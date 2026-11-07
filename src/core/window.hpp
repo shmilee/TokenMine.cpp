@@ -56,6 +56,12 @@ public:
     // The initial (config) size is returned until the window exists.
     int width() const;
     int height() const;
+    // V3-12b: the CONFIG-requested geometry (the net's window-parity
+    // handshake's value — the live size is the WM's, a tile-race in
+    // the headless gate; the requested size is the two machines'
+    // config contract, the R8's deterministic face).
+    int requestedWidth() const { return m_width; }
+    int requestedHeight() const { return m_height; }
 
     // Current LOGICAL size (SDL_GetWindowSize). Equals width()/height()
     // at dppx 1; on a HiDPI-scaled display it is the unscaled size while

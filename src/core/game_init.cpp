@@ -97,6 +97,52 @@ Game::~Game() {
 // Scene construction
 // ---------------------------------------------------------------------------
 
+// V3-12b: the starter inventory's per-session fill (the buildScene's
+// hotbar.json block, extracted — the net connect's player-2 gets the
+// same fresh-world gift, the assetFNV's parity's twin).
+Result<void> Game::fillStarterInventory(PlayerSession& s) {
+    auto hotbarText = m_assets.loadText("data/hotbar.json");
+    MC_TRY(hotbarText);
+    auto hotbarJson = Json::parse(*hotbarText);
+    MC_TRY(hotbarJson);
+    const Json* list = hotbarJson->find("items");
+    if (list == nullptr || !list->isArray() || list->size() == 0) {
+        return MC_FAIL("hotbar.json: 'items' array is required and must "
+                       "not be empty");
+    }
+    if (list->size() > static_cast<std::size_t>(Inventory::kHotbarSize)) {
+        return MC_FAIL("hotbar.json: at most " +
+                       std::to_string(Inventory::kHotbarSize) +
+                       " items (hotbar size)");
+    }
+    for (std::size_t i = 0; i < list->size(); ++i) {
+        const Json& entry = list->at(i);
+        if (!entry.isString()) {
+            return MC_FAIL("hotbar.json: entry #" + std::to_string(i) +
+                           " must be an item name string");
+        }
+        const ItemID iid = m_items.idForName(entry.asString());
+        if (!iid.valid()) {
+            return MC_FAIL("hotbar.json: unknown item '" + entry.asString() +
+                           "'");
+        }
+        s.inventory.setSlot(i, ItemStack {iid, m_items.at(iid).maxStack});
+    }
+    // GEN-2: the starter STORAGE fill (hotbar.json's `inventory` section,
+    // the strict parse in item/inventory — the hidden-starter pattern:
+    // the saplings sit in the storage, NOT the hotbar, so a no-input run
+    // renders nothing new; the slot ranges are disjoint, so no overwrite
+    // of the `items` fill is possible). A SAVE LOAD still replaces the
+    // whole inventory (the starter is a fresh-world gift — the applySave
+    // contract).
+    auto starterSlots = parseStarterSlots(*hotbarJson, m_items);
+    MC_TRY(starterSlots);
+    for (const StarterSlot& st : *starterSlots) {
+        s.inventory.setSlot(st.slot, ItemStack {st.item, st.count});
+    }
+    return {};
+}
+
 Result<void> Game::buildScene() {
     // PIPE-2: the save journal's observer, installed at the TOP of
     // buildScene — before ANY cell-level write: the demo-area generation
@@ -1567,32 +1613,8 @@ Result<void> Game::buildScene() {
                        std::to_string(Inventory::kHotbarSize) +
                        " items (hotbar size)");
     }
-    for (std::size_t i = 0; i < list->size(); ++i) {
-        const Json& entry = list->at(i);
-        if (!entry.isString()) {
-            return MC_FAIL("hotbar.json: entry #" + std::to_string(i) +
-                           " must be an item name string");
-        }
-        const ItemID iid = m_items.idForName(entry.asString());
-        if (!iid.valid()) {
-            return MC_FAIL("hotbar.json: unknown item '" + entry.asString() +
-                           "'");
-        }
-        m_inventory.setSlot(i, ItemStack {iid, m_items.at(iid).maxStack});
-    }
-
-    // GEN-2: the starter STORAGE fill (hotbar.json's `inventory` section,
-    // the strict parse in item/inventory — the hidden-starter pattern:
-    // the saplings sit in the storage, NOT the hotbar, so a no-input run
-    // renders nothing new; the slot ranges are disjoint, so no overwrite
-    // of the `items` fill is possible). A SAVE LOAD still replaces the
-    // whole inventory (the starter is a fresh-world gift — the applySave
-    // contract).
-    auto starterSlots = parseStarterSlots(*hotbarJson, m_items);
-    MC_TRY(starterSlots);
-    for (const StarterSlot& s : *starterSlots) {
-        m_inventory.setSlot(s.slot, ItemStack {s.item, s.count});
-    }
+    auto r = fillStarterInventory(*m_sessions[0]);
+    MC_TRY(r);
 
     // -- world generation (Phase 4: seeded, data-driven) ---------------------
     auto biomesLoad = m_biomes.loadDirectory(m_assets, "data/biomes");
@@ -1829,31 +1851,48 @@ Result<void> Game::buildScene() {
     MC_TRY(fontScale);
     m_fontScale = *fontScale;
     const Player::Params& playerDims = *playerParams; // room check
-    Vec3 spawnPos {0.5f,
-                   static_cast<float>(m_generator->surfaceHeight(0, 0)) + 1.0f,
-                   0.5f};
-    constexpr int kSpawnCandidates[][2] = {
-        {0, 0}, {4, 0}, {-4, 0}, {8, 0}, {-8, 0},
-        {0, 4}, {0, -4}, {4, 4}, {-4, -4}, {8, 8},
-    };
+    // V3-12b (R9): the per-INDEX spawn (the i-th valid kSpawnCandidates
+    // entry — the two players never share a cell; the world spawn / the
+    // spawn-protection anchor is index 0, the pre-V3-12b value). The
+    // candidate scan is the original loop, collected (the room-check is
+    // the same pure predicate over the same world, so index 0 is the
+    // bit-identical first valid). A missing index wraps to 0 (fewer than
+    // i valid candidates — the single-player world's shape).
+    std::vector<Vec3> spawnCandidates;
     int spawnX = 0;
     int spawnZ = 0;
-    for (const auto& c : kSpawnCandidates) {
-        const int h = m_generator->surfaceHeight(c[0], c[1]);
-        if (h <= m_generator->params().seaLevel) {
-            continue;
-        }
-        const Vec3 cand {static_cast<float>(c[0]) + 0.5f,
-                         static_cast<float>(h) + 1.0f,
-                         static_cast<float>(c[1]) + 0.5f};
-        if (Player::hasRoomAt(m_world, m_blocks, cand, playerDims.width,
-                              playerDims.height)) {
-            spawnPos = cand;
-            spawnX = c[0];
-            spawnZ = c[1];
-            break;
+    {
+        constexpr int kSpawnCandidates[][2] = {
+            {0, 0}, {4, 0}, {-4, 0}, {8, 0}, {-8, 0},
+            {0, 4}, {0, -4}, {4, 4}, {-4, -4}, {8, 8},
+        };
+        for (const auto& c : kSpawnCandidates) {
+            const int h = m_generator->surfaceHeight(c[0], c[1]);
+            if (h <= m_generator->params().seaLevel) {
+                continue;
+            }
+            const Vec3 cand {static_cast<float>(c[0]) + 0.5f,
+                             static_cast<float>(h) + 1.0f,
+                             static_cast<float>(c[1]) + 0.5f};
+            if (Player::hasRoomAt(m_world, m_blocks, cand, playerDims.width,
+                                  playerDims.height)) {
+                spawnCandidates.push_back(cand);
+                if (spawnCandidates.size() == 1) {
+                    spawnX = c[0];
+                    spawnZ = c[1];
+                }
+            }
         }
     }
+    const Vec3 spawnPos =
+        spawnCandidates.empty()
+            ? Vec3 {0.5f,
+                    static_cast<float>(m_generator->surfaceHeight(0, 0)) + 1.0f,
+                    0.5f}
+            : spawnCandidates[0];
+    // V3-12b (R9): keep the valid-candidate list for the net connect (the
+    // second player takes index 1 — the spawnPositionForIndex's wrap).
+    m_spawnCandidates = spawnCandidates;
     // The WORLD spawn (Phase 25): the center of the hostile spawn-protection
     // circle. Captured BEFORE the save load — a loaded save moves the
     // player, but the protection stays anchored to the world spawn (the
@@ -1863,7 +1902,11 @@ Result<void> Game::buildScene() {
     // of the respawn-time bed validation (respawnPlayer — a remembered
     // bed that no longer validates reverts the spawn to here).
     m_mobs.spawnPoint = spawnPos;
-    m_player.emplace(m_world, m_blocks, spawnPos, *playerParams);
+    // V3-12b: the primary (index 0) player — the m_player alias's single
+    // set site (the net session adds the remote player at the connect).
+    m_players.push_back(
+        std::make_unique<Player>(m_world, m_blocks, spawnPos, *playerParams));
+    m_player = m_players[0].get();
     // V2-12 (format 27): the FRESH-world xp seed (worldSeed ^ kXpSeedInit —
     // deterministic). A loaded save REPLACES it in applySave (the saved
     // value, or the same migration for a pre-27 file), so this only
@@ -2787,6 +2830,21 @@ Result<void> Game::init(const GameArgs& args) {
     const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
     MC_LOG_INFO(std::string("GL ") + glVersion + " | " + vendor + " | " + renderer);
 
+    // --- V3-12b: the net CLIENT's handshake (before the world — the
+    // WELCOME's seed is the world spec's authority; the fingerprint's
+    // four faces need the config + the assets + the window, all
+    // ready here) ---
+    if (!m_args.connectHost.empty()) {
+        MC_TRY(netClientHandshake());
+        if (m_netSeedOverride >= 0) {
+            m_config.set("world.seed", static_cast<long long>(m_netSeedOverride));
+            MC_LOG_INFO("net: the WELCOME's seed " +
+                        std::to_string(m_netSeedOverride) +
+                        " is the world spec's authority (the host's "
+                        "world, the zero-transfer's shape)");
+        }
+    }
+
     // --- renderer + scene ---------------------------------------------------
     auto rendererInit = m_renderer.init();
     MC_TRY(rendererInit);
@@ -2803,6 +2861,29 @@ Result<void> Game::init(const GameArgs& args) {
     if (m_demoMode == DemoMode::Replay &&
         m_args.demoFile->world.type == DemoWorldSpec::Type::Save) {
         m_args.saveSlot.reset();
+    }
+
+    // --- V3-12b: the net HOST's handshake (after the world + the
+    // player — the HELLO's comparison needs the world's seed + the
+    // creative's gate; the accept's 10-s timeout is the gate's
+    // named-error face) + the --script's injection kernel ---
+    if (m_args.listenPort != 0) {
+        MC_TRY(netHostHandshake());
+    }
+    if (m_netActive && !m_netIsHost) {
+        // The client's OWN player (slot 1 — the localPlayer's body;
+        // the host's player 0 is the init's normal construction, the
+        // primary's alias target).
+        netAddPlayer(1);
+    }
+    if (m_args.scriptFile.has_value()) {
+        m_scriptPlayer.emplace(*m_args.scriptFile);
+        m_scriptActive = true;
+        MC_LOG_INFO("net script: '" + m_args.script.string() + "' (" +
+                    std::to_string(m_scriptPlayer->frameCount()) +
+                    " frames, " +
+                    std::to_string(m_args.scriptFile->events.size()) +
+                    " events — the deterministic input's source)");
     }
 
     m_initialized = true;
@@ -2915,13 +2996,23 @@ void Game::runGameplayLoop(double lastFrame) {
     while (true) {
         m_input.frameBegin();
         m_input.pump();
+        // V3-12b: the --script's deterministic input (the demo
+        // injection kernel's fourth consumer — the frame's events into
+        // the live pump's same handle* surface; the frame limit's
+        // guard: past the timeline's end the input is the no-input
+        // zero, the solo's structural-immunity shape).
+        if (m_scriptActive &&
+            static_cast<int>(m_frameCount) <
+                m_scriptPlayer->frameCount()) {
+            m_scriptPlayer->injectForFrame(m_frameCount, m_input);
+        }
         // ESC exits only while the pointer is free AND the inventory is
         // closed AND the player is alive (while captured it releases the
         // pointer, while the inventory is open it closes it, while dead
         // the death screen owns the input — all handled in update).
         if (m_input.quitRequested() ||
             (!m_window.relativeMouseMode() && !panelOpen() &&
-             !m_player->isDead() &&
+             !localPlayer()->isDead() &&
              m_input.wasPressed(GameKey::Escape))) {
             MC_LOG_INFO("Exit requested, shutting down");
             break;
@@ -2945,10 +3036,39 @@ void Game::runGameplayLoop(double lastFrame) {
                 (m_fpsSmoothed <= 0.0) ? fps : (m_fpsSmoothed * 0.95 + fps * 0.05);
         }
 
+        // V3-12b: the net's frame pre-hook (the poll / the capture / the
+        // preload; the client's dt is OVERRIDDEN by the host's broadcast
+        // — the raw f64 bits, the sim's ONLY time source. The solo's
+        // netActive-false keeps the wall dt verbatim, the bit-level).
+        if (netActive()) {
+            const std::string err = netFramePre(dt);
+            if (!err.empty()) {
+                MC_LOG_ERROR("net: " + err);
+                if (m_netIsHost && m_players.size() == 1) {
+                    // The client's EOF already removed slot 1 (the
+                    // session's solo continuation — the loop carries on).
+                    m_netActive = false;
+                } else {
+                    break;
+                }
+            }
+        }
+
         update(dt);
         render();
         m_window.swapBuffers();
         ++m_frameCount;
+
+        // V3-12b: the net's frame post-hook (the host's FRAME send +
+        // the client's INPUT send + the hash's exchange). The frame
+        // index = the just-simulated one (the increment already ran).
+        if (netActive()) {
+            const std::string err = netFramePost(dt, m_frameCount - 1);
+            if (!err.empty()) {
+                MC_LOG_ERROR("net: " + err);
+                break;
+            }
+        }
 
         // V3-9: the record's dt append (flag-gated — Off = the pre-V3-9
         // loop verbatim). The dt = the just-simulated frame's clamped

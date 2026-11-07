@@ -109,10 +109,19 @@ void Game::updateEntities(double dt) {
     // the mob's integer frame counter — the ambient roll's contrast,
     // the determinism's clean side: a no-input run's aim is the saved
     // view, byte-identical across runs).
-    if (playerAlive) {
-        const Vec3 eye = m_player->eyePosition();
-        const Vec3 aim = aimForward();
-        const std::optional<BlockHit> aimBlock = targetBlock();
+    // V3-12b: the ×N form (every player's gaze can provoke — solo:
+    // one player = the original primary's geometry, bit-identical;
+    // the aim gate: solo the camera path, net the first-person form).
+    for (std::size_t pi = 0; pi < m_players.size(); ++pi) {
+        const Player& p = *m_players[pi];
+        if (p.isDead()) {
+            continue;
+        }
+        const Vec3 eye = p.eyePosition();
+        const Vec3 aim = (m_players.size() == 1) ? aimForward()
+                                                 : playerAimForwardFor(p);
+        const std::optional<BlockHit> aimBlock =
+            (m_players.size() == 1) ? targetBlock() : targetBlockFor(p);
         const float tBlock = aimBlock ? aimBlock->distance : 1e30f;
         for (auto& entity : ents) {
             auto* mob = dynamic_cast<MobEntity*>(entity.get());
@@ -209,8 +218,6 @@ void Game::updateEntities(double dt) {
         // the pass itself runs every frame (the pickup's cadence — the
         // frame-mod gates only the PLACE branch below).
         World& world = currentWorld();
-        const Vec3 pmin = m_player->aabbMin();
-        const Vec3 pmax = m_player->aabbMax();
         for (auto& entity : ents) {
             auto* mob = dynamic_cast<MobEntity*>(entity.get());
             if (mob == nullptr || mob->dead() || !mob->carriesBlocks()) {
@@ -306,12 +313,26 @@ void Game::updateEntities(double dt) {
                                 continue;
                             }
                             // The player's box (the strict cell-AABB
-                            // overlap — the mob never places ON the
+                            // overlap — the mob never places ON any
                             // player, the knockback-less belt).
+                            // V3-12b: the ×N check (every player's box —
+                            // solo: one player, the bit-identical test).
                             const bool overlapsPlayer =
-                                pmin.x < cx + 1 && pmax.x > cx &&
-                                pmin.y < cy + 1 && pmax.y > cy &&
-                                pmin.z < cz + 1 && pmax.z > cz;
+                                [this, &cx, &cy, &cz]() {
+                                for (std::size_t pi = 0;
+                                     pi < m_players.size(); ++pi) {
+                                    const Vec3 pmin =
+                                        m_players[pi]->aabbMin();
+                                    const Vec3 pmax =
+                                        m_players[pi]->aabbMax();
+                                    if (pmin.x < cx + 1 && pmax.x > cx &&
+                                        pmin.y < cy + 1 && pmax.y > cy &&
+                                        pmin.z < cz + 1 && pmax.z > cz) {
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            }();
                             if (overlapsPlayer) {
                                 continue;
                             }
@@ -421,35 +442,53 @@ void Game::updateEntities(double dt) {
         // Mob-shot arrows (Phase 27) can hit the player: the same swept
         // test as the mobs, run FIRST (the arrow's target). The player's
         // own bow arrows are unflagged and keep flying through the player
-        // (no self-damage, single-player v1).
+        // (no self-damage). V3-12b: the ×N sweep (any player can be hit —
+        // the index order, the first hit consumes the arrow; solo: one
+        // player, the bit-identical test).
         if (arrow->hurtPlayer()) {
-            const float tp = raycastAabb(prev, step, m_player->aabbMin(),
-                                         m_player->aabbMax());
-            if (tp >= 0.0f && tp <= 1.0f && !m_player->isDead()) {
-                m_player->damage(arrow->damage(), false,
-                                 {Player::DamageSource::Arrow, {}});
-                if (arrow->effectId() >= 0) {
-                    // SURV-5: the arrow's effect lands on the player
-                    // (the skeleton's wither) through the SAME single
-                    // choke point as the spider's on_hit_effect (the
-                    // name is init-cross-checked; the instant settlement
-                    // is a no-op for a lingering effect like the wither).
-                    applyPlayerEffect(m_effects.at(arrow->effectId()).name,
-                                      arrow->effectDuration(),
-                                      arrow->effectTier());
-                    syncAbsorption(); // the pool takes the new total
+            bool consumed = false;
+            for (std::size_t pi = 0; pi < m_players.size() && !consumed;
+                 ++pi) {
+                Player& pl = *m_players[pi];
+                PlayerSession& ps = *m_sessions[pi];
+                if (pl.isDead()) {
+                    continue;
                 }
-                arrow->kill();
-                if (arrow->explodes()) {
-                    // V3-14b: the player-contact blast — the fireball's
-                    // hurtPlayer flag is the contact trigger (the
-                    // direct damage is 0, the blast is the hit).
-                    explodeAt(arrow->position(), arrow->explodeRadius(),
-                              arrow->explodeSource());
+                const float tp =
+                    raycastAabb(prev, step, pl.aabbMin(), pl.aabbMax());
+                if (tp >= 0.0f && tp <= 1.0f) {
+                    pl.damage(arrow->damage(), false,
+                              {Player::DamageSource::Arrow, {}});
+                    if (arrow->effectId() >= 0) {
+                        // SURV-5: the arrow's effect lands on the player
+                        // (the skeleton's wither) through the SAME single
+                        // choke point as the spider's on_hit_effect (the
+                        // name is init-cross-checked; the instant
+                        // settlement is a no-op for a lingering effect
+                        // like the wither).
+                        applyPlayerEffectFor(
+                            pl, ps, m_effects.at(arrow->effectId()).name,
+                            arrow->effectDuration(), arrow->effectTier());
+                        syncAbsorptionFor(pl, ps); // the pool takes
+                        // the new total
+                    }
+                    arrow->kill();
+                    if (arrow->explodes()) {
+                        // V3-14b: the player-contact blast — the
+                        // fireball's hurtPlayer flag is the contact
+                        // trigger (the direct damage is 0, the blast is
+                        // the hit).
+                        explodeAt(arrow->position(),
+                                  arrow->explodeRadius(),
+                                  arrow->explodeSource());
+                    }
+                    MC_LOG_DEBUG("mob arrow hit player for " +
+                                 std::to_string(arrow->damage()));
+                    consumed = true;
                 }
-                MC_LOG_DEBUG("mob arrow hit player for " +
-                             std::to_string(arrow->damage()));
-                continue;  // consumed: no mob test this step
+            }
+            if (consumed) {
+                continue; // consumed: no mob test this step
             }
         }
         for (auto& entity : ents) {
@@ -507,7 +546,7 @@ void Game::updateEntities(double dt) {
     // separateEntityList).
     std::vector<Entity*> bodies;
     bodies.reserve(ents.size() + 1);
-    bodies.push_back(m_player.operator->());
+    bodies.push_back(m_player);
     for (auto& entity : ents) {
         bodies.push_back(entity.get());
     }
@@ -552,6 +591,22 @@ void Game::updateEntities(double dt) {
     // no-input run has no ready drops and no stuck arrows (zero
     // entities in the 60-frame baseline) = zero motion = the baseline
     // byte-identical (structural immunity).
+     // V3-12b: the ×N magnet (each ready drop / orb / stuck arrow is
+     // drawn toward the NEAREST player — the pure function with the
+     // index tie-break; solo: one player = the original playerPos, the
+     // bit-identical displacement).
+    const auto nearestPlayerPos = [this](const Vec3& pos) -> const Vec3& {
+        float best = 1e30f;
+        std::size_t bi = 0;
+        for (std::size_t pi = 0; pi < m_players.size(); ++pi) {
+            const float d = lengthSq(m_players[pi]->position() - pos);
+            if (d < best) {
+                best = d;
+                bi = pi;
+            }
+        }
+        return m_players[bi]->position();
+    };
     for (std::size_t i = 0; i < n; ++i) {
         if (gone[i]) {
             continue;
@@ -562,7 +617,8 @@ void Game::updateEntities(double dt) {
                 continue;
             }
             const Vec3 disp = pickupMagnetDisplacement(item->position(),
-                                                       playerPos,
+                                                       nearestPlayerPos(
+                                                           item->position()),
                                                        m_frameCount,
                                                        kMobStepPerFrame);
             if (disp != Vec3::zero()) {
@@ -577,7 +633,9 @@ void Game::updateEntities(double dt) {
         if (arrow != nullptr) {
             if (arrow->stuck() && !arrow->ammoItem().empty()) {
                 const Vec3 disp =
-                    pickupMagnetDisplacement(arrow->position(), playerPos,
+                    pickupMagnetDisplacement(arrow->position(),
+                                             nearestPlayerPos(
+                                                 arrow->position()),
                                              m_frameCount, kMobStepPerFrame);
                 if (disp != Vec3::zero()) {
                     arrow->setPosition(arrow->position() + disp);
@@ -593,9 +651,9 @@ void Game::updateEntities(double dt) {
         if (orb == nullptr || !orb->pickupReady()) {
             continue;
         }
-        const Vec3 disp = pickupMagnetDisplacement(orb->position(), playerPos,
-                                                   m_frameCount,
-                                                   kMobStepPerFrame);
+        const Vec3 disp = pickupMagnetDisplacement(
+            orb->position(), nearestPlayerPos(orb->position()), m_frameCount,
+            kMobStepPerFrame);
         if (disp != Vec3::zero()) {
             const Vec3 next = orb->position() + disp;
             if (orb->hasRoomAt(next)) {
@@ -603,13 +661,13 @@ void Game::updateEntities(double dt) {
             }
         }
     }
-    // Pickup (Phase 11): items within kPickupDistance of the player's
-    // bottom-center that are past their pickup delay go into the inventory
-    // (deterministic index order; if the inventory has no room the item
-    // stays where it is and is retried next frame). V2-6: the magnet
-    // above has already drawn ready drops in toward the player, so the
-    // fixed radius now collects what the pull delivered (the radius
-    // itself is unchanged).
+    // Pickup (Phase 11): items within kPickupDistance of a player's
+    // bottom-center that are past their pickup delay go into that
+    // player's inventory (deterministic entity index order, the players
+    // tried in index order — the first with room collects; if none has
+    // room the item stays where it is and is retried next frame).
+    // V3-12b: the ×N form (solo: one player, the bit-identical pickup;
+    // D8: the "pickup" timbre plays for the LOCAL player only).
     const float pickupSq = kPickupDistance * kPickupDistance;
     for (std::size_t i = 0; i < n; ++i) {
         if (gone[i]) {
@@ -619,41 +677,50 @@ void Game::updateEntities(double dt) {
         if (item == nullptr || !item->pickupReady()) {
             continue;
         }
-        const Vec3 d = item->position() - playerPos;
-        if (lengthSq(d) > pickupSq) {
-            continue;
-        }
         // Validity is guaranteed: drops are validated at init and only
         // spawn from that validated data.
         const ItemID iid = m_items.idForName(item->itemName());
-        // SURV-3: the picked-up stack's damage returns with it; V2-12
-        // (format 27): its enchantments too (the Inventory::add merge
-        // rule: same-item AND same-damage AND same-enchants only).
-        if (m_inventory.add(iid, item->count(), m_items, item->damage(),
-                            item->enchants()) < 0) {
-            continue; // inventory full: the item stays on the ground
+        for (std::size_t pi = 0; pi < m_players.size(); ++pi) {
+            const Vec3 d = item->position() - m_players[pi]->position();
+            if (lengthSq(d) > pickupSq) {
+                continue;
+            }
+            // SURV-3: the picked-up stack's damage returns with it;
+            // V2-12 (format 27): its enchantments too (the
+            // Inventory::add merge rule: same-item AND same-damage AND
+            // same-enchants only).
+            if (m_sessions[pi]->inventory.add(
+                    iid, item->count(), m_items, item->damage(),
+                    item->enchants()) < 0) {
+                continue; // this inventory full: try the next player
+            }
+            gone[i] = true;
+            // CRAFT-3: the generic "pickup" timbre (items have no
+            // sound_material — YAGNI, documented), spatialized at the
+            // picked item's position.
+            if (pi == static_cast<std::size_t>(m_localSlot)) {
+                m_sound.play("pickup", item->position());
+            }
+            // V2-3: the pickup.<item> tutorial event — the PLAYER's
+            // pickup of a dropped ItemEntity (the single choke point:
+            // the merge / despawn paths above never fire it, mob drops
+            // are unrelated), every frame the entity pass runs (hard
+            // rule 8). The collector is the actor (the D12's gate).
+            emitTutorialEvent("pickup." + item->itemName(), 1,
+                              m_players[pi].get());
+            break;
         }
-        gone[i] = true;
-        // CRAFT-3: the generic "pickup" timbre (items have no
-        // sound_material — YAGNI, documented), spatialized at the picked
-        // item's position.
-        m_sound.play("pickup", item->position());
-        // V2-3: the pickup.<item> tutorial event — the PLAYER's pickup
-        // of a dropped ItemEntity (the single choke point: the merge /
-        // despawn paths above never fire it, mob drops are unrelated),
-        // every frame the entity pass runs (hard rule 8).
-        emitTutorialEvent("pickup." + item->itemName(), 1);
     }
     // V2-11 (XP): the orb pickup — the SAME deterministic index order,
     // radius (kPickupDistance, pickupSq above) and pickup delay as the
-    // item pickup: a READY orb within the radius is collected into the
-    // player's experience pool (m_xpTotal += value — the curve derives
-    // the level), the orb is removed, and the "pickup" timbre plays
-    // (REUSED — the 8-event set, no new wav; spatialized at the orb, the
-    // item pattern). The dynamic_cast isolation: the item loop above is
-    // bit-level unchanged (it never sees an orb — the orb is not an
-    // ItemEntity, and there is no inventory-full retry here: the pool
-    // is unbounded, so a ready orb in range always collects).
+    // item pickup: a READY orb within a player's radius is collected
+    // into that player's experience pool (m_xpTotal += value — the
+    // curve derives the level), the orb is removed, and the "pickup"
+    // timbre plays (REUSED — the 8-event set, no new wav; spatialized
+    // at the orb, the item pattern). The pool is unbounded, so the
+    // first in-range player (the index order — the nearest with the
+    // tie-break) always collects. V3-12b: the ×N form (solo: one
+    // player, the bit-identical pickup).
     for (std::size_t i = 0; i < n; ++i) {
         if (gone[i]) {
             continue;
@@ -662,21 +729,26 @@ void Game::updateEntities(double dt) {
         if (orb == nullptr || !orb->pickupReady()) {
             continue;
         }
-        const Vec3 d = orb->position() - playerPos;
-        if (lengthSq(d) > pickupSq) {
-            continue;
+        for (std::size_t pi = 0; pi < m_players.size(); ++pi) {
+            const Vec3 d = orb->position() - m_players[pi]->position();
+            if (lengthSq(d) > pickupSq) {
+                continue;
+            }
+            gone[i] = true;
+            m_players[pi]->gainXp(orb->value());
+            if (pi == static_cast<std::size_t>(m_localSlot)) {
+                m_sound.play("pickup", orb->position());
+            }
+            break;
         }
-        gone[i] = true;
-        m_player->gainXp(orb->value());
-        m_sound.play("pickup", orb->position());
     }
     // Arrow pickup (Phase 42): a STUCK arrow within kArrowPickupRadius of
-    // the player's bottom-center returns to the inventory as the
+    // a player's bottom-center returns to that player's inventory as the
     // launcher's ammo item (Minecraft: walk up to a stuck arrow to pick
     // it up). Flying arrows are not pickable (they are in the air). Same
-    // deterministic index order as the item pickup above; if the
-    // inventory has no room the arrow stays stuck and is retried next
-    // frame.
+    // deterministic index order as the item pickup above; if no player's
+    // inventory has room the arrow stays stuck and is retried next frame.
+    // V3-12b: the ×N form (solo: one player, the bit-identical pickup).
     {
         const float arrowPickupSq =
             kArrowPickupRadius * kArrowPickupRadius;
@@ -689,23 +761,29 @@ void Game::updateEntities(double dt) {
                 arrow->ammoItem().empty()) {
                 continue;
             }
-            const Vec3 d = arrow->position() - playerPos;
-            if (lengthSq(d) > arrowPickupSq) {
-                continue;
-            }
             // Validity is guaranteed: the ammo item exists (init
-            // cross-check, the launcher's 'ammo' field / the mob's 'ammo').
+            // cross-check, the launcher's 'ammo' field / the mob's
+            // 'ammo').
             const ItemID aid = m_items.idForName(arrow->ammoItem());
-            if (m_inventory.add(aid, 1, m_items) < 0) {
-                continue; // inventory full: the arrow stays stuck
+            for (std::size_t pi = 0; pi < m_players.size(); ++pi) {
+                const Vec3 d = arrow->position() - m_players[pi]->position();
+                if (lengthSq(d) > arrowPickupSq) {
+                    continue;
+                }
+                if (m_sessions[pi]->inventory.add(aid, 1, m_items) < 0) {
+                    continue; // this inventory full: try the next player
+                }
+                gone[i] = true;
+                if (pi == static_cast<std::size_t>(m_localSlot)) {
+                    m_sound.play("pickup");
+                }
+                const Vec3 p = arrow->position();
+                MC_LOG_DEBUG("picked up stuck arrow (" +
+                             arrow->ammoItem() + ") at (" +
+                             std::to_string(p.x) + ", " + std::to_string(p.y) +
+                             ", " + std::to_string(p.z) + ")");
+                break;
             }
-            gone[i] = true;
-            m_sound.play("pickup");
-            const Vec3 p = arrow->position();
-            MC_LOG_DEBUG("picked up stuck arrow (" +
-                         arrow->ammoItem() + ") at (" +
-                         std::to_string(p.x) + ", " + std::to_string(p.y) +
-                         ", " + std::to_string(p.z) + ")");
         }
     }
     // Despawn: merged-away / picked-up + aged-out / impact / below the
@@ -741,8 +819,18 @@ void Game::updateEntities(double dt) {
         // before, the bit root).
         if (mob != nullptr && !mob->dead() &&
             !mob->def().properties.boss) {
-            const Vec3 d = mob->position() - playerPos;
-            if (lengthSq(d) > despawnSq) {
+            // V3-12b: the ×N despawn ring — a mob survives while within
+            // the distance of ANY player (the index-order scan, the
+            // first in-range keeps it; solo: one player = the original
+            // playerPos ring, bit-identical).
+            bool far = true;
+            for (std::size_t pi = 0; pi < m_players.size() && far; ++pi) {
+                if (lengthSq(mob->position() - m_players[pi]->position()) <=
+                    despawnSq) {
+                    far = false;
+                }
+            }
+            if (far) {
                 gone[i] = true;
                 continue;
             }
@@ -1591,9 +1679,12 @@ void Game::drawMobShadows(const Mat4& view, const Mat4& projection) {
         shadows.push_back({blobShadowCenter(mob->position()),
                            blobShadowSide(def.model.width)});
     }
-    if (m_playerBody.modelLoaded && m_player.has_value() &&
+    // V3-12b: the LOCAL player's shadow (the third-person body — the
+    // render follows the machine's own player; solo: the only player,
+    // the pre-V3-12b value).
+    if (m_playerBody.modelLoaded && localPlayer() != nullptr &&
         m_cameraMode != CameraMode::First) {
-        shadows.push_back({blobShadowCenter(m_player->position()),
+        shadows.push_back({blobShadowCenter(localPlayer()->position()),
                            blobShadowSide(m_playerBody.model.width)});
     }
     if (shadows.empty()) {
@@ -1750,37 +1841,50 @@ void Game::drawPlayerBody(const Mat4& view, const Mat4& projection) {
     // byte-identical (the structural-immunity root). The held hand (the
     // first-person view model, drawHeldHand) is untouched by this
     // function.
-    if (m_cameraMode == CameraMode::First || !m_playerBody.modelLoaded ||
-        !m_player) {
+    // V3-12b: the ×N form — the LOCAL player's body keeps the UX-3
+    // gate + the swing-aware mesh (the per-frame dynamic VBO); the
+    // REMOTE player's body always draws in the STATIC rest pose (the
+    // swing VBO is a single instance — the per-player swing is the 12c
+    // extension, the documented 12b deviation). Solo: one local player,
+    // the pre-V3-12b sequence byte-identically.
+    if (!m_playerBody.modelLoaded || m_players.empty()) {
         return;
     }
-    // The ENT-1 pattern: an actively swinging player (the model has swing
-    // data + the phase != 0) draws the per-frame DYNAMIC mesh (the swing
-    // parts rotated about their pivots, the rest verbatim); the rest pose
-    // (phase 0 = the identity pose) draws the STATIC cache — byte-
-    // identical. mobs.limb_swing does NOT gate the player body: its
-    // visibility belongs to the camera mode alone (the task's rule — the
-    // config is the mobs' render switch).
-    const Mesh& mesh =
-        limbSwingActive(true, !m_playerBody.model.swings.empty(),
-                        m_player->swingPhase())
-            ? playerBodySwingMesh()
-            : playerBodyMesh();
-    if (!mesh.valid()) {
-        return;
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        const bool isLocal = (i == static_cast<std::size_t>(m_localSlot));
+        if (isLocal && m_cameraMode == CameraMode::First) {
+            continue;
+        }
+        // The ENT-1 pattern: an actively swinging player (the model has
+        // swing data + the phase != 0) draws the per-frame DYNAMIC mesh
+        // (the swing parts rotated about their pivots, the rest
+        // verbatim); the rest pose (phase 0 = the identity pose) draws
+        // the STATIC cache — byte-identical. The remote body's rest
+        // pose is its always-state (the swing's 12c extension).
+        const Mesh& mesh =
+            (isLocal && limbSwingActive(true,
+                                        !m_playerBody.model.swings.empty(),
+                                        p.swingPhase()))
+                ? playerBodySwingMesh()
+                : playerBodyMesh();
+        if (!mesh.valid()) {
+            continue;
+        }
+        // Bottom-center origin (the player's AABB position — the Entity
+        // convention), rotated by the player's yaw (the mob's facingYaw
+        // convention: yaw 0 = facing -Z, the box's -Z face is the front).
+        const Mat4 model = Mat4::multiply(Mat4::translate(p.position()),
+                                          Mat4::rotateY(p.yaw));
+        // Zero per-draw uniforms (the drawMobs pattern, the function
+        // right above in the same pass): the render pass set
+        // u_useTexture = 1 and bound the atlas at the top, and the bake
+        // is skyLight = 1.0 / blockLight = 0 (makeMobModelGeometry — the
+        // mobs' always-bright convention; the PRE-6 / LGT-4 world-light
+        // override is NOT applied, the documented deviation shared with
+        // the mobs).
+        m_renderer.draw(mesh, m_basicShader, view, projection, model);
     }
-    // Bottom-center origin (the player's AABB position — the Entity
-    // convention), rotated by the camera yaw (the mob's facingYaw
-    // convention: yaw 0 = facing -Z, the box's -Z face is the front).
-    const Mat4 model = Mat4::multiply(
-        Mat4::translate(m_player->position()), Mat4::rotateY(m_player->yaw));
-    // Zero per-draw uniforms (the drawMobs pattern, the function right
-    // above in the same pass): the render pass set u_useTexture = 1 and
-    // bound the atlas at the top, and the bake is skyLight = 1.0 /
-    // blockLight = 0 (makeMobModelGeometry — the mobs' always-bright
-    // convention; the PRE-6 / LGT-4 world-light override is NOT applied,
-    // the documented deviation shared with the mobs).
-    m_renderer.draw(mesh, m_basicShader, view, projection, model);
 }
 
 const Mesh& Game::playerBodyMesh() {

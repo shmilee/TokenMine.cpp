@@ -359,4 +359,12 @@ DemoFile authorDemoFile(const DemoWorldSpec& world,
 Result<std::filesystem::path> authorDemoFromFile(
     const std::filesystem::path& timelinePath);
 
+// V3-12b: the --script's timeline parse (the authorDemoFromFile's
+// no-write twin — the net session's deterministic input source, the
+// demo kernel's fourth consumer). The world key is OPTIONAL (the
+// net's WELCOME is the world spec's authority — a present spec rides
+// along ignored, the shape's strictness keeps the file's one-file-
+// one-purpose discipline).
+Result<DemoFile> parseScriptTimeline(const std::filesystem::path& path);
+
 } // namespace mc

@@ -179,6 +179,11 @@ public:
     // (t = 0: starts inside the box) and self-consume.
     MobEntity* source() const { return m_source; }
     void setSource(MobEntity* s) { m_source = s; }
+    // V3-12b: the PLAYER thrower's index (the pearl's landing teleports
+    // ITS thrower — the m_source's player twin; -1 = no player thrower
+    // (the pre-V3-12b arrows / the mob shots, the bit root)).
+    int throwerIndex() const { return m_throwerIndex; }
+    void setThrowerIndex(int i) { m_throwerIndex = i; }
 
     // Consumed by a NON-block source (a mob hit, Phase 21): the same
     // removal path as a block impact (shouldDespawn) but no sticking
@@ -201,6 +206,7 @@ private:
     float m_damage = 0.0f; // per-hit mob damage (Phase 21, set at launch)
     bool m_hurtPlayer = false; // swept test may hit the player (Phase 27)
     MobEntity* m_source = nullptr; // shooter (skipped by the hit test)
+    int m_throwerIndex = -1;      // the player thrower (the pearl)
     float m_power = 1.0f; // shot charge, scales mob-hit knockback (Phase 42)
     std::string m_ammoItem; // pickup returns this (Phase 42, "" = none)
     // SURV-5: the arrow's status effect (id -1 = none, the default —

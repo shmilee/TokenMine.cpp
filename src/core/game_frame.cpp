@@ -118,8 +118,10 @@ void Game::syncCamera() {
     // (thirdPersonFrontAngles) — the camera in front of the player,
     // looking at it. The mode is session state (never saved, defaults
     // to First), so a no-input run stays on the legacy path.
-    m_camera.yaw = m_player->yaw;
-    m_camera.pitch = m_player->pitch;
+    // V3-12b: the camera follows the LOCAL player (the local presentation — each machine views its own player; solo: local == primary, the pre-V3-12b bit-identical value).
+    Player* lp = localPlayer();
+    m_camera.yaw = lp->yaw;
+    m_camera.pitch = lp->pitch;
     if (m_cameraMode == CameraMode::ThirdBack) {
         // 2.0.0: orbit kThirdPersonOrbitHeight ABOVE the eye along the
         // view's up axis (the Minecraft third-person convention) so the
@@ -135,9 +137,9 @@ void Game::syncCamera() {
         // so it keeps its pre-V2-19 signature).
         m_camera.position = resolveThirdPersonCamera(
             currentWorld(), m_blocks,
-            thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
-                                   m_player->pitch),
-            m_player->yaw, m_player->pitch, m_thirdPersonDistance);
+            thirdPersonOrbitCenter(lp->eyePosition(), lp->yaw,
+                                   lp->pitch),
+            lp->yaw, lp->pitch, m_thirdPersonDistance);
     } else if (m_cameraMode == CameraMode::ThirdFront) {
         // V2-1: front view = the back camera's resolve run at the flipped
         // view angles (thirdPersonFrontAngles): the camera sits
@@ -153,7 +155,7 @@ void Game::syncCamera() {
         // the V2-1 note in game_interaction, the MC front-view
         // convention).
         const ThirdPersonAngles fa =
-            thirdPersonFrontAngles(m_player->yaw, m_player->pitch);
+            thirdPersonFrontAngles(lp->yaw, lp->pitch);
         m_camera.yaw = fa.yaw;
         m_camera.pitch = fa.pitch;
         // V2-19: the same wheel-zoomed session distance (the front view
@@ -161,11 +163,11 @@ void Game::syncCamera() {
         // single-value sharing).
         m_camera.position = resolveThirdPersonCamera(
             currentWorld(), m_blocks,
-            thirdPersonOrbitCenter(m_player->eyePosition(), m_player->yaw,
-                                   m_player->pitch),
+            thirdPersonOrbitCenter(lp->eyePosition(), lp->yaw,
+                                   lp->pitch),
             fa.yaw, fa.pitch, m_thirdPersonDistance);
     } else {
-        m_camera.position = m_player->eyePosition(); // First: legacy
+        m_camera.position = lp->eyePosition(); // First: legacy
     }
 
     // V3-9: the AUDIENCE orbit (replay only, RENDER-ONLY): the
@@ -187,7 +189,7 @@ void Game::syncCamera() {
             kAudienceOrbitMaxPitch);
         m_camera.position = resolveThirdPersonCamera(
             currentWorld(), m_blocks,
-            thirdPersonOrbitCenter(m_player->eyePosition(), oyaw, opitch),
+            thirdPersonOrbitCenter(lp->eyePosition(), oyaw, opitch),
             oyaw, opitch, m_thirdPersonDistance);
         m_camera.yaw = oyaw;
         m_camera.pitch = opitch;
@@ -195,6 +197,10 @@ void Game::syncCamera() {
 }
 
 void Game::update(double dt) {
+    // V3-12b (R2): the shared sim clock's advance (first of the frame —
+    // every double-tap window's read sees this frame's dt; solo: an
+    // unread accumulator, the bit-level red line).
+    m_simTime += dt;
     // Chunk streaming (Phase 14) + worker meshing (PIPE-1) — frame
     // pipeline, the race-free part: every worker job from the previous
     // frame (generation, mesh, lighting) completes at this flush; from
@@ -265,8 +271,13 @@ void Game::update(double dt) {
     // armed by an event later in this same update still draws this
     // frame (120 frames total). A no-input run never arms it (zero
     // events — the structural immunity).
-    if (m_tutorialToastFrames > 0) {
-        --m_tutorialToastFrames;
+    // V3-12b: the ×N pass (the per-player toast countdown — solo: one
+    // session, the pre-V3-12b decrement bit-identical).
+    for (std::size_t i = 0; i < m_sessions.size(); ++i) {
+        PlayerSession& s = *m_sessions[i];
+        if (s.tutorialToastFrames > 0) {
+            --s.tutorialToastFrames;
+        }
     }
 
     // V3-1 Phase B (D3 time-capsule ruling): the overworld's world pass
@@ -290,10 +301,19 @@ void Game::update(double dt) {
     // While the inventory is open, player physics and block interaction
     // are paused; the world keeps ticking (day cycle, fluids, entities,
     // streaming) — see docs/KNOWN_ISSUES.
-    if (panelOpen()) {
-        handlePanelClicks();
-    } else {
-        handleInteraction(dt);
+    // V3-12b: the ×N input pass (the per-player panel OR interaction —
+    // solo: one player, the pre-V3-12b sequence bit-identical; the
+    // panel gate is the player's OWN panel, the D11's remote-no-panel
+    // falls out of the loop).
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        PlayerSession& s = *m_sessions[i];
+        const Input& in = inputFor(i);
+        if (s.panel.openPanel != OpenPanel::None) {
+            handlePanelClicks(p, s, in);
+        } else {
+            handleInteraction(p, s, in, dt);
+        }
     }
 
     // V3-14d: the ride pass (the dismount conditions + the carry snap +
@@ -307,8 +327,13 @@ void Game::update(double dt) {
     // V3-10b: the pearl's throw cooldown (the frame-locked bookkeeping
     // — one decrement per frame; a no-throw session keeps it 0, the
     // structural-immunity root, the portal-cooldown's shape).
-    if (m_pearlThrowCooldownFrames > 0) {
-        --m_pearlThrowCooldownFrames;
+    // V3-12b: the ×N pass (the per-player pearl cooldown — solo: one
+    // session, the pre-V3-12b decrement bit-identical).
+    for (std::size_t i = 0; i < m_sessions.size(); ++i) {
+        PlayerSession& s = *m_sessions[i];
+        if (s.pearlThrowCooldownFrames > 0) {
+            --s.pearlThrowCooldownFrames;
+        }
     }
 
     // V3-1 Phase B (D3 time-capsule ruling, the section-1 twin): the
@@ -361,7 +386,15 @@ void Game::update(double dt) {
     // pointer is captured, so an unlocked cursor never rotates the view.
     // Paused while the inventory is open (Phase 15) or the player is dead
     // (Phase 16: the death screen freezes the body; R respawns).
-    if (!panelOpen() && !m_player->isDead()) {
+    // V3-12b: the ×N physics pass (the per-player body — solo: one
+    // player, the pre-V3-12b sequence bit-identical; the tutorial's
+    // walk/jump events anchor the PRIMARY per D12).
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        PlayerSession& s = *m_sessions[i];
+        if (s.panel.openPanel != OpenPanel::None || p.isDead()) {
+            continue;
+        }
         // UX-7: the tutorial walk / jump events — pure comparisons of
         // the player's own state across this frame's update (frame-
         // locked, no real-dt, hard rule 8):
@@ -374,18 +407,26 @@ void Game::update(double dt) {
         //     the swim-up, not a jump — the inWater/inLava tick-state
         //     gate; a knockback lift applied BEFORE the player update
         //     is already in the baseline, so it never fakes a rise).
-        const Vec3 tutPosBefore = m_player->position();
-        const float tutVyBefore = m_player->velocity().y;
-        const bool tutGroundedBefore = m_player->onGround();
-        m_player->update(dt, m_input, m_window.relativeMouseMode());
-        const Vec3 tutPosAfter = m_player->position();
-        if (tutPosAfter.x != tutPosBefore.x ||
-            tutPosAfter.z != tutPosBefore.z) {
-            emitTutorialEvent("walk", 1);
+        const Vec3 tutPosBefore = p.position();
+        const float tutVyBefore = p.velocity().y;
+        const bool tutGroundedBefore = p.onGround();
+        // R18: the pointer-lock SIM mirror — solo syncs from the SDL
+        // state (the original read's value, bit-identical); net reads
+        // the FrameState-carried flag (the local fact in the sim).
+        if (m_players.size() == 1) {
+            s.inputLocked = m_window.relativeMouseMode();
         }
-        if (tutGroundedBefore && m_player->velocity().y > tutVyBefore &&
-            !m_player->inWater() && !m_player->inLava()) {
-            emitTutorialEvent("jump", 1);
+        p.update(dt, inputFor(i), s.inputLocked);
+        if (i == 0) {
+            const Vec3 tutPosAfter = p.position();
+            if (tutPosAfter.x != tutPosBefore.x ||
+                tutPosAfter.z != tutPosBefore.z) {
+                emitTutorialEvent("walk", 1);
+            }
+            if (tutGroundedBefore && p.velocity().y > tutVyBefore &&
+                !p.inWater() && !p.inLava()) {
+                emitTutorialEvent("jump", 1);
+            }
         }
     }
     // V3-1 Phase A: the portal entry countdown (the frame-locked class —
@@ -421,16 +462,18 @@ void Game::update(double dt) {
     // ticking, the Minecraft behavior); after a death it is naturally
     // inert (Player::damage no-ops on the frozen body, and the death
     // transition in updateSurvival refills the state for the respawn).
-    {
-        const float dmg = drownStep(m_drown, headInFluid(*m_player, currentWorld()),
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        PlayerSession& s = *m_sessions[i];
+        const float dmg = drownStep(s.drown, headInFluid(p, currentWorld()),
                                     static_cast<unsigned>(m_frameCount));
         if (dmg > 0.0f) {
             // Drowning BYPASSES the armor reduction (the wiki damage
             // table: Drowning = "Armor: No effect"); the resistance
             // effect and the absorption pool still apply (damage()'s
             // pipeline, the bypass flag skips the armor step only).
-            m_player->damage(dmg, /*bypassArmor=*/true,
-                              {Player::DamageSource::Drown, {}});
+            p.damage(dmg, /*bypassArmor=*/true,
+                     {Player::DamageSource::Drown, {}});
         }
     }
 
@@ -833,57 +876,72 @@ void Game::updateFireSpread() {
 
 void Game::updateBeacons() {
     // Phase 83: re-derive the power level of every tracked beacon and
-    // refresh its NAMED effect on the player while the player is in range.
-    // The level is a pure function of the world (world/beacon) — no stored
-    // state. A no-op (fast-exit) while the world holds no beacon OR the
-    // player is dead (structural immunity: a fresh no-input world has no
-    // beacon, so m_states.beacons is empty and this never runs its body).
+    // refresh its NAMED effect on the player(s) in range.
+    // V3-12b: the ×N pass (each player in range gets the effects —
+    // solo: one player, the pre-V3-12b sequence bit-identical). The
+    // level is a pure function of the world (world/beacon) — no stored
+    // state. A no-op (fast-exit) while the world holds no beacon (the
+    // structural immunity: a fresh no-input world has no beacon, so
+    // m_states.beacons is empty and this never runs its body).
     m_states.beaconActive.clear();
-    if (m_states.beacons.empty() || m_player->isDead()) {
+    if (m_states.beacons.empty()) {
         return;
     }
-    // The absorption pool is a pure function of the effect total at the
-    // sync points. updateEffects only detects a change if the total moves
-    // DURING its own ticks; the beacon applies its effect HERE (before
-    // updateEffects), so capture the total around the applies and sync the
-    // pool if the beacon raised it (the fire-source pattern: standing in
-    // range keeps the layer at its full total; damage still drains it
-    // between sync points, Phase 72).
-    const float absorbBefore = m_playerEffects.totalAbsorption(m_effects);
-    const Vec3 feet = m_player->position();
-    for (const auto& [pos, bid] : m_states.beacons) {
-        const int level = beaconLevel(m_world, m_blocks, pos.x, pos.y, pos.z);
-        if (level < 1) {
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        PlayerSession& s = *m_sessions[i];
+        if (p.isDead()) {
             continue;
         }
-        // An active beacon feeds the beam renderer (drawn in the blending
-        // pass; the beam is gated on the `beacon.beam` config there).
-        m_states.beaconActive.push_back(BeaconBeam {pos.x, pos.y, pos.z, level});
-        // In range? Chebyshev distance from the player's feet to the beacon
-        // cell's centre (the voxel-cube "within N blocks" rule).
-        const float dx = feet.x - (pos.x + 0.5f);
-        const float dy = feet.y - (pos.y + 0.5f);
-        const float dz = feet.z - (pos.z + 0.5f);
-        const float dist = std::max(std::fabs(dx),
-                                    std::max(std::fabs(dy), std::fabs(dz)));
-        if (dist > static_cast<float>(m_states.beaconRange)) {
-            continue;
-        }
-        // Apply the beacon's EFFECT LIST (Phase 91; each name is
-        // init-validated to exist). The duration of every effect refreshes
-        // each frame while in range (the fire-source pattern — standing in
-        // the beam keeps the effects alive). A single-effect beacon (the
-        // Phase 83 `beacon_effect`) is a 1-element list.
-        for (const std::string& effName :
-             m_blocks.at(bid).properties.beaconEffects) {
-            const int eff = m_effects.idForName(effName);
-            if (eff != -1) {
-                m_playerEffects.apply(eff, kBeaconEffectDurationSeconds);
+        // The absorption pool is a pure function of the effect total at
+        // the sync points. updateEffects only detects a change if the
+        // total moves DURING its own ticks; the beacon applies its
+        // effect HERE (before updateEffects), so capture the total
+        // around the applies and sync the pool if the beacon raised it
+        // (the fire-source pattern: standing in range keeps the layer at
+        // its full total; damage still drains it between sync points,
+        // Phase 72).
+        const float absorbBefore = s.effects.totalAbsorption(m_effects);
+        const Vec3 feet = p.position();
+        for (const auto& [pos, bid] : m_states.beacons) {
+            const int level = beaconLevel(m_world, m_blocks, pos.x, pos.y, pos.z);
+            if (level < 1) {
+                continue;
+            }
+            // An active beacon feeds the beam renderer (drawn in the
+            // blending pass; the beam is gated on the `beacon.beam`
+            // config there).
+            m_states.beaconActive.push_back(
+                BeaconBeam {pos.x, pos.y, pos.z, level});
+            // In range? Chebyshev distance from the player's feet to the
+            // beacon cell's centre (the voxel-cube "within N blocks"
+            // rule).
+            const float dx = feet.x - (pos.x + 0.5f);
+            const float dy = feet.y - (pos.y + 0.5f);
+            const float dz = feet.z - (pos.z + 0.5f);
+            const float dist = std::max(std::fabs(dx),
+                                        std::max(std::fabs(dy),
+                                                 std::fabs(dz)));
+            if (dist > static_cast<float>(m_states.beaconRange)) {
+                continue;
+            }
+            // Apply the beacon's EFFECT LIST (Phase 91; each name is
+            // init-validated to exist). The duration of every effect
+            // refreshes each frame while in range (the fire-source
+            // pattern — standing in the beam keeps the effects alive).
+            // A single-effect beacon (the Phase 83 `beacon_effect`) is a
+            // 1-element list.
+            for (const std::string& effName :
+                 m_blocks.at(bid).properties.beaconEffects) {
+                const int eff = m_effects.idForName(effName);
+                if (eff != -1) {
+                    s.effects.apply(eff, kBeaconEffectDurationSeconds);
+                }
             }
         }
-    }
-    if (m_playerEffects.totalAbsorption(m_effects) != absorbBefore) {
-        syncAbsorption();
+        if (s.effects.totalAbsorption(m_effects) != absorbBefore) {
+            syncAbsorptionFor(p, s);
+        }
     }
 }
 
@@ -1030,63 +1088,87 @@ void Game::updatePortalEntry() {
 // re-opens the data-fication, the MC's per-species saddle point).
 static constexpr float kRideCarryHeight = 1.05f;
 
+const Input& Game::inputFor(std::size_t i) const {
+    // V3-12b: the per-player SIM input source. SOLO (m_players.size()==1,
+    // the only reachable state with no net session): the live pump — the
+    // pre-V3-12b value, bit-identical. NET (size > 1): the player's
+    // preloaded ring input (the preloadNetInputs' target — the N−D
+    // frame state, the unified delay rule's no local fast-path).
+    if (m_netActive && m_players.size() > 1) {
+        return m_netInputs[i];
+    }
+    (void)i;
+    return m_input;
+}
+
 void Game::updateRide() {
-    // V3-14d: the ride pass — the per-frame choke point (the recon's
-    // design: one place owns the dismount conditions, the carry snap
-    // and the steer push). No ride = one null check (the structural-
-    // immunity root: a no-input session never mounts, the pass is
-    // inert, the S1 anchor stays byte-identical).
-    if (m_ridingMount == nullptr) {
-        return;
+    // V3-12b: the ×N ride pass (the per-player dismount conditions +
+    // the carry snap + the steer push — solo: one player, the
+    // pre-V3-12b sequence bit-identical). No ride per player = one null
+    // check each (the structural-immunity root).
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        PlayerSession& s = *m_sessions[i];
+        if (s.ridingMount == nullptr) {
+            continue;
+        }
+        MobEntity& mount = *s.ridingMount;
+        // The dismount conditions (every exit funnel here): the mount
+        // dies / the player dies (the death screen owns the body) / the
+        // flight toggle (G / the gamepad's B — the carry and the fly
+        // cannot stack) / a panel opens (the pointer frees, the panel
+        // owns the input — same-frame, handlePanelClicks ran first) /
+        // the mount is IN WATER (the dismounts_underwater structural
+        // twin — the LAVA SURFACE stays ridden: onLavaSurface is the
+        // strider's home, the Minecraft ruling).
+        if (mount.dead() || p.isDead() || p.isFlying() ||
+            s.panel.openPanel != OpenPanel::None ||
+            (mount.inFluid() && !mount.onLavaSurface())) {
+            dismountRideFor(p, s);
+            continue;
+        }
+        // The steer push (the player's key wish in the CAMERA frame —
+        // the player update's flatFwd / right twins, yaw 0 = -Z): W
+        // forward, S back, A/D side (the WASD-direct ruling — the MC
+        // fungus-stick turn is the documented deviation 2; any wish =
+        // forward drive, no wish = the kRideDecel drift-stop).
+        const float cy = std::cos(p.yaw);
+        const float sy = std::sin(p.yaw);
+        const Input& in = inputFor(i);
+        Vec3 dir {0.0f, 0.0f, 0.0f};
+        if (in.isDown(GameKey::W)) {
+            dir = dir + Vec3 {-sy, 0.0f, -cy};
+        }
+        if (in.isDown(GameKey::S)) {
+            dir = dir - Vec3 {-sy, 0.0f, -cy};
+        }
+        if (in.isDown(GameKey::D)) {
+            dir = dir + Vec3 {cy, 0.0f, -sy};
+        }
+        if (in.isDown(GameKey::A)) {
+            dir = dir - Vec3 {cy, 0.0f, -sy};
+        }
+        mount.setRiderSteer(dir, lengthSq(dir) > 0.0f);
+        // The carry snap (the player's pose = the mount's back position;
+        // the horizontal velocity is pushed for the swing phase's
+        // displacement drive + the dismount's drift — the vertical stays
+        // 0: the strider's feet-on-plane snap owns the height, the
+        // player's integrate is the no-op while carried).
+        p.setPosition(mount.position() + Vec3 {0.0f, kRideCarryHeight, 0.0f});
+        const Vec3 mv = mount.velocity();
+        p.setVelocity(Vec3 {mv.x, 0.0f, mv.z});
+        p.setCarried(true);
     }
-    MobEntity& mount = *m_ridingMount;
-    // The dismount conditions (every exit funnel here): the mount dies
-    // / the player dies (the death screen owns the body) / the flight
-    // toggle (G / the gamepad's B — the carry and the fly cannot
-    // stack) / a panel opens (the pointer frees, the panel owns the
-    // input — same-frame, handlePanelClicks ran first) / the mount is
-    // IN WATER (the dismounts_underwater structural twin — the LAVA
-    // SURFACE stays ridden: onLavaSurface is the strider's home, the
-    // Minecraft ruling).
-    if (mount.dead() || m_player->isDead() || m_player->isFlying() ||
-        panelOpen() || (mount.inFluid() && !mount.onLavaSurface())) {
-        dismountRide();
-        return;
-    }
-    // The steer push (the player's key wish in the CAMERA frame — the
-    // player update's flatFwd / right twins, yaw 0 = -Z): W forward,
-    // S back, A/D side (the WASD-direct ruling — the MC fungus-stick
-    // turn is the documented deviation 2; any wish = forward drive,
-    // no wish = the kRideDecel drift-stop).
-    const float cy = std::cos(m_player->yaw);
-    const float sy = std::sin(m_player->yaw);
-    Vec3 dir {0.0f, 0.0f, 0.0f};
-    if (m_input.isDown(GameKey::W)) {
-        dir = dir + Vec3 {-sy, 0.0f, -cy};
-    }
-    if (m_input.isDown(GameKey::S)) {
-        dir = dir - Vec3 {-sy, 0.0f, -cy};
-    }
-    if (m_input.isDown(GameKey::D)) {
-        dir = dir + Vec3 {cy, 0.0f, -sy};
-    }
-    if (m_input.isDown(GameKey::A)) {
-        dir = dir - Vec3 {cy, 0.0f, -sy};
-    }
-    mount.setRiderSteer(dir, lengthSq(dir) > 0.0f);
-    // The carry snap (the player's pose = the mount's back position;
-    // the horizontal velocity is pushed for the swing phase's
-    // displacement drive + the dismount's drift — the vertical stays
-    // 0: the strider's feet-on-plane snap owns the height, the
-    // player's integrate is the no-op while carried).
-    m_player->setPosition(mount.position() +
-                          Vec3 {0.0f, kRideCarryHeight, 0.0f});
-    const Vec3 mv = mount.velocity();
-    m_player->setVelocity(Vec3 {mv.x, 0.0f, mv.z});
-    m_player->setCarried(true);
 }
 
 void Game::dismountRide() {
+    // The primary's dismount (the portal arm's choke — D9's
+    // primary-anchored portals; solo: the only player, the pre-V3-12b
+    // behavior).
+    dismountRideFor(*m_player, *m_sessions[0]);
+}
+
+void Game::dismountRideFor(Player& p, PlayerSession& s) {
     // V3-14d: the dismount exit (every dismount funnels here — the
     // Space / LeftControl keys, the ride pass's conditions, the portal
     // arm): the mount's AI returns to its wander (the m_ridden release
@@ -1097,14 +1179,14 @@ void Game::dismountRide() {
     // update's fly twin), so the ~1.05-block dismount drop never
     // damages. The player KEEPS the mount's horizontal velocity (the
     // drift — the knockback-free project's natural exit).
-    if (m_ridingMount == nullptr) {
+    if (s.ridingMount == nullptr) {
         return;
     }
-    MC_LOG_DEBUG("dismounted the '" + m_ridingMount->def().name + "'");
-    m_ridingMount->setRidden(false);
-    m_ridingMount->setRiderSteer(Vec3::zero(), false);
-    m_ridingMount = nullptr;
-    m_player->setCarried(false);
+    MC_LOG_DEBUG("dismounted the '" + s.ridingMount->def().name + "'");
+    s.ridingMount->setRidden(false);
+    s.ridingMount->setRiderSteer(Vec3::zero(), false);
+    s.ridingMount = nullptr;
+    p.setCarried(false);
 }
 
 // The portal frame the player's AABB currently overlaps (the travel's
@@ -1503,9 +1585,16 @@ void Game::pearlLanding(Projectile* pearl) {
     // so the feet land ON it), the hitbox probe (the strict
     // inequality, hard rule 6) + the +1..+3 up-step (the portal's
     // landing-probe twin — the sealed-pocket total failure swallows).
+    // V3-12b: the thrower (the pearl's landing teleports ITS thrower —
+    // solo: index 0 = the only player, the pre-V3-12b value).
+    const std::size_t pi =
+        (pearl->throwerIndex() >= 0) ? static_cast<std::size_t>(
+            pearl->throwerIndex()) : 0;
+    Player& thrower = *m_players[pi];
+    PlayerSession& tsession = *m_sessions[pi];
     Vec3 target = landing + offset;
-    const float width = m_player->params().width;
-    const float height = m_player->params().height;
+    const float width = thrower.params().width;
+    const float height = thrower.params().height;
     bool roomy = false;
     for (int up = 0; up <= kPortalLandingProbeUp && !roomy; ++up) {
         const Vec3 probe {target.x, target.y + static_cast<float>(up),
@@ -1524,11 +1613,16 @@ void Game::pearlLanding(Projectile* pearl) {
     // The dismount (a rider throws — the ride pass's condition would
     // otherwise drop the rider on the flip's frame; the MC 1.10
     // dismounts-underwater-throw's pearl twin).
-    dismountRide();
-    m_player->restorePosition(target);
-    m_camera.position = m_player->eyePosition();
-    m_camera.yaw = m_player->yaw;
-    m_camera.pitch = m_player->pitch;
+    dismountRideFor(thrower, tsession);
+    thrower.restorePosition(target);
+    // The camera's jump cut is the LOCAL machine's act (the thrower's
+    // view — solo: the only player, the pre-V3-12b sync; net: the
+    // remote thrower's teleport does not move this machine's view).
+    if (&thrower == localPlayer()) {
+        m_camera.position = thrower.eyePosition();
+        m_camera.yaw = thrower.yaw;
+        m_camera.pitch = thrower.pitch;
+    }
     const Item& pearlItem =
         m_items.at(m_items.idForName("ender_pearl"));
     if (!pearlItem.teleportSound.empty()) {
@@ -2357,13 +2451,19 @@ void Game::updateWeather() {
     }
 }
 
-void Game::emitTutorialEvent(const std::string& name, int n) {
+void Game::emitTutorialEvent(const std::string& name, int n, Player* actor) {
     // UX-7 / V2-3: the single tutorial-event choke point (the thin
     // adapter — the state machine's logic is unit-test-owned in
     // core/tutorial). Gated: disabled or done = ZERO execution (no
     // event ever fires without input — the no-input run's structural
     // immunity — and a done/disabled tutorial never re-runs the
     // machine, the skip key no-ops through this same gate).
+    // V3-12b (D12): the tutorial anchors the PRIMARY — a non-primary
+    // actor's event is a no-op in the net session (the solo actor is
+    // always the primary = the gate inert, bit-identical).
+    if (m_players.size() > 1 && actor != nullptr && actor != m_player) {
+        return;
+    }
     if (!m_tutorialEnabled || m_tutorial.done) {
         return;
     }

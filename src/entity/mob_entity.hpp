@@ -304,6 +304,10 @@ DragonLapDecision rollDragonLapDecision(std::uint64_t& state,
 
 class MobEntity : public Entity {
 public:
+    // V3-12b: the per-mob stream state's read (the net state hash's
+    // field — the two machines' mob streams must agree bit-for-bit).
+    std::uint64_t rngState() const { return m_rng; }
+
     // `def` is a registry entry owned by the game (which outlives every
     // entity). `rngSeed` is a per-mob deterministic seed (the game derives
     // it from the world seed + the spawn counter).

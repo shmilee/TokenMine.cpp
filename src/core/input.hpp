@@ -218,6 +218,34 @@ public:
     const std::string& frameText() const { return m_frameText; }
     bool frameBackspace() const { return m_frameBackspace; }
 
+    // V3-12b (the net relay's injection seam): the FRAME-STATE preload —
+    // reset to one captured frame's state (the handle*'s state-form
+    // twin: the level masks + the edges + the accumulated delta /
+    // position / wheel). The net session's per-player SIM input is this
+    // (the demo's event injection is the twin's event form — both feed
+    // the same handle* surface's accumulated state, the input.hpp:239
+    // three-consumer discipline's fourth). The gamepad's connection
+    // state is untouched (the local machine's fact — the presentation
+    // layer, never the sim).
+    void preloadFrame(std::uint64_t keysDown, std::uint64_t keysPressed,
+                      std::uint8_t buttonsDown, std::uint8_t buttonsPressed,
+                      std::uint8_t buttonsReleased, float dx, float dy,
+                      std::uint32_t ax, std::uint32_t ay, int wheel) {
+        frameBegin();
+        for (int k = 0; k < kKeyCount; ++k) {
+            m_keyDown[k] = ((keysDown >> k) & 1u) ? 1 : 0;
+            m_keyPressed[k] = ((keysPressed >> k) & 1u) != 0;
+        }
+        for (int b = 0; b < kMouseButtonCount; ++b) {
+            m_buttonDown[b] = ((buttonsDown >> b) & 1u) ? 1 : 0;
+            m_buttonPressed[b] = ((buttonsPressed >> b) & 1u) != 0;
+            m_buttonReleased[b] = ((buttonsReleased >> b) & 1u) != 0;
+        }
+        m_mouseDelta = Vec2 {dx, dy};
+        m_mousePos = Vec2 {static_cast<float>(ax), static_cast<float>(ay)};
+        m_wheelDelta = wheel;
+    }
+
     // Last absolute mouse position in window pixels (the UI screens read
     // it; while the pointer is captured SDL reports (0, 0) and the value
     // is stale by design — the UI is only used while the pointer is free).

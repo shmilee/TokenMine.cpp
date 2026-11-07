@@ -68,6 +68,36 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **client 环槽偏 1 + 主机快跑屏障 + RST≠FIN + WM 平铺 + uiScale 时
+  序 + seed 豁免 + 无火种子 + --new 净主机 + 起始库存 per-session
+  九坑（PITS 410，门 219 v3.29.0 V3-12b 2 人多人 PoC）**——① **lock-
+  step 环槽 store 偏 1**：主机侧客户端 INPUT{f} 存 f%3 正确（消费帧
+  f+D 的读槽恰合），但**客户端侧收到的主机帧态（属帧 f−D）必须存
+  ringSlot(f) 而非 f%3**（读槽 = ringSlot(N) = (N+1)%3，差 1 = 主机
+  玩家输入晚 1 帧）——f150 哈希点名抓获（f120 前 = W 按前位差未积
+  累，首哈希违例在动作后第 3 个哈希窗）；纪律 = **环槽写读对称性
+  用消费帧验证**（写 slot 的帧 X 必须被读 slot 的帧 X+D 消费）。②
+  **无头主机快跑吃未发输入**：主机 55fps 跑赢客户端 0.3s 启动偏斜
+  → 消费客户端 ring 冷零 = 静默 desync 根；修 = **lockstep 屏障**
+  （主机 pre(N) 等 INPUT[N−D] 水印达标，waitPacket 10s 点名超时；
+  因果链 N−D < N 无死锁）。③ **客户端干净退出 = TCP RST 非 FIN**
+  （进程退出时缓冲区有未读数据 = 内核 RST）：主机 send ECONNRESET
+  原当致命 → 会话死；与 poll EOF 同形 = 移除 player + solo 续跑。
+  ④ **WM 平铺竞态打 window parity**：无头双窗被 WM 各自平铺（679×
+  744 vs 1280×720）= 环境噪声（PITS 388 族）→ parity 改 **config
+  请求几何**（requestedWidth/Height，D19 记档）。⑤ **HELLO 的
+  uiScale 时序**：client 握手先于 buildScene（种子权威要求）→
+  m_uiScale 未设 = 0.0 误拒 window parity；改 config 直读
+  （uiScaleFromConfig）。⑥ **world.seed 入 simConfigHash = 误拒**
+  （client 本地 config 种子 ≠ 主机 --seed；WELCOME 种子 = 权威 →
+  豁免出 parity 键表）。⑦ **无输入臂跨 run savenorm EXACT 需无火
+  种子**（fire 熄灭 real-dt 域，PITS 385/390 族——同种子同 run 双
+  进程同序 ✓，跨 run 位差 ✗）：seed 11/22 无火 / 33/44/55 有火
+  扫描定案。⑧ **--new 须 --save 卡净主机**（净会话世界恒 fresh，
+  --new 无 slot 合法 = WELCOME fresh 形的 CLI 门）。⑨ **起始库存
+  per-session**：netAddPlayer 空 Inventory（默认构造）= 断线移除
+  零掉落静默（门臂 entities=0 抓获）；fillStarterInventory 提取
+  buildScene 块共享（hotbar.json items + inventory 段）。
 - **负 cell 中心 + 无蛋 ≠ 首访 + demo 死点击 + 旋转 dy 累计 +
   /tmp 路径重写五坑（PITS 409，门 217 v3.27.0 V3-10d2 召唤与复
   杀）**——① **负坐标 cell 中心 = -N + 0.5 非 -N - 0.5**（硬规

@@ -63,45 +63,50 @@ constexpr double kHurtFlashSeconds = 0.5;
 
 } // namespace
 
-int Game::armorProtectionPoints() const {
+int Game::armorProtectionPoints(const Player& p) const {
     // V2-12 (protection): 4 * min(20, the sum of the protection levels over
     // the four worn pieces). The pure accessor per piece is
     // protectionLevel (0 when the piece is empty / unenchantable / has no
-    // protection). No protection worn = 0 (the pre-V2-12 bit-identical path).
+    // protection). No protection worn = 0 (the pre-V2-12 bit-identical
+    // path). V3-12b: per-player (the ×N effects pass's read — solo: the
+    // only player, the original value).
     int sum = 0;
     for (int slot = 0; slot < kArmorSlotCount; ++slot) {
-        sum += protectionLevel(m_player->armorSlot(slot), m_enchants);
+        sum += protectionLevel(p.armorSlot(slot), m_enchants);
     }
     return 4 * std::min(20, sum);
 }
 
 void Game::updateEffects(double dt) {
+    // V3-12b: the ×N effects pass (solo: one player, the pre-V3-12b
+    // sequence bit-identical — the loop's single iteration).
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        PlayerSession& s = *m_sessions[i];
     // Phase 84: push the effect-derived move-speed + damage-reduction onto
     // the player every frame (the player's movement + damage read them; the
     // identity 1.0 / 0.0 when no such effect is active). Runs even for a
     // dead player so the values reset cleanly on respawn.
-    m_player->setSpeedMultiplier(
-        m_playerEffects.totalSpeedMultiplier(m_effects));
-    m_player->setDamageReduction(
-        m_playerEffects.totalDamageReduction(m_effects));
+        p.setSpeedMultiplier(s.effects.totalSpeedMultiplier(m_effects));
+        p.setDamageReduction(s.effects.totalDamageReduction(m_effects));
     // V2-12 (protection): push the armor protection bonus each frame (0 =
     // none — the pre-V2-12 bit-identical damage path).
-    m_player->setProtectionBonus(armorProtectionPoints());
+        p.setProtectionBonus(armorProtectionPoints(p));
     // V2-12 (unbreaking): push each worn piece's unbreaking level (0 =
     // none — the pre-V2-12 bit-identical armor wear).
-    for (int slot = 0; slot < kArmorSlotCount; ++slot) {
-        m_player->setArmorUnbreaking(
-            slot, unbreakingLevel(m_player->armorSlot(slot), m_enchants));
-    }
-    if (m_player->isDead()) {
-        return;
-    }
+        for (int slot = 0; slot < kArmorSlotCount; ++slot) {
+            p.setArmorUnbreaking(
+                slot, unbreakingLevel(p.armorSlot(slot), m_enchants));
+        }
+        if (p.isDead()) {
+            continue;
+        }
     // Phase 72: the absorption pool is synced only when the effects'
     // total ACTUALLY changes this frame (an expiry, a water extinguish).
     // A per-frame SET would fight the damage drain: the pool must persist
     // between sync points (the Phase 56 bonus sync was idempotent, the
     // pool is not — damage lowers it below the total).
-    const float absorptionBefore = m_playerEffects.totalAbsorption(m_effects);
+        const float absorptionBefore = s.effects.totalAbsorption(m_effects);
     // Phase 57: the fire system (the data-flagged effect, resolved at
     // init). Runs EVEN with no active effects — the ignition is a source:
     // while the player is in the lava OR overlapping a fire block
@@ -117,23 +122,22 @@ void Game::updateEffects(double dt) {
     // in the rain stays out, the water-beats-fire order; no roof-shade
     // check = the documented deviation; off/clear = the water-only path
     // bit-identical).
-    if (m_fireEffectId != -1) {
-        // V3-15 (netherite): the fire immunity — no re-ignition while
-        // a fire-resistant piece is worn (the lava tick's suppression
-        // is the player's own, the Phase-57 twin).
-        if ((m_player->inLava() || m_player->isInFire()) &&
-            !m_player->hasFireResistantArmor()) {
-            m_playerEffects.apply(
-                m_fireEffectId,
-                m_player->params().fireDurationSeconds);
+        if (m_fireEffectId != -1) {
+            // V3-15 (netherite): the fire immunity — no re-ignition while
+            // a fire-resistant piece is worn (the lava tick's suppression
+            // is the player's own, the Phase-57 twin).
+            if ((p.inLava() || p.isInFire()) &&
+                !p.hasFireResistantArmor()) {
+                s.effects.apply(m_fireEffectId,
+                                p.params().fireDurationSeconds);
+            }
+            if (p.inWater() || m_weather.raining) {
+                s.effects.clearExtinguishable(m_effects);
+            }
         }
-        if (m_player->inWater() || m_weather.raining) {
-            m_playerEffects.clearExtinguishable(m_effects);
+        if (s.effects.count() == 0) {
+            continue;
         }
-    }
-    if (m_playerEffects.count() == 0) {
-        return;
-    }
     // The ticks are REAL dt (the survival-timer class, like hunger and
     // the eat channel). The HP changes apply against the player HERE
     // (not in StatusEffects): the damage tick respects the effect's
@@ -142,43 +146,57 @@ void Game::updateEffects(double dt) {
     // clamps at max health. A poison tick that drops health shows the
     // red hurt veil like any other damage (updateSurvival polls the
     // health each frame; the v1 has no separate poison tint).
-    m_playerEffects.update(
-        dt, m_effects, [this](const Effect& def) {
-            if (def.tick == Effect::Tick::Damage) {
-                // V3-15 (netherite): the fire's damage tick is
-                // suppressed by a worn fire-resistant piece (the
-                // ignition itself never lands — the re-apply gate
-                // above; a burn started before the piece equips keeps
-                // its visual but stops damaging, the Minecraft
-                // fire-resistance semantics).
-                const bool fireImmune =
-                    def.name == "fire" &&
-                    m_player->hasFireResistantArmor();
-                if (!fireImmune &&
-                    m_player->health() - def.tickAmount >= def.minHealth) {
-                    m_player->damage(def.tickAmount, false,
-                                     {Player::DamageSource::Effect,
-                                      def.name});
+        s.effects.update(
+            dt, m_effects, [&p](const Effect& def) {
+                if (def.tick == Effect::Tick::Damage) {
+                    // V3-15 (netherite): the fire's damage tick is
+                    // suppressed by a worn fire-resistant piece (the
+                    // ignition itself never lands — the re-apply gate
+                    // above; a burn started before the piece equips keeps
+                    // its visual but stops damaging, the Minecraft
+                    // fire-resistance semantics).
+                    const bool fireImmune =
+                        def.name == "fire" && p.hasFireResistantArmor();
+                    if (!fireImmune &&
+                        p.health() - def.tickAmount >= def.minHealth) {
+                        p.damage(def.tickAmount, false,
+                                 {Player::DamageSource::Effect,
+                                  def.name});
+                    }
+                } else if (def.tick == Effect::Tick::Heal) {
+                    p.heal(def.tickAmount);
                 }
-            } else if (def.tick == Effect::Tick::Heal) {
-                m_player->heal(def.tickAmount);
-            }
-        });
+            });
     // Phase 72: an expired (or extinguished) absorption layer drops the
     // pool to the remaining total (the health is untouched — the pool is
     // not HP). Unchanged totals leave the pool alone (the drain since
     // the last sync point persists).
-    if (m_playerEffects.totalAbsorption(m_effects) != absorptionBefore) {
-        syncAbsorption();
+        if (s.effects.totalAbsorption(m_effects) != absorptionBefore) {
+            syncAbsorptionFor(p, s);
+        }
     }
 }
 
 void Game::syncAbsorption() {
-    m_player->setAbsorption(m_playerEffects.totalAbsorption(m_effects));
+    // V3-12b: the primary's sync (solo: the only player, the pre-V3-12b
+    // behavior; the ×N callers use syncAbsorptionFor).
+    syncAbsorptionFor(*m_player, *m_sessions[0]);
+}
+
+void Game::syncAbsorptionFor(Player& p, PlayerSession& s) {
+    p.setAbsorption(s.effects.totalAbsorption(m_effects));
 }
 
 void Game::applyPlayerEffect(const std::string& name, double duration,
                              int tier) {
+    // V3-12b: the primary's apply (solo: the only player, the pre-V3-12b
+    // behavior; the ×N callers use applyPlayerEffectFor).
+    applyPlayerEffectFor(*m_player, *m_sessions[0], name, duration, tier);
+}
+
+void Game::applyPlayerEffectFor(Player& p, PlayerSession& s,
+                                const std::string& name, double duration,
+                                int tier) {
     // SURV-4 (potions): the single choke point for applying a NAMED effect
     // to the player. Every grant source (a food's grants_effect(s), a
     // drinkable's, a mob's on_hit_effect) is init-cross-checked to name an
@@ -202,40 +220,25 @@ void Game::applyPlayerEffect(const std::string& name, double duration,
     if (id == -1) {
         return; // init guarantees existence; this is a defensive no-op.
     }
-    m_playerEffects.apply(id, duration, tier);
+    s.effects.apply(id, duration, tier);
     const Effect& def = m_effects.at(id);
     if (def.instantHp > 0.0f) {
-        m_player->heal(def.instantHp);
+        p.heal(def.instantHp);
     } else if (def.instantHp < 0.0f) {
-        m_player->damage(-def.instantHp, true);
+        p.damage(-def.instantHp, true);
     }
 }
 
 void Game::handleUiKeys() {
+    // V3-12b: the split — the LOCAL group (F3 / F5 / C / the wheel zoom:
+    // per-machine presentation + the host's save, the live pump) keeps
+    // the original order, then the ×N SIM group (the hotbar digits / G /
+    // T / E / the panel ESC) runs per player over the N−D input (the
+    // unified relay rule — solo: m_input live, the pre-V3-12b sequence
+    // bit-identical; the C→wheel and the G→T→E relative orders are
+    // preserved, the regrouped branches share no state).
     if (m_input.wasPressed(GameKey::F3)) {
         m_debugOverlay = !m_debugOverlay;
-    }
-    // CRAFT-7: the top-row digits select the hotbar slot directly
-    // (Minecraft; the Tab cycle stays). In the GLOBAL key section
-    // (handleUiKeys, not the locked-world section): it must work with a
-    // panel open, as in Minecraft — the world section early-returns
-    // while the pointer is free (panel open). V3-11b: with the creative
-    // search FOCUSED (the 物品栏 tab open) a digit is TEXT (it types
-    // into the search — the key's printable character) and does NOT
-    // switch the hotbar (the Minecraft's search-focus semantics; the
-    // slot is chosen before the panel opens, or with the pointer
-    // locked). The text side-effect is the panel branch's
-    // appendFrameText — the digit is typed either way.
-    const bool searchFocused = m_panel.openPanel == OpenPanel::Inventory &&
-                               m_player->isCreative() &&
-                               m_panel.creativeTab == 0;
-    for (int d = 0; d < 9; ++d) {
-        if (m_input.wasPressed(static_cast<GameKey>(
-                static_cast<int>(GameKey::Digit1) + d))) {
-            if (!searchFocused) {
-                m_selectedSlot = static_cast<std::size_t>(d);
-            }
-        }
     }
     if (m_input.wasPressed(GameKey::F5)) {
         if (m_args.saveSlot.has_value()) {
@@ -261,80 +264,99 @@ void Game::handleUiKeys() {
                       ? CameraMode::ThirdFront
                       : CameraMode::First;
     }
-    // V3-11a: the creative mode toggle (G — the C-key's game-mode twin:
-    // locked-pointer only, the E-key pattern, alive only). The mode is
-    // a SAVE flag (format 31, the per-player Minecraft gamemode — unlike
-    // the camera's session state). ON: the flight comes up with it (the
-    // creative's default — the mode owns the transition; the Space
-    // double-tap stays for toggling flight within the mode); OFF: the
-    // flight down (the respawn's reset twin).
-    if (m_input.wasPressed(GameKey::G) && m_window.relativeMouseMode() &&
-        !m_player->isDead()) {
-        const bool on = !m_player->isCreative();
-        m_player->setCreative(on);
-        m_player->setFlying(on);
-        MC_LOG_INFO("Creative mode " + std::string(on ? "ON" : "OFF") +
-                    " (G)");
-    }
     // V2-19: the mouse wheel zooms the third-person orbit distance
-    // (session state — never saved, the camera-mode precedent; the C mode
-    // switch does NOT reset it). Third views only: First is a no-op
-    // (the design gate). The wheel delta is the per-frame input state
-    // (reset in frameBegin — a no-input run reads 0 forever, the
-    // structural-immunity root): distance += kZoomStep per tick, clamped
-    // to [kZoomMin, kZoomMax] (the pure resolve takes the value, the
-    // aimReach's ThirdFront D + kReach follows it — the front camera's
-    // reach stays the full Minecraft reach behind the player at any
-    // zoom; the aim RAYS still leave from the eye, UX-8g untouched).
+    // (session state — never saved, the camera-mode precedent; the C
+    // mode switch does NOT reset it). Third views only: First is a
+    // no-op (the design gate).
     if (m_input.wheelDelta() != 0 && m_cameraMode != CameraMode::First) {
         m_thirdPersonDistance = std::clamp(
             m_thirdPersonDistance + kZoomStep * m_input.wheelDelta(),
             kZoomMin, kZoomMax);
     }
-    // UX-7 / V2-3: T skips the tutorial (locked pointer only — the
-    // C-key pattern: a free cursor / panel / death screen never touches
-    // it). Gated on enabled ∧ !done (the brief's rules: disabled = the
-    // key is a no-op; a finished tutorial cannot be re-skipped) — T not
-    // pressed = zero execution. V2-3: T skips the CURRENT SERIES — a
-    // non-final series moves to the next series' first step (NO toast
-    // — the target line's step change is the cue, the design decision)
-    // with the one-shot info log (the E2E evidence, the PRE-4 pattern);
-    // the last series keeps the pre-V2-3 behavior (the done flip arms
-    // the SAME completion toast + the log).
-    if (m_input.wasPressed(GameKey::T) && m_window.relativeMouseMode() &&
-        m_tutorialEnabled && !m_tutorial.done) {
-        if (m_tutorial.seriesIndex + 1 <
-            static_cast<int>(m_tutorialSeries.size())) {
-            m_tutorial.seriesIndex += 1;
-            m_tutorial.stepIndex = 0;
-            m_tutorial.progress = 0;
-            MC_LOG_INFO("Tutorial: series skipped (" +
-                        std::to_string(m_tutorial.seriesIndex) + "/" +
-                        std::to_string(m_tutorialSeries.size()) + ")");
-        } else {
-            m_tutorial.done = true;
-            m_tutorialToastFrames = kTutorialToastFrames;
-            MC_LOG_INFO("Tutorial: skipped");
+
+    // The ×N SIM group.
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        PlayerSession& s = *m_sessions[i];
+        const Input& in = inputFor(i);
+        // R18: the sim lock read — solo: the SDL state (the original
+        // value); net: the player's N−D FrameState flag.
+        const bool locked =
+            (m_players.size() == 1) ? m_window.relativeMouseMode()
+                                    : s.inputLocked;
+        // CRAFT-7: the top-row digits select the hotbar slot directly
+        // (Minecraft; the Tab cycle stays). V3-11b: with the creative
+        // search FOCUSED (the 物品栏 tab open) a digit is TEXT (it types
+        // into the search — the key's printable character) and does NOT
+        // switch the hotbar (the Minecraft's search-focus semantics; the
+        // slot is chosen before the panel opens, or with the pointer
+        // locked). The text side-effect is the panel branch's
+        // appendFrameText — the digit is typed either way.
+        const bool searchFocused =
+            s.panel.openPanel == OpenPanel::Inventory && p.isCreative() &&
+            s.panel.creativeTab == 0;
+        for (int d = 0; d < 9; ++d) {
+            if (in.wasPressed(static_cast<GameKey>(
+                    static_cast<int>(GameKey::Digit1) + d))) {
+                if (!searchFocused) {
+                    s.selectedSlot = static_cast<std::size_t>(d);
+                }
+            }
         }
-    }
-    if (m_input.wasPressed(GameKey::E)) {
-        if (panelOpen()) {
-            closePanel();
-        } else if (m_window.relativeMouseMode()) {
-            openPanel(OpenPanel::Inventory);
+        // V3-11a: the creative mode toggle (G). D11: creative MULTI is
+        // disabled in 12b — the branch is solo-only (the net sessions'
+        // players stay survival; the solo creative is untouched).
+        if (m_players.size() == 1 && in.wasPressed(GameKey::G) && locked &&
+            !p.isDead()) {
+            const bool on = !p.isCreative();
+            p.setCreative(on);
+            p.setFlying(on);
+            MC_LOG_INFO("Creative mode " + std::string(on ? "ON" : "OFF") +
+                        " (G)");
         }
-    }
-    if (panelOpen() && m_input.wasPressed(GameKey::Escape)) {
-        closePanel();
+        // UX-7 / V2-3: T skips the tutorial (locked pointer only). D12:
+        // the tutorial anchors the PRIMARY in 12b (host-only — the
+        // client's user's T is a no-op, the host's T relays).
+        if (i == 0 && in.wasPressed(GameKey::T) && locked &&
+            s.tutorialEnabled && !s.tutorial.done) {
+            if (s.tutorial.seriesIndex + 1 <
+                static_cast<int>(m_tutorialSeries.size())) {
+                s.tutorial.seriesIndex += 1;
+                s.tutorial.stepIndex = 0;
+                s.tutorial.progress = 0;
+                MC_LOG_INFO("Tutorial: series skipped (" +
+                            std::to_string(s.tutorial.seriesIndex) + "/" +
+                            std::to_string(m_tutorialSeries.size()) + ")");
+            } else {
+                s.tutorial.done = true;
+                s.tutorialToastFrames = kTutorialToastFrames;
+                MC_LOG_INFO("Tutorial: skipped");
+            }
+        }
+        // R17: the E-key panel is the LOCAL player's face (the remote
+        // player's E is a no-op in 12b — its inventory moves only via
+        // the Q drop + the pickup's world state).
+        const bool isLocal = (i == static_cast<std::size_t>(m_localSlot));
+        if (isLocal && in.wasPressed(GameKey::E)) {
+            if (s.panel.openPanel != OpenPanel::None) {
+                closePanelFor(p, s);
+            } else if (locked) {
+                openPanelFor(p, s, OpenPanel::Inventory);
+            }
+        }
+        if (isLocal && s.panel.openPanel != OpenPanel::None &&
+            in.wasPressed(GameKey::Escape)) {
+            closePanelFor(p, s);
+        }
     }
 }
 
-void Game::openPanel(OpenPanel panel) {
+void Game::openPanelFor(Player& p, PlayerSession& s, OpenPanel panel) {
     m_window.setRelativeMouseMode(false); // free the cursor for clicking
-    m_panel.openPanel = panel;
-    resetBreaking();
-    resetBowDraw(); // a panel interrupts a draw (Phase 24)
-    resetEatChannel(); // a panel interrupts an eat too (Phase 28)
+    s.panel.openPanel = panel;
+    resetBreaking(s);
+    resetBowDraw(s); // a panel interrupts a draw (Phase 24)
+    resetEatChannel(s); // a panel interrupts an eat too (Phase 28)
     // V3-11b: the creative's E opens on the 物品栏 tab (the Minecraft's
     // creative-tab default — the search + grant face first), with a
     // FRESH session state (the enchant slots' precedent). The typed
@@ -342,31 +364,31 @@ void Game::openPanel(OpenPanel panel) {
     // SDL3's text input is off by default, so every other open (and
     // the whole no-input run) never delivers a TEXT_INPUT event
     // (the structural-immunity root).
-    if (panel == OpenPanel::Inventory && m_player->isCreative()) {
-        m_panel.creativeUi.reset();
-        m_panel.creativeTab = 0;
+    if (panel == OpenPanel::Inventory && p.isCreative()) {
+        s.panel.creativeUi.reset();
+        s.panel.creativeTab = 0;
     }
     m_window.setTextInputEnabled(
-        panel == OpenPanel::Inventory && m_player->isCreative());
+        panel == OpenPanel::Inventory && p.isCreative());
     m_sound.play("ui_open");
 }
 
-void Game::closePanel() {
+void Game::closePanelFor(Player& p, PlayerSession& s) {
     // V2-12: the enchant panel's item + lapis slots are SESSION state —
     // they return to the inventory on close (a full inventory drops them at
     // the player's feet — the documented return rule). The other panels'
     // states persist (the furnace per-block, the grids), so only the
     // Enchant panel triggers the return.
-    if (m_panel.openPanel == OpenPanel::Enchant) {
-        returnEnchantSlot(m_panel.enchantItemSlot);
-        returnEnchantSlot(m_panel.enchantLapisSlot);
-        m_panel.enchantOffers = EnchantOffers {};
+    if (s.panel.openPanel == OpenPanel::Enchant) {
+        returnEnchantSlotFor(p, s, s.panel.enchantItemSlot);
+        returnEnchantSlotFor(p, s, s.panel.enchantLapisSlot);
+        s.panel.enchantOffers = EnchantOffers {};
     }
     // V3-11b: the typed text is a creative-Inventory-panel state — a
     // close (of any panel) stops it (the open's twin; SDL3's default
     // stays off, so the no-input run's immunity holds across close).
     m_window.setTextInputEnabled(false);
-    m_panel.openPanel = OpenPanel::None;
+    s.panel.openPanel = OpenPanel::None;
     m_sound.play("ui_close");
 }
 
@@ -375,15 +397,15 @@ void Game::closePanel() {
 // one; furnaceAt's default-construct is defensive). The state is stable
 // while the panel is open: block interaction is paused and no other code
 // path mutates or removes a furnace block in the meantime.
-void Game::openFurnacePanel(const BlockPos& pos) {
-    m_panel.openFurnacePos = pos;
-    m_panel.furnaceUi.bind(furnaceAt(pos));
-    openPanel(OpenPanel::Furnace);
+void Game::openFurnacePanelFor(Player& p, PlayerSession& s, const BlockPos& pos) {
+    s.panel.openFurnacePos = pos;
+    s.panel.furnaceUi.bind(furnaceAt(pos));
+    openPanelFor(p, s, OpenPanel::Furnace);
     // UX-7: the tutorial interact event (the panel-open success point —
     // the block under the click, the data-driven name).
     emitTutorialEvent(
         "interact." +
-            m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name, 1);
+            m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name, 1, &p);
 }
 
 FurnaceState& Game::furnaceAt(const BlockPos& pos) {
@@ -400,14 +422,14 @@ FurnaceState& Game::furnaceAt(const BlockPos& pos) {
 // while the panel is open: block interaction is paused and no other code
 // path mutates or removes a table block in the meantime (the Phase 44
 // furnace argument, the twin).
-void Game::openTablePanel(const BlockPos& pos) {
-    m_panel.tableUi.bind(tableAt(pos));
-    openPanel(OpenPanel::Table);
+void Game::openTablePanelFor(Player& p, PlayerSession& s, const BlockPos& pos) {
+    s.panel.tableUi.bind(tableAt(pos));
+    openPanelFor(p, s, OpenPanel::Table);
     // UX-7: the tutorial interact event (the panel-open success point —
     // the block under the click, the data-driven name).
     emitTutorialEvent(
         "interact." +
-            m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name, 1);
+            m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name, 1, &p);
 }
 
 CraftingGrid& Game::tableAt(const BlockPos& pos) {
@@ -431,106 +453,106 @@ CampfireCookState& Game::campfireAt(const BlockPos& pos) {
 // class/enchantability + the player's xpSeed); the item/lapis slots are
 // session state returned to the inventory on close (the documented
 // deviation from the furnace's per-block persistence).
-void Game::openEnchantPanel(const BlockPos& pos) {
-    m_panel.openEnchantPos = pos;
-    m_panel.enchantItemSlot = ItemStack {};
-    m_panel.enchantLapisSlot = ItemStack {};
-    m_panel.enchantUi.bind(m_panel.enchantItemSlot, m_panel.enchantLapisSlot);
-    openPanel(OpenPanel::Enchant);
-    regenEnchantOffers(); // empty slot -> the offers clear
+void Game::openEnchantPanelFor(Player& p, PlayerSession& s, const BlockPos& pos) {
+    s.panel.openEnchantPos = pos;
+    s.panel.enchantItemSlot = ItemStack {};
+    s.panel.enchantLapisSlot = ItemStack {};
+    s.panel.enchantUi.bind(s.panel.enchantItemSlot, s.panel.enchantLapisSlot);
+    openPanelFor(p, s, OpenPanel::Enchant);
+    regenEnchantOffersFor(p, s); // empty slot -> the offers clear
     // UX-7: the tutorial interact event (the panel-open success point).
     emitTutorialEvent(
         "interact." +
-            m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name, 1);
+            m_blocks.at(m_world.getBlock(pos.x, pos.y, pos.z)).name, 1, &p);
 }
 
-void Game::regenEnchantOffers() {
-    if (m_panel.openPanel != OpenPanel::Enchant) {
+void Game::regenEnchantOffersFor(Player& p, PlayerSession& s) {
+    if (s.panel.openPanel != OpenPanel::Enchant) {
         return;
     }
-    const ItemStack& itemSlot = m_panel.enchantItemSlot;
+    const ItemStack& itemSlot = s.panel.enchantItemSlot;
     if (itemSlot.empty()) {
-        m_panel.enchantOffers = EnchantOffers {};
+        s.panel.enchantOffers = EnchantOffers {};
         return;
     }
     const Item& item = m_items.at(itemSlot.item);
     // bookshelfCount is evaluated ONLY while the panel is open (no panel =
     // zero cost, the structural-immunity root).
     const int B =
-        bookshelfCount(m_world, m_blocks, m_panel.openEnchantPos);
-    m_panel.enchantOffers = generateOffers(
+        bookshelfCount(m_world, m_blocks, s.panel.openEnchantPos);
+    s.panel.enchantOffers = generateOffers(
         static_cast<std::uint64_t>(m_generator->seed()),
-        m_panel.openEnchantPos, item.enchantClass, item.enchantability,
-        m_player->xpSeed(), B, m_enchants);
+        s.panel.openEnchantPos, item.enchantClass, item.enchantability,
+        p.xpSeed(), B, m_enchants);
 }
 
 // V2-12: return one panel slot's stack to the inventory (add-merge; a full
 // inventory drops it at the player's feet — the documented return rule).
-void Game::returnEnchantSlot(ItemStack& stack) {
+void Game::returnEnchantSlotFor(Player& p, PlayerSession& s, ItemStack& stack) {
     if (stack.empty()) {
         return;
     }
     const Item& item = m_items.at(stack.item);
     const int slot =
-        m_inventory.add(stack.item, stack.count, m_items, stack.damage,
+        s.inventory.add(stack.item, stack.count, m_items, stack.damage,
                         stack.enchants);
     if (slot < 0) {
         m_entities.push_back(std::make_unique<ItemEntity>(
             m_world, m_blocks, item.name, item.maxStack, stack.count,
-            m_player->position(), stack.damage, stack.enchants));
+            p.position(), stack.damage, stack.enchants));
     }
     stack = ItemStack {};
 }
 
-bool Game::applyEnchantOffer(int row) {
+bool Game::applyEnchantOfferFor(Player& p, PlayerSession& s, int row) {
     if (row < 0 || row > 2) {
         return false;
     }
     const EnchantOffer* o =
-        row == 0 ? &m_panel.enchantOffers.top
-        : row == 1 ? &m_panel.enchantOffers.mid
-                   : &m_panel.enchantOffers.bottom;
-    const ItemStack& itemSlot = m_panel.enchantItemSlot;
+        row == 0 ? &s.panel.enchantOffers.top
+        : row == 1 ? &s.panel.enchantOffers.mid
+                   : &s.panel.enchantOffers.bottom;
+    const ItemStack& itemSlot = s.panel.enchantItemSlot;
     if (itemSlot.empty()) {
         return false;
     }
     const Item& item = m_items.at(itemSlot.item);
-    const int poolLevel = levelFromTotalXp(m_player->xpTotal());
+    const int poolLevel = levelFromTotalXp(p.xpTotal());
     const int lapisCount =
-        m_panel.enchantLapisSlot.empty() ? 0 : m_panel.enchantLapisSlot.count;
+        s.panel.enchantLapisSlot.empty() ? 0 : s.panel.enchantLapisSlot.count;
     if (!offerApplicable(itemSlot, item.enchantability, poolLevel, lapisCount,
                          *o)) {
         return false;
     }
     // Apply: the item slot gains the offer's enchants (one apply per item —
     // the offerApplicable gate ensures it was unenchanted).
-    m_panel.enchantItemSlot.enchants = o->enchants;
+    s.panel.enchantItemSlot.enchants = o->enchants;
     // Deduct the whole XP levels (the within-level remainder is kept).
-    m_player->setXpTotal(
-        applyEnchantXpCharge(m_player->xpTotal(), o->xpCost));
+    p.setXpTotal(
+        applyEnchantXpCharge(p.xpTotal(), o->xpCost));
     // Deduct the lapis from the panel slot.
-    m_panel.enchantLapisSlot.count -= o->lapisCost;
-    if (m_panel.enchantLapisSlot.count <= 0) {
-        m_panel.enchantLapisSlot = ItemStack {};
+    s.panel.enchantLapisSlot.count -= o->lapisCost;
+    if (s.panel.enchantLapisSlot.count <= 0) {
+        s.panel.enchantLapisSlot = ItemStack {};
     }
     // Advance the xpSeed (the next panel-open roll differs — the PITS #4
     // step-then-mix).
-    m_player->setXpSeed(xpSeedStep(m_player->xpSeed()));
+    p.setXpSeed(xpSeedStep(p.xpSeed()));
     // The item is now enchanted: clear the offers (a re-place re-rolls).
-    m_panel.enchantOffers = EnchantOffers {};
+    s.panel.enchantOffers = EnchantOffers {};
     m_sound.play("craft"); // reused (no dedicated enchant sound asset)
     MC_LOG_DEBUG("enchant applied: " +
-                 std::to_string(m_panel.enchantItemSlot.enchants.size()) +
+                 std::to_string(s.panel.enchantItemSlot.enchants.size()) +
                  " enchant(s), xpCost " + std::to_string(o->xpCost) +
                  ", lapisCost " + std::to_string(o->lapisCost));
     return true;
 }
 
-void Game::tryCampfireCook(const BlockPos& pos) {
+void Game::tryCampfireCookFor(PlayerSession& s, const BlockPos& pos) {
     // The click is ALWAYS consumed (the caller returns) — a campfire is
     // never placed through this branch, whatever the hand holds.
     CampfireCookState& st = campfireAt(pos);
-    const ItemStack& held = m_inventory.at(m_selectedSlot);
+    const ItemStack& held = s.inventory.at(s.selectedSlot);
     // Phase 76: the relight — an ignites_flamable item (the flint and
     // steel) on a campfire-family block with an `ignites_to` target sets
     // the target in place (unlit -> lit: the cooking state survives the
@@ -573,7 +595,7 @@ void Game::tryCampfireCook(const BlockPos& pos) {
                     // from the hand; the cooking starts at the next tick.
                     st.slots[i] = ItemStack {held.item, 1};
                     st.progressSubsteps[i] = 0;
-                    m_inventory.take(m_selectedSlot, 1);
+                    s.inventory.take(s.selectedSlot, 1);
                     m_sound.play("place");
                     // UX-7: the tutorial interact event (a unit was
                     // placed on the fire — the block under the click).
@@ -596,7 +618,7 @@ void Game::tryCampfireCook(const BlockPos& pos) {
     // the selected slot is empty, so the write is a direct set.
     for (std::size_t i = 0; i < kCampfireSlotCount; ++i) {
         if (!st.slots[i].empty()) {
-            m_inventory.setSlot(m_selectedSlot, st.slots[i]);
+            s.inventory.setSlot(s.selectedSlot, st.slots[i]);
             st.slots[i] = ItemStack {};
             st.progressSubsteps[i] = 0;
             m_sound.play("pickup");
@@ -636,7 +658,7 @@ std::vector<const Recipe*> Game::shapedRecipes() const {
     return out;
 }
 
-void Game::handlePanelClicks() {
+void Game::handlePanelClicks(Player& p, PlayerSession& s, const Input& in) {
     // The layout and the mouse hit tests both live in UI pixels (Phase
     // 34): InventoryLayout / FurnaceLayout are pure geometry, so passing
     // the UI space scales the panel identically to the rendered one.
@@ -649,22 +671,25 @@ void Game::handlePanelClicks() {
     // The double-click window is REAL dt (the survival-timer class, hard
     // rule 8: input-only state — a no-input run never touches it), and
     // any non-slot click / other button / shift resets the pairing.
-    const bool shift = m_input.isDown(GameKey::LeftShift);
-    const bool leftPressed = m_input.wasPressed(MouseButton::Left);
-    const bool rightPressed = m_input.wasPressed(MouseButton::Right);
-    const double now = nowSeconds();
+    const bool shift = in.isDown(GameKey::LeftShift);
+    const bool leftPressed = in.wasPressed(MouseButton::Left);
+    const bool rightPressed = in.wasPressed(MouseButton::Right);
+    // R2: the collect window's clock — solo: the wall clock (the
+    // original read, bit-identical); net: the shared sim clock.
+    const double now =
+        (m_players.size() == 1) ? nowSeconds() : m_simTime;
     auto isDoubleClick = [&](int slot) {
-        return !shift && slot >= 0 && slot == m_panel.lastLeftSlot &&
-               m_panel.lastLeftClickTime >= 0.0 &&
-               (now - m_panel.lastLeftClickTime) <= kDoubleClickSeconds;
+        return !shift && slot >= 0 && slot == s.panel.lastLeftSlot &&
+               s.panel.lastLeftClickTime >= 0.0 &&
+               (now - s.panel.lastLeftClickTime) <= kDoubleClickSeconds;
     };
     auto armDoubleClick = [&](int slot) {
-        m_panel.lastLeftSlot = slot;
-        m_panel.lastLeftClickTime = slot >= 0 ? now : -1.0;
+        s.panel.lastLeftSlot = slot;
+        s.panel.lastLeftClickTime = slot >= 0 ? now : -1.0;
     };
     auto disarmDoubleClick = [&]() {
-        m_panel.lastLeftSlot = -1;
-        m_panel.lastLeftClickTime = -1.0;
+        s.panel.lastLeftSlot = -1;
+        s.panel.lastLeftClickTime = -1.0;
     };
 
     // Phase 40: the furnace panel. Same click model as the crafting
@@ -672,18 +697,18 @@ void Game::handlePanelClicks() {
     // 36-slot / input / fuel / output is active; a left click with all of
     // them inactive drops the carry). No craft action — the output fills
     // by itself.
-    if (m_panel.openPanel == OpenPanel::Furnace) {
+    if (s.panel.openPanel == OpenPanel::Furnace) {
         const FurnaceLayout layout = FurnaceLayout::compute(w, h);
-        const std::pair<int, int> mp = uiMouse();
+        const std::pair<int, int> mp = uiMouseFor(in);
         const int slot = layout.slotAt(mp.first, mp.second);
         const int fslot = layout.furnaceSlotAt(mp.first, mp.second);
         if (leftPressed) {
             if (shift) {
-                m_panel.furnaceUi.quickMove(slot, fslot);
+                s.panel.furnaceUi.quickMove(slot, fslot);
             } else if (fslot < 0 && isDoubleClick(slot)) {
-                m_panel.furnaceUi.doubleCollect(slot);
+                s.panel.furnaceUi.doubleCollect(slot);
             } else {
-                m_panel.furnaceUi.leftClick(slot, fslot);
+                s.panel.furnaceUi.leftClick(slot, fslot);
             }
             if (fslot < 0 && !shift) {
                 armDoubleClick(slot);
@@ -694,9 +719,9 @@ void Game::handlePanelClicks() {
         }
         if (rightPressed) {
             if (shift) {
-                m_panel.furnaceUi.quickMove(slot, fslot);
+                s.panel.furnaceUi.quickMove(slot, fslot);
             } else {
-                m_panel.furnaceUi.rightClick(slot, fslot);
+                s.panel.furnaceUi.rightClick(slot, fslot);
             }
             disarmDoubleClick();
         }
@@ -710,23 +735,23 @@ void Game::handlePanelClicks() {
     // / lapis slots are ordinary pick-and-place (the lapis slot's
     // enchant_material gate lives in the EnchantUI). A left click that
     // changes the item slot re-rolls the offers (the one-shot generation).
-    if (m_panel.openPanel == OpenPanel::Enchant) {
+    if (s.panel.openPanel == OpenPanel::Enchant) {
         const EnchantLayout layout = EnchantLayout::compute(w, h);
-        const std::pair<int, int> mp = uiMouse();
+        const std::pair<int, int> mp = uiMouseFor(in);
         const int slot = layout.slotAt(mp.first, mp.second);
         const int pslot = layout.panelSlotAt(mp.first, mp.second);
         if (leftPressed) {
             if (shift) {
-                m_panel.enchantUi.quickMove(slot, pslot);
+                s.panel.enchantUi.quickMove(slot, pslot);
             } else {
                 const int offerRow = (pslot >= 2 && pslot <= 4) ? pslot - 2 : -1;
                 if (offerRow >= 0) {
-                    applyEnchantOffer(offerRow); // the sound plays inside
-                } else if (m_panel.enchantUi.leftClick(slot,
+                    applyEnchantOfferFor(p, s, offerRow); // the sound plays inside
+                } else if (s.panel.enchantUi.leftClick(slot,
                                                        pslot == 0 || pslot == 1
                                                            ? pslot
                                                            : -1)) {
-                    regenEnchantOffers(); // the item slot changed
+                    regenEnchantOffersFor(p, s); // the item slot changed
                 }
             }
             disarmDoubleClick();
@@ -734,13 +759,13 @@ void Game::handlePanelClicks() {
         }
         if (rightPressed) {
             if (shift) {
-                m_panel.enchantUi.quickMove(slot, pslot);
+                s.panel.enchantUi.quickMove(slot, pslot);
             } else {
                 const bool itemChanged =
-                    m_panel.enchantUi.rightClick(
+                    s.panel.enchantUi.rightClick(
                         slot, pslot == 0 || pslot == 1 ? pslot : -1);
                 if (itemChanged) {
-                    regenEnchantOffers();
+                    regenEnchantOffersFor(p, s);
                 }
             }
             disarmDoubleClick();
@@ -748,7 +773,7 @@ void Game::handlePanelClicks() {
         return;
     }
 
-    const bool table = m_panel.openPanel == OpenPanel::Table;
+    const bool table = s.panel.openPanel == OpenPanel::Table;
     const PanelKind kind =
         table ? PanelKind::CraftingTable : PanelKind::Inventory;
     // The hint list per kind: shapeless craft rows (E panel) or shaped
@@ -759,41 +784,41 @@ void Game::handlePanelClicks() {
     std::vector<const Recipe*> hints =
         table ? shapedRecipes() : shapelessRecipes();
     if (!table) {
-        hints = orderedRecipeHints(hints, m_inventory, m_items);
+        hints = orderedRecipeHints(hints, s.inventory, m_items);
     }
     const InventoryLayout layout =
         InventoryLayout::compute(w, h, static_cast<int>(hints.size()), kind);
-    const std::pair<int, int> mp = uiMouse();
+    const std::pair<int, int> mp = uiMouseFor(in);
     // V3-11b: the creative's E-panel face (the tabs + the 物品栏 tab).
     // The outer layout above is shared (the 背包 tab's content IS the
     // ordinary E panel's — bit-identical to the survival's; only the
     // title row's face differs). The 物品栏 tab consumes the frame's
     // typed text (the search), the wheel (the scroll) and the clicks
     // (the tab switch / the grant).
-    if (!table && m_player->isCreative()) {
+    if (!table && p.isCreative()) {
         const CreativeLayout cl =
             CreativeLayout::compute(w, h, static_cast<int>(hints.size()));
-        if (m_panel.creativeTab == 0) {
-            if (!m_input.frameText().empty()) {
-                m_panel.creativeUi.appendFrameText(m_input.frameText());
+        if (s.panel.creativeTab == 0) {
+            if (!in.frameText().empty()) {
+                s.panel.creativeUi.appendFrameText(in.frameText());
             }
-            if (m_input.frameBackspace()) {
-                m_panel.creativeUi.backspace();
+            if (in.frameBackspace()) {
+                s.panel.creativeUi.backspace();
             }
-            m_panel.creativeUi.scrollBy(m_input.wheelDelta());
+            s.panel.creativeUi.scrollBy(in.wheelDelta());
         }
         const int tab = cl.tabAt(mp.first, mp.second);
-        if (leftPressed && tab >= 0 && tab != m_panel.creativeTab) {
-            m_panel.creativeTab = tab;
+        if (leftPressed && tab >= 0 && tab != s.panel.creativeTab) {
+            s.panel.creativeTab = tab;
             disarmDoubleClick();
             return;
         }
-        if (m_panel.creativeTab == 0) {
+        if (s.panel.creativeTab == 0) {
             const int ccell = cl.cellAt(mp.first, mp.second);
             if (leftPressed || rightPressed) {
                 if (ccell >= 0 &&
-                    m_panel.creativeUi.grant(
-                        static_cast<int>(m_selectedSlot), ccell,
+                    s.panel.creativeUi.grant(
+                        static_cast<int>(s.selectedSlot), ccell,
                         leftPressed)) {
                     m_sound.play("pickup");
                 }
@@ -805,7 +830,7 @@ void Game::handlePanelClicks() {
     }
     const int px = mp.first;
     const int py = mp.second;
-    InventoryUI& ui = table ? m_panel.tableUi : m_panel.inventoryUi;
+    InventoryUI& ui = table ? s.panel.tableUi : s.panel.inventoryUi;
     // The layout hit tests are disjoint: at most one of slot / grid cell /
     // output is active (the UI dispatch checks output first, then grid,
     // then slot; all-inactive drops the carry on a left click).
@@ -827,8 +852,8 @@ void Game::handlePanelClicks() {
                 return;
             }
             const Recipe& recipe = *hints[static_cast<std::size_t>(row)];
-            if (canCraft(m_inventory, recipe, m_items)) {
-                auto crafted = craft(m_inventory, recipe, m_items);
+            if (canCraft(s.inventory, recipe, m_items)) {
+                auto crafted = craft(s.inventory, recipe, m_items);
                 if (crafted.ok()) {
                     m_sound.play("craft");
                     // UX-7: the tutorial craft event — the RECIPE-ROW
@@ -840,7 +865,7 @@ void Game::handlePanelClicks() {
                     // repair discriminator is needed here.
                     emitTutorialEvent("craft." +
                                          m_items.at(recipe.output).name,
-                                     1);
+                                     1, &p);
                 } else {
                     MC_LOG_ERROR("Craft failed: " + crafted.error().describe());
                 }
@@ -865,7 +890,7 @@ void Game::handlePanelClicks() {
                     emitTutorialEvent(
                         "craft." +
                             m_items.at(tutMatch.recipe->output).name,
-                        1);
+                        1, &p);
                 }
             }
         }
@@ -890,7 +915,7 @@ void Game::handlePanelClicks() {
                     emitTutorialEvent(
                         "craft." +
                             m_items.at(tutMatch.recipe->output).name,
-                        1);
+                        1, &p);
                 }
             }
         }
@@ -899,20 +924,35 @@ void Game::handlePanelClicks() {
 }
 
 void Game::updateSoundTimers(double dt) {
-    if (!m_player || !m_window.relativeMouseMode() || panelOpen()) {
-        return;
-    }
-    const Vec3 v = m_player->velocity();
-    const bool moving =
-        std::abs(v.x) > kStepMinSpeed || std::abs(v.z) > kStepMinSpeed;
-    if (moving && m_player->onGround()) {
-        m_interaction.stepTimer += dt;
-        if (m_interaction.stepTimer >= kStepSoundInterval) {
-            m_interaction.stepTimer = 0.0;
-            m_sound.play("step");
+    // V3-12b: the ×N step-timer pass (the per-player footstep RHYTHM —
+    // solo: one player, the pre-V3-12b sequence bit-identical). D8: the
+    // SOUND plays for the local player only (the remote player is
+    // silent — the 3D-propagation's documented absence).
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        PlayerSession& s = *m_sessions[i];
+        // R18: the solo lock mirror (the original read's value); net:
+        // the per-player flag (the FrameState's local fact).
+        if (m_players.size() == 1) {
+            s.inputLocked = m_window.relativeMouseMode();
         }
-    } else {
-        m_interaction.stepTimer = 0.0;
+        if (!s.inputLocked || s.panel.openPanel != OpenPanel::None) {
+            continue;
+        }
+        const Vec3 v = p.velocity();
+        const bool moving =
+            std::abs(v.x) > kStepMinSpeed || std::abs(v.z) > kStepMinSpeed;
+        if (moving && p.onGround()) {
+            s.interaction.stepTimer += dt;
+            if (s.interaction.stepTimer >= kStepSoundInterval) {
+                s.interaction.stepTimer = 0.0;
+                if (i == static_cast<std::size_t>(m_localSlot)) {
+                    m_sound.play("step");
+                }
+            }
+        } else {
+            s.interaction.stepTimer = 0.0;
+        }
     }
 }
 
@@ -939,46 +979,71 @@ void Game::updateAutoSave(double dt) {
 }
 
 void Game::updateSurvival(double dt) {
-    if (m_hurtFlash > 0.0) {
-        m_hurtFlash = std::max(0.0, m_hurtFlash - dt);
-    }
-    const float hp = m_player->health();
-    const bool dead = m_player->isDead();
-    if (m_prevHealth >= 0.0f && hp < m_prevHealth) {
-        // A health drop this frame: the red veil restarts and the hurt
-        // sound plays (suppressed when the drop was lethal — the death
-        // sound follows instead).
-        m_hurtFlash = kHurtFlashSeconds;
-        if (!dead) {
-            m_sound.play("hurt");
+    // V3-12b: the ×N survival pass (solo: one player, the pre-V3-12b
+    // sequence bit-identical). D8: the hurt / death sounds + the pointer
+    // release are LOCAL presentation (the local player's death screen);
+    // the state (the flash / the stats / the effects / the drown reset /
+    // the respawn) is per-player simulation.
+    for (std::size_t i = 0; i < m_players.size(); ++i) {
+        Player& p = *m_players[i];
+        PlayerSession& s = *m_sessions[i];
+        const bool local = (i == static_cast<std::size_t>(m_localSlot));
+        if (s.hurtFlash > 0.0) {
+            s.hurtFlash = std::max(0.0, s.hurtFlash - dt);
         }
-    }
-    if (dead && m_prevHealth >= 0.0f && m_prevHealth > 0.0f) {
-        // Alive -> dead transition: the death screen owns the input, so
-        // release the pointer (it was locked while the fall happened).
-        // Phase 46: the active status effects die with the player (the
-        // respawn starts clean — Minecraft parity).
-        m_window.setRelativeMouseMode(false);
-        m_sound.play("death");
-        // SURV-7: the death counter (the alive->dead transition — one
-        // increment per life lost, whatever the cause; frame-locked).
-        m_stats["deathCount"]++;
-        m_playerEffects.clearAll();
-        syncAbsorption(); // Phase 72: the pool dies with the player
-        // SURV-2: the air refills with the death (the respawn
-        // convergence point — the next life starts on the dry spawn
-        // with full oxygen; while dead the pass is inert and the
-        // state's decay is harmless).
-        m_drown = DrownState {};
-    }
-    m_prevHealth = hp;
-    if (dead && m_input.wasPressed(GameKey::R)) {
-        respawnPlayer();
-        m_prevHealth = m_player->health(); // no hurt flash on respawn
+        const float hp = p.health();
+        const bool dead = p.isDead();
+        if (s.prevHealth >= 0.0f && hp < s.prevHealth) {
+            // A health drop this frame: the red veil restarts and the
+            // hurt sound plays (suppressed when the drop was lethal —
+            // the death sound follows instead).
+            s.hurtFlash = kHurtFlashSeconds;
+            if (!dead && local) {
+                m_sound.play("hurt");
+            }
+        }
+        if (dead && s.prevHealth >= 0.0f && s.prevHealth > 0.0f) {
+            // Alive -> dead transition: the death screen owns the input,
+            // so release the pointer (it was locked while the fall
+            // happened) — the LOCAL machine's pointer (the death screen
+            // is local UI; the remote player's death releases nothing
+            // here — its body is simulated, D8). Phase 46: the active
+            // status effects die with the player (the respawn starts
+            // clean — Minecraft parity).
+            if (local) {
+                m_window.setRelativeMouseMode(false);
+            }
+            if (local) {
+                m_sound.play("death");
+            }
+            // SURV-7: the death counter (the alive->dead transition —
+            // one increment per life lost, whatever the cause;
+            // frame-locked).
+            s.stats["deathCount"]++;
+            s.effects.clearAll();
+            syncAbsorptionFor(p, s); // Phase 72: the pool dies
+            // SURV-2: the air refills with the death (the respawn
+            // convergence point — the next life starts on the dry spawn
+            // with full oxygen; while dead the pass is inert and the
+            // state's decay is harmless).
+            s.drown = DrownState {};
+        }
+        s.prevHealth = hp;
+        if (dead && inputFor(i).wasPressed(GameKey::R)) {
+            respawnPlayerFor(p, s);
+            s.prevHealth = p.health(); // no hurt flash on respawn
+        }
     }
 }
 
 void Game::respawnPlayer() {
+    // V3-12b: the primary's respawn (solo: the only player, the
+    // pre-V3-12b behavior; the ×N callers use respawnPlayerFor).
+    respawnPlayerFor(*m_player, *m_sessions[0]);
+}
+
+void Game::respawnPlayerFor(Player& p, PlayerSession& s) {
+    (void)s;
     // V2-13 (core/bed): the R key's single choke point — the RESPAWN-
     // TIME bed validation (the Minecraft rule: the saved coordinate is
     // re-checked only at the respawn; the bed's break / recolor /
@@ -992,10 +1057,10 @@ void Game::respawnPlayer() {
     // spawn-protection anchor) and the memory re-pins to it (a broken
     // bed therefore restores the world spawn permanently — the
     // Minecraft rule, the coordinate memory follows the respawn).
-    const Vec3 remembered = m_player->spawnPos();
+    const Vec3 remembered = p.spawnPos();
     const Vec3 target = bedRespawnValid(
-        m_world, m_blocks, remembered, m_player->params().width,
-        m_player->params().height)
+        m_world, m_blocks, remembered, p.params().width,
+        p.params().height)
         ? remembered
         : m_mobs.spawnPoint;
     // V3-1 Phase B (D8): a NETHER death respawns in the OVERWORLD (the
@@ -1008,7 +1073,7 @@ void Game::respawnPlayer() {
     // can only be left by dying or the exit" ruling — the D8 triple;
     // the End holds no spawn point either).
     if (playerInNether() || playerInEnd()) {
-        m_player->setWorld(m_world);
+        p.setWorld(m_world);
         m_playerDimension = Dimension::Overworld;
         {
             const int cx = floorDiv(static_cast<int>(std::floor(target.x)),
@@ -1022,8 +1087,8 @@ void Game::respawnPlayer() {
         // leg is a value-identical no-op, the floor is unchanged).
         applyDimensionAmbient();
     }
-    m_player->setSpawnPos(target);
-    m_player->respawn();
+    p.setSpawnPos(target);
+    p.respawn();
 }
 
 Game::UiSize Game::uiSize() const {
@@ -1035,12 +1100,62 @@ Game::UiSize Game::uiSize() const {
             static_cast<double>(m_window.logicalHeight()) / scale)))};
 }
 
+
+// V3-12b: the primary delegates (the pre-V3-12b call shapes — solo: the
+// only player, bit-identical; the ×N callers use the For forms).
+void Game::openEnchantPanel(const BlockPos& pos) {
+    openEnchantPanelFor(*m_player, *m_sessions[0], pos);
+}
+
+void Game::tryCampfireCook(const BlockPos& pos) {
+    tryCampfireCookFor(*m_sessions[0], pos);
+}
+
+void Game::regenEnchantOffers() {
+    regenEnchantOffersFor(*m_player, *m_sessions[0]);
+}
+
+bool Game::applyEnchantOffer(int row) {
+    return applyEnchantOfferFor(*m_player, *m_sessions[0], row);
+}
+
+void Game::returnEnchantSlot(ItemStack& stack) {
+    returnEnchantSlotFor(*m_player, *m_sessions[0], stack);
+}
+
+void Game::openPanel(OpenPanel panel) {
+    openPanelFor(*m_player, *m_sessions[0], panel);
+}
+
+void Game::closePanel() {
+    closePanelFor(*m_player, *m_sessions[0]);
+}
+
+
+void Game::openFurnacePanel(const BlockPos& pos) {
+    openFurnacePanelFor(*m_player, *m_sessions[0], pos);
+}
+
+void Game::openTablePanel(const BlockPos& pos) {
+    openTablePanelFor(*m_player, *m_sessions[0], pos);
+}
+
 std::pair<int, int> Game::uiMouse() const {
     const Vec2 p = m_input.mousePosition();
     const double scale = static_cast<double>(m_uiScale);
     return {static_cast<int>(std::lround(p.x / scale)),
             static_cast<int>(std::lround(p.y / scale))};
 }
+// V3-12b: the per-input mouse (the ×N panel pass reads the player's own
+// relayed coordinates — R8's window-parity handshake makes the cell
+// lands agree; the local UI keeps uiMouse()'s live pump).
+std::pair<int, int> Game::uiMouseFor(const Input& in) const {
+    const Vec2 p = in.mousePosition();
+    const double scale = static_cast<double>(m_uiScale);
+    return {static_cast<int>(std::lround(p.x / scale)),
+            static_cast<int>(std::lround(p.y / scale))};
+}
+
 
 Mat4 Game::uiProjection(int w, int h) const {
     // UI pixels (y = 0 is the window top), stretched onto the drawable by
@@ -1085,6 +1200,12 @@ void Game::renderUi() {
     const UiSize space = uiSize();
     const int w = space.width;
     const int h = space.height;
+    // V3-12b: the LOCAL player / session (the HUD + hotbar +
+    // hearts + tooltip + death screen + hurt veil + F3 all
+    // read the machine's own player — solo: the only
+    // player, the pre-V3-12b value).
+    Player* lplayer = localPlayer();
+    PlayerSession& lsess = localSession();
     const bool locked = m_window.relativeMouseMode();
     const Mat4 ortho = uiProjection(w, h);
 
@@ -1315,12 +1436,12 @@ void Game::renderUi() {
             const UIRect slot {sx, y0, kHotbarSlotSize, kHotbarSlotSize};
             addQuad(batchFor(kSlotBg, false, nullptr), slot.x, slot.y,
                     slot.w, slot.h);
-            if (static_cast<std::size_t>(i) == m_selectedSlot) {
+            if (static_cast<std::size_t>(i) == lsess.selectedSlot) {
                 addBorder(batchFor(kSelected, false, nullptr), slot, 2);
             } else {
                 addBorder(batchFor(kBorder, false, nullptr), slot, 1);
             }
-            const ItemStack& stack = m_inventory.at(i);
+            const ItemStack& stack = lsess.inventory.at(i);
             drawIcon(stack, static_cast<float>(sx + kHotbarSlotSize / 2),
                      static_cast<float>(y0 + kHotbarSlotSize / 2),
                      kHotbarIconPx);
@@ -1346,13 +1467,13 @@ void Game::renderUi() {
             constexpr int kIconPx = kUiIconPx;
             constexpr int kIconGap = kUiIconGap;
             constexpr int kStripGap = kUiStripGap;
-            const float baseMaxHealth = m_player->params().maxHealth;
+            const float baseMaxHealth = lplayer->params().maxHealth;
             const int heartIcons =
                 static_cast<int>(std::ceil(baseMaxHealth / 2.0f));
             const int hungerIcons =
-                static_cast<int>(std::ceil(m_player->maxHunger() / 2.0f));
-            const int oxygen = m_drown.oxygen;
-            const float absorbPool = m_player->absorption();
+                static_cast<int>(std::ceil(lplayer->maxHunger() / 2.0f));
+            const int oxygen = lsess.drown.oxygen;
+            const float absorbPool = lplayer->absorption();
             const int absIcons = absorbPool > 0.0f
                 ? static_cast<int>(std::ceil(absorbPool / 2.0f))
                 : 0;
@@ -1404,7 +1525,7 @@ void Game::renderUi() {
                 drawStrip(hx0 - kStripGap - absW, absIcons, m_healthTexture,
                           absorbPool, Vec4 {1.0f, 0.35f, 0.35f, 1.0f});
             }
-            drawStrip(hx0, heartIcons, m_healthTexture, m_player->health(),
+            drawStrip(hx0, heartIcons, m_healthTexture, lplayer->health(),
                       Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
             // SURV-2: the oxygen bubble row REPLACES the hunger row at
             // its position (gx0, hy — the same row, right of the hearts)
@@ -1429,7 +1550,7 @@ void Game::renderUi() {
                 }
             } else {
                 drawStrip(gx0, hungerIcons, m_hungerTexture,
-                          m_player->hunger(), Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
+                          lplayer->hunger(), Vec4 {1.0f, 1.0f, 1.0f, 1.0f});
             }
             // Status effect icons (Phase 46; PRE-10: the dedicated row):
             // one 16 px effects.png tile per ACTIVE effect in application
@@ -1446,14 +1567,14 @@ void Game::renderUi() {
             // drawn (the no-input baseline is untouched).
             const int effX0 = heartRow.rowLeft;
             const int ey = hy - kIconPx - kStripGap;
-            if (m_playerEffects.count() > 0) {
+            if (lsess.effects.count() > 0) {
                 const int n = static_cast<int>(
                     m_effectTexture.width() / kIconPx);
                 UiBatch& batch =
                     batchFor(Vec4 {1.0f, 1.0f, 1.0f, 1.0f}, true,
                              &m_effectTexture);
                 int ex = effX0;
-                for (const ActiveEffect& a : m_playerEffects.list()) {
+                for (const ActiveEffect& a : lsess.effects.list()) {
                     const Effect& def = m_effects.at(a.effect);
                     addQuadUv(batch, ex, ey, kIconPx, kIconPx,
                               Vec2 {static_cast<float>(def.icon) / n, 0.0f},
@@ -1474,7 +1595,7 @@ void Game::renderUi() {
             // nothing).
             const int ay = hy - 2 * (kIconPx + kStripGap);
             for (int slot = 0; slot < kArmorSlotCount; ++slot) {
-                const ItemStack& worn = m_player->armorSlot(slot);
+                const ItemStack& worn = lplayer->armorSlot(slot);
                 if (worn.empty()) {
                     continue;
                 }
@@ -1493,7 +1614,7 @@ void Game::renderUi() {
         // Phase 24/28 2D icon pull is gone).
         const float heldX = static_cast<float>(w - kHeldIconOffset);
         const float heldY = static_cast<float>(h - kHeldIconOffset);
-        drawIcon(m_inventory.at(m_selectedSlot), heldX, heldY, kHeldIconPx);
+        drawIcon(lsess.inventory.at(lsess.selectedSlot), heldX, heldY, kHeldIconPx);
         // UX-7: the tutorial target line (centered, one row above the
         // heart row — the effect row / armor row push it up a tier when
         // active, the PRE-10 stacked-rows discipline) + the completion
@@ -1510,22 +1631,22 @@ void Game::renderUi() {
         // kText (the primary HUD text color, the death-hint precedent):
         // the target is the primary guidance line; kTextDim (0.55) was
         // too faint against bright terrain for a first-time player.
-        if (m_tutorialEnabled && !m_player->isDead() &&
-            (!m_tutorial.done || m_tutorialToastFrames > 0)) {
+        if (lsess.tutorialEnabled && !lplayer->isDead() &&
+            (!lsess.tutorial.done || lsess.tutorialToastFrames > 0)) {
             const int hy = y0 - kUiIconPx - kUiStripGap; // heart row top
             bool hasArmor = false;
             for (int slot = 0; slot < kArmorSlotCount && !hasArmor; ++slot) {
-                hasArmor = !m_player->armorSlot(slot).empty();
+                hasArmor = !lplayer->armorSlot(slot).empty();
             }
             const int topRow =
-                hasArmor ? 2 : (m_playerEffects.count() > 0 ? 1 : 0);
+                hasArmor ? 2 : (lsess.effects.count() > 0 ? 1 : 0);
             const int tutY =
                 hy - topRow * (kUiIconPx + kUiStripGap) - kUiStripGap -
                 kGlyphSize;
             const std::string line =
-                m_tutorial.done
+                lsess.tutorial.done
                     ? std::string(kTutorialDoneText)
-                    : tutorialTargetLine(m_tutorial, m_tutorialSeries);
+                    : tutorialTargetLine(lsess.tutorial, m_tutorialSeries);
             addText(line,
                     (w - static_cast<int>(textWidth(line, fScale(1.0)))) / 2,
                     tutY, fScale(1.0), kText);
@@ -1537,9 +1658,9 @@ void Game::renderUi() {
             // Same gate as the main line, plus !done (the toast owns the
             // slot) and a non-empty tip: a tip-less step adds ZERO rows
             // (bit-identical to v1.41.0).
-            if (!m_tutorial.done) {
+            if (!lsess.tutorial.done) {
                 const std::string tip =
-                    tutorialTipLine(m_tutorial, m_tutorialSeries);
+                    tutorialTipLine(lsess.tutorial, m_tutorialSeries);
                 if (!tip.empty()) {
                     // UX-8e: the tip/main offset is a TEXT-STACK pitch —
                     // it grows with the glyphs (lround, identity at
@@ -1573,13 +1694,13 @@ void Game::renderUi() {
     // (m_xpTotal); the level + fill derive through the pure
     // xp_curve functions (the level is never stored). xpNeededForLevel
     // is always >= 7, so the ratio never divides by zero.
-    if (!panelOpen() && m_player) {
+    if (!panelOpen() && lplayer) {
         const int n = Inventory::kHotbarSize;
         const int total = n * kHotbarSlotSize + (n - 1) * kHotbarSlotGap;
         const int x0 = (w - total) / 2;
         const int hotbarY = h - kHotbarBottomMargin - kHotbarSlotSize;
         const int barY = hotbarY + kHotbarSlotSize + kXpBarGap;
-        const int xpTotal = m_player->xpTotal();
+        const int xpTotal = lplayer->xpTotal();
         const int level = levelFromTotalXp(xpTotal);
         const int needed = xpNeededForLevel(level);
         const int into = xpIntoLevel(xpTotal, level);
@@ -1603,7 +1724,7 @@ void Game::renderUi() {
     // session timer (the render-only alpha; the bar holds its final fill
     // through the fade). The top region is free (the clock is top-right,
     // the F3 is left, the tutorial mid-bottom).
-    if (!panelOpen() && m_player && playerInEnd() &&
+    if (!panelOpen() && lplayer && playerInEnd() &&
         m_end.m_dragon != nullptr) {
         const int f = m_end.m_dragon->ascensionFrames();
         // The fade: alive = 1.0; the ascension's first 120 frames (2 s)
@@ -1654,7 +1775,7 @@ void Game::renderUi() {
     // -- death screen (Phase 16, while the player is dead) ------------------
     // The player physics is frozen; the pointer was released on death, so
     // R (any pointer state) respawns.
-    if (m_player && m_player->isDead()) {
+    if (lplayer && lplayer->isDead()) {
         addQuad(batchFor(Vec4 {0.0f, 0.0f, 0.0f, 0.55f}, false, nullptr), 0,
                 0, w, h);
         // PRE-1: the user-visible strings are localized to Chinese
@@ -1667,8 +1788,8 @@ void Game::renderUi() {
         // R hint. The line step tracks fScale (no overlap at any
         // ui.scale).
         const std::string died = "你死了！";
-        const std::string cause = m_player->deathCauseLine(
-            m_player->deathInfo());
+        const std::string cause = lplayer->deathCauseLine(
+            lplayer->deathInfo());
         const double totalSeconds = static_cast<double>(m_frameCount) / 60.0;
         const std::string mined =
             "采挖 " + std::to_string(m_sessionStats.blocksMined) + " 块";
@@ -1677,7 +1798,7 @@ void Game::renderUi() {
         const std::string killed =
             "击杀 " + std::to_string(m_sessionStats.mobsKilled) + " 只";
         const std::string walked =
-            "行走 " + std::to_string(static_cast<int>(m_player->
+            "行走 " + std::to_string(static_cast<int>(lplayer->
                                      statsDistance())) + " 格";
         const std::string survived =
             "存活 " + std::to_string(static_cast<int>(totalSeconds / 60)) +
@@ -1712,8 +1833,8 @@ void Game::renderUi() {
     // (its per-block state). The 36 inventory slots + the smelting
     // section (input, progress bar, output, fuel). No crafting of any
     // kind happens here — the output fills by itself (the furnace tick).
-    if (m_panel.openPanel == OpenPanel::Furnace) {
-        const FurnaceState& f = furnaceAt(m_panel.openFurnacePos);
+    if (localPanel().openPanel == OpenPanel::Furnace) {
+        const FurnaceState& f = furnaceAt(localPanel().openFurnacePos);
         const FurnaceLayout layout = FurnaceLayout::compute(w, h);
         const double s = layout.scale;
         const auto L = [s](int v) {
@@ -1735,14 +1856,14 @@ void Game::renderUi() {
         for (std::size_t i = 0; i < layout.slots.size(); ++i) {
             const UIRect& r = layout.slots[i];
             addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
-            if (i == m_selectedSlot) {
+            if (i == lsess.selectedSlot) {
                 addBorder(batchFor(kSelected, false, nullptr), r, 2);
             } else if (static_cast<int>(i) == hoverSlot) {
                 addBorder(batchFor(kHover, false, nullptr), r, 2);
             } else {
                 addBorder(batchFor(kBorder, false, nullptr), r, 1);
             }
-            const ItemStack& stack = m_inventory.at(i);
+            const ItemStack& stack = lsess.inventory.at(i);
             drawIcon(stack, static_cast<float>(r.x + r.w / 2),
                      static_cast<float>(r.y + r.h / 2), slotIcon);
             if (!stack.empty() &&
@@ -1808,7 +1929,7 @@ void Game::renderUi() {
         // The hovered slot's item name + the carried stack at the cursor +
         // the close hint.
         if (hoverSlot >= 0) {
-            const ItemStack& stack = m_inventory.at(hoverSlot);
+            const ItemStack& stack = lsess.inventory.at(hoverSlot);
             if (!stack.empty()) {
                 // PRE-12 (tooltip): name + " xN" (count > 1) + the
                 // d/max durability readout line (the pure
@@ -1817,8 +1938,8 @@ void Game::renderUi() {
                               mx + L(12), my + L(12), s, L(16));
             }
         }
-        if (m_panel.furnaceUi.carrying()) {
-            drawIcon(m_panel.furnaceUi.carry(), static_cast<float>(mx),
+        if (localPanel().furnaceUi.carrying()) {
+            drawIcon(localPanel().furnaceUi.carry(), static_cast<float>(mx),
                      static_cast<float>(my), slotIcon);
         }
         const std::string hint = "按 E 关闭"; // PRE-1
@@ -1829,7 +1950,7 @@ void Game::renderUi() {
     }
 
     // -- V2-12: the enchanting panel (the 3-offer GUI) ----------------------
-    if (m_panel.openPanel == OpenPanel::Enchant) {
+    if (localPanel().openPanel == OpenPanel::Enchant) {
         const EnchantLayout layout = EnchantLayout::compute(w, h);
         const double s = layout.scale;
         const auto L = [s](int v) {
@@ -1850,14 +1971,14 @@ void Game::renderUi() {
         for (std::size_t i = 0; i < layout.slots.size(); ++i) {
             const UIRect& r = layout.slots[i];
             addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
-            if (i == m_selectedSlot) {
+            if (i == lsess.selectedSlot) {
                 addBorder(batchFor(kSelected, false, nullptr), r, 2);
             } else if (static_cast<int>(i) == hoverSlot) {
                 addBorder(batchFor(kHover, false, nullptr), r, 2);
             } else {
                 addBorder(batchFor(kBorder, false, nullptr), r, 1);
             }
-            const ItemStack& stack = m_inventory.at(i);
+            const ItemStack& stack = lsess.inventory.at(i);
             drawIcon(stack, static_cast<float>(r.x + r.w / 2),
                      static_cast<float>(r.y + r.h / 2), slotIcon);
             if (!stack.empty() &&
@@ -1872,8 +1993,8 @@ void Game::renderUi() {
 
         // The item + lapis slots.
         const UIRect* pRects[2] = {&layout.item, &layout.lapis};
-        const ItemStack* pSlots[2] = {&m_panel.enchantItemSlot,
-                                      &m_panel.enchantLapisSlot};
+        const ItemStack* pSlots[2] = {&localPanel().enchantItemSlot,
+                                      &localPanel().enchantLapisSlot};
         for (int i = 0; i < 2; ++i) {
             const UIRect& r = *pRects[i];
             addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
@@ -1898,9 +2019,9 @@ void Game::renderUi() {
         // The three offer rows: "name roman xpCost" (the first enchant's
         // display name + its level's roman + the row's xp cost). An empty
         // offer (no enchants) draws a dimmed placeholder.
-        const EnchantOffer* offers[3] = {&m_panel.enchantOffers.top,
-                                         &m_panel.enchantOffers.mid,
-                                         &m_panel.enchantOffers.bottom};
+        const EnchantOffer* offers[3] = {&localPanel().enchantOffers.top,
+                                         &localPanel().enchantOffers.mid,
+                                         &localPanel().enchantOffers.bottom};
         for (int r = 0; r < 3; ++r) {
             const UIRect& rect = layout.offers[r];
             addQuad(batchFor(kSlotBg, false, nullptr), rect.x, rect.y,
@@ -1923,13 +2044,13 @@ void Game::renderUi() {
                         " " + std::to_string(o.xpCost);
                 // Affordable (the four gates minus the "not yet enchanted"
                 // — the display brightens when the player could apply it):
-                const int poolLevel = levelFromTotalXp(m_player->xpTotal());
-                const int lapisCount = m_panel.enchantLapisSlot.empty()
-                    ? 0 : m_panel.enchantLapisSlot.count;
+                const int poolLevel = levelFromTotalXp(lplayer->xpTotal());
+                const int lapisCount = localPanel().enchantLapisSlot.empty()
+                    ? 0 : localPanel().enchantLapisSlot.count;
                 const bool affordable =
                     poolLevel >= o.xpCost && lapisCount >= o.lapisCost &&
-                    !m_panel.enchantItemSlot.empty() &&
-                    m_items.at(m_panel.enchantItemSlot.item).enchantability >
+                    !localPanel().enchantItemSlot.empty() &&
+                    m_items.at(localPanel().enchantItemSlot.item).enchantability >
                         0;
                 color = affordable ? kText : kTextDim;
             } else {
@@ -1942,14 +2063,14 @@ void Game::renderUi() {
 
         // The hovered slot's item name + the carried stack + the close hint.
         if (hoverSlot >= 0) {
-            const ItemStack& stack = m_inventory.at(hoverSlot);
+            const ItemStack& stack = lsess.inventory.at(hoverSlot);
             if (!stack.empty()) {
                 appendTooltip(itemTooltip(m_items.at(stack.item), stack),
                               mx + L(12), my + L(12), s, L(16));
             }
         }
-        if (m_panel.enchantUi.carrying()) {
-            drawIcon(m_panel.enchantUi.carry(), static_cast<float>(mx),
+        if (localPanel().enchantUi.carrying()) {
+            drawIcon(localPanel().enchantUi.carry(), static_cast<float>(mx),
                      static_cast<float>(my), slotIcon);
         }
         const std::string hint = "按 E 关闭"; // PRE-1
@@ -1962,9 +2083,9 @@ void Game::renderUi() {
     // -- crafting panel (while open): the E inventory (2x2 grid + the
     // shapeless recipe craft list) or the crafting table (3x3 grid + the
     // shaped recipe hint list, CRAFT-4). ------------------------------------
-    if (panelOpen() && m_panel.openPanel != OpenPanel::Furnace &&
-        m_panel.openPanel != OpenPanel::Enchant) {
-        const bool table = m_panel.openPanel == OpenPanel::Table;
+    if (panelOpen() && localPanel().openPanel != OpenPanel::Furnace &&
+        localPanel().openPanel != OpenPanel::Enchant) {
+        const bool table = localPanel().openPanel == OpenPanel::Table;
         const PanelKind kind =
             table ? PanelKind::CraftingTable : PanelKind::Inventory;
         // The hint list per kind (same source — and, for the E panel, the
@@ -1973,12 +2094,12 @@ void Game::renderUi() {
         std::vector<const Recipe*> hints =
             table ? shapedRecipes() : shapelessRecipes();
         if (!table) {
-            hints = orderedRecipeHints(hints, m_inventory, m_items);
+            hints = orderedRecipeHints(hints, lsess.inventory, m_items);
         }
         const InventoryLayout layout =
             InventoryLayout::compute(w, h, static_cast<int>(hints.size()),
                                      kind);
-        InventoryUI& ui = table ? m_panel.tableUi : m_panel.inventoryUi;
+        InventoryUI& ui = table ? localPanel().tableUi : localPanel().inventoryUi;
 
         // Panel fit factor (Phase 35): below the native width the whole
         // panel scales down; the text (font scale) and icons (quad sizes)
@@ -2001,8 +2122,8 @@ void Game::renderUi() {
         // content IS the ordinary face below (bit-identical to the
         // survival's — the creative's delta is the title row + the
         // 物品栏 tab only).
-        const bool creative = !table && m_player->isCreative();
-        const bool ordinaryFace = !creative || m_panel.creativeTab == 1;
+        const bool creative = !table && lplayer->isCreative();
+        const bool ordinaryFace = !creative || localPanel().creativeTab == 1;
         if (creative) {
             const CreativeLayout cl =
                 CreativeLayout::compute(w, h, static_cast<int>(hints.size()));
@@ -2012,7 +2133,7 @@ void Game::renderUi() {
                 addQuad(batchFor(kSlotBg, false, nullptr), tr.x, tr.y, tr.w,
                         tr.h);
                 addBorder(
-                    batchFor(t == m_panel.creativeTab ? kSelected : kBorder,
+                    batchFor(t == localPanel().creativeTab ? kSelected : kBorder,
                              false, nullptr),
                     tr, 2);
                 const std::string& name = tabNames[static_cast<std::size_t>(t)];
@@ -2023,7 +2144,7 @@ void Game::renderUi() {
                 // The 物品栏 tab: the search box (the typed text + the
                 // frame-locked cursor blink, the portal phase's twin) +
                 // the 6x4 grant grid + the two hint rows.
-                const std::string& text = m_panel.creativeUi.text();
+                const std::string& text = localPanel().creativeUi.text();
                 addQuad(batchFor(kSlotBg, false, nullptr), cl.search.x,
                         cl.search.y, cl.search.w, cl.search.h);
                 addBorder(batchFor(kBorder, false, nullptr), cl.search, 1);
@@ -2038,8 +2159,8 @@ void Game::renderUi() {
                     addText("_", textX + textWidth(shown, fScale(s)) + L(2),
                             textY, fScale(s), kTextDim);
                 }
-                const std::vector<ItemID>& list = m_panel.creativeUi.filtered();
-                const int start = m_panel.creativeUi.visibleStart();
+                const std::vector<ItemID>& list = localPanel().creativeUi.filtered();
+                const int start = localPanel().creativeUi.visibleStart();
                 const int hoverCell = cl.cellAt(mx, my);
                 for (int i = 0; i < CreativeLayout::kVisible; ++i) {
                     const UIRect& r = cl.cells[static_cast<std::size_t>(i)];
@@ -2104,14 +2225,14 @@ void Game::renderUi() {
         for (std::size_t i = 0; i < layout.slots.size(); ++i) {
             const UIRect& r = layout.slots[i];
             addQuad(batchFor(kSlotBg, false, nullptr), r.x, r.y, r.w, r.h);
-            if (i == m_selectedSlot) {
+            if (i == lsess.selectedSlot) {
                 addBorder(batchFor(kSelected, false, nullptr), r, 2);
             } else if (static_cast<int>(i) == hoverSlot) {
                 addBorder(batchFor(kHover, false, nullptr), r, 2);
             } else {
                 addBorder(batchFor(kBorder, false, nullptr), r, 1);
             }
-            const ItemStack& stack = m_inventory.at(i);
+            const ItemStack& stack = lsess.inventory.at(i);
             drawIcon(stack, static_cast<float>(r.x + r.w / 2),
                      static_cast<float>(r.y + r.h / 2), slotIcon);
             if (!stack.empty() &&
@@ -2196,7 +2317,7 @@ void Game::renderUi() {
             for (std::size_t i = 0; i < layout.recipes.size(); ++i) {
                 const Recipe& recipe = *hints[static_cast<std::size_t>(i)];
                 const UIRect& r = layout.recipes[i];
-                const bool can = canSupply(m_inventory, patternBag(recipe));
+                const bool can = canSupply(lsess.inventory, patternBag(recipe));
                 // The 3x3 mini pattern, top-left aligned exactly as defined
                 // (a valid placement the grid match accepts): dark cell
                 // background + the keyed item's icon; a space = empty cell.
@@ -2242,7 +2363,7 @@ void Game::renderUi() {
             for (std::size_t i = 0; i < layout.recipes.size(); ++i) {
                 const Recipe& recipe = *hints[static_cast<std::size_t>(i)];
                 const UIRect& r = layout.recipes[i];
-                const bool can = canCraft(m_inventory, recipe, m_items);
+                const bool can = canCraft(lsess.inventory, recipe, m_items);
                 const Vec4 outColor = can ? kText : kTextDim;
                 drawIcon(ItemStack {recipe.output, recipe.outputCount},
                          static_cast<float>(r.x + L(14)),
@@ -2278,7 +2399,7 @@ void Game::renderUi() {
         // The hovered slot/cell's item name + the carried stack at the
         // cursor.
         if (hoverSlot >= 0) {
-            const ItemStack& stack = m_inventory.at(hoverSlot);
+            const ItemStack& stack = lsess.inventory.at(hoverSlot);
             if (!stack.empty()) {
                 // PRE-12 (tooltip): name + " xN" (count > 1) + the
                 // d/max durability readout line (the pure
@@ -2312,6 +2433,10 @@ void Game::renderUi() {
     // -- F3 debug overlay (while toggled) ------------------------------------
     if (m_debugOverlay) {
         DebugInfo info;
+        // V3-12b: the F3 readout is the LOCAL player (each machine's
+        // own view; solo: local == primary, the pre-V3-12b value).
+        Player* lp = localPlayer();
+        PlayerSession& s = localSession();
         info.fps = static_cast<int>(std::lround(m_fpsSmoothed));
         info.frame = m_frameCount;
         info.drawCalls = m_renderer.stats().drawCalls;
@@ -2319,19 +2444,19 @@ void Game::renderUi() {
         // V3-1 Phase B: the CURRENT dimension's world / entity list (the
         // F3 readout is the dimension the player is in).
         info.chunks = static_cast<int>(currentWorld().chunkCount());
-        if (m_player) {
-            info.posX = m_player->position().x;
-            info.posY = m_player->position().y;
-            info.posZ = m_player->position().z;
-            info.yaw = m_player->yaw;
-            info.pitch = m_player->pitch;
+        if (lp) {
+            info.posX = lp->position().x;
+            info.posY = lp->position().y;
+            info.posZ = lp->position().z;
+            info.yaw = lp->yaw;
+            info.pitch = lp->pitch;
         }
-        if (m_player) {
+        if (lp) {
             info.columnX =
-                floorDiv(static_cast<int>(std::floor(m_player->position().x)),
+                floorDiv(static_cast<int>(std::floor(lp->position().x)),
                          kChunkSize);
             info.columnZ =
-                floorDiv(static_cast<int>(std::floor(m_player->position().z)),
+                floorDiv(static_cast<int>(std::floor(lp->position().z)),
                          kChunkSize);
         }
         info.seed = m_generator ? m_generator->seed() : 0;
@@ -2349,21 +2474,21 @@ void Game::renderUi() {
         info.inventoryOpen = panelOpen();
         info.particles = m_particles.size();
         info.entities = currentEntities().size();
-        if (m_player) {
-            info.health = m_player->health();
-            info.maxHealth = m_player->maxHealth();
-            info.absorption = m_player->absorption();
-            info.armorPoints = m_player->armorPoints(); // SURV-1
-            info.oxygen = m_drown.oxygen; // SURV-2
-            info.hunger = m_player->hunger();
-            info.maxHunger = m_player->maxHunger();
+        if (lp) {
+            info.health = lp->health();
+            info.maxHealth = lp->maxHealth();
+            info.absorption = lp->absorption();
+            info.armorPoints = lp->armorPoints(); // SURV-1
+            info.oxygen = s.drown.oxygen; // SURV-2
+            info.hunger = lp->hunger();
+            info.maxHunger = lp->maxHunger();
         }
         // SURV-3: the held item's line — "(none)" on an empty hand, the
         // item name otherwise, plus " damage/durability" when the item
         // has one (the d/max readout; a full-durability held item shows
         // 0.0).
         {
-            const ItemStack& held = m_inventory.at(m_selectedSlot);
+            const ItemStack& held = s.inventory.at(s.selectedSlot);
             if (held.empty()) {
                 info.heldItem = "(none)";
             } else {
@@ -2384,7 +2509,7 @@ void Game::renderUi() {
         // (application order); empty when the player has none. PRE-12
         // (the SURV-6 display boundary): every effect carries its
         // amplifier roman (tier 0 = "I").
-        for (const ActiveEffect& a : m_playerEffects.list()) {
+        for (const ActiveEffect& a : s.effects.list()) {
             char buf[80];
             std::snprintf(buf, sizeof(buf), "%s %s %.1fs",
                           m_effects.at(a.effect).name.c_str(),
@@ -2397,32 +2522,33 @@ void Game::renderUi() {
         // PRE-12 (the SURV-7 display boundary): the player stats
         // (deathCount + kill.<name>; the map holds non-zero entries in
         // key order).
-        info.stats = m_stats;
+        info.stats = s.stats;
         // UX-7 / V2-3: the tutorial line (the F3 stays English — the
         // developer-tool discipline): "off" when disabled, "done" when
         // finished or skipped, "<series+1>/<total> <id>
         // <progress>/<count>" while in progress (the series position is
         // 1-based, e.g. "2/3 seed 0/1").
-        if (!m_tutorialEnabled) {
+        if (!s.tutorialEnabled) {
             info.tutorial = "off";
-        } else if (m_tutorial.done) {
+        } else if (s.tutorial.done) {
             info.tutorial = "done";
-        } else if (m_tutorial.seriesIndex >= 0 &&
-                   m_tutorial.seriesIndex <
+        } else if (s.tutorial.seriesIndex >= 0 &&
+                   s.tutorial.seriesIndex <
                        static_cast<int>(m_tutorialSeries.size()) &&
-                   m_tutorial.stepIndex >= 0 &&
-                   m_tutorial.stepIndex <
+                   s.tutorial.stepIndex >= 0 &&
+                   s.tutorial.stepIndex <
                        static_cast<int>(
-                           m_tutorialSeries[m_tutorial.seriesIndex].size())) {
-            const TutorialStep& s =
-                m_tutorialSeries[m_tutorial.seriesIndex]
+                           m_tutorialSeries[s.tutorial.seriesIndex].size())) {
+            const TutorialState& tut = s.tutorial;
+            const TutorialStep& stp =
+                m_tutorialSeries[tut.seriesIndex]
                                    [static_cast<std::size_t>(
-                                       m_tutorial.stepIndex)];
+                                       tut.stepIndex)];
             char buf[96];
             std::snprintf(buf, sizeof(buf), "%d/%d %s %d/%d",
-                          m_tutorial.seriesIndex + 1,
+                          tut.seriesIndex + 1,
                           static_cast<int>(m_tutorialSeries.size()),
-                          s.id.c_str(), m_tutorial.progress, s.count);
+                          stp.id.c_str(), tut.progress, stp.count);
             info.tutorial = buf;
         }
         // V2-19: the camera line (the F3 stays English — the developer-
@@ -2435,7 +2561,7 @@ void Game::renderUi() {
                 : (m_cameraMode == CameraMode::ThirdFront ? "ThirdFront"
                                                           : "First");
         info.camDistance = m_thirdPersonDistance;
-        info.flying = m_player ? m_player->isFlying() : false;
+        info.flying = lp ? lp->isFlying() : false;
         // V3-8: the gamepad line (the F3 stays English — the developer-
         // tool discipline): the Input's connection state (the single
         // consumer of the pump's gamepad events) — "gamepad: none" when
@@ -2669,7 +2795,7 @@ void Game::renderUi() {
     // structural immunity).
     {
         const std::vector<EffectTint> tints =
-            activeEffectTints(m_playerEffects, m_effects);
+            activeEffectTints(lsess.effects, m_effects);
         for (const EffectTint& t : tints) {
             UiBatch veil;
             veil.color = {t.r, t.g, t.b, t.a};
@@ -2683,9 +2809,9 @@ void Game::renderUi() {
     // kHurtFlashSeconds after a damage event. Drawn last (over every UI
     // element); the timer is 0 in the no-input baseline, so nothing is
     // drawn there.
-    if (m_hurtFlash > 0.0) {
+    if (lsess.hurtFlash > 0.0) {
         const float a =
-            0.35f * static_cast<float>(m_hurtFlash / kHurtFlashSeconds);
+            0.35f * static_cast<float>(lsess.hurtFlash / kHurtFlashSeconds);
         UiBatch flash;
         flash.color = {1.0f, 0.0f, 0.0f, a};
         addQuad(flash, 0, 0, w, h);

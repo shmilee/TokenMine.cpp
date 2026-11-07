@@ -11,6 +11,54 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.29.0（2026-11-07）— V3-12b 2 人多人 PoC（门 219 全 PASS，矩阵收官前最后一版）
+
+**矩阵最后项 V3-12 多人相位 12b = 2 人局域网 lockstep PoC**（设计稿
+§4 全采纳；**format 32 零 bump**【主机单存档 D13】/ **sim 2 不 bump**
+【canary 4 EXACT 执法——solo 路径位级 = 结构免疫根】/ 零新依赖
+POSIX TCP 无 net 线程 / N ≤ 8 协议形 12b 恒 2）：
+
+**net/ 新目录 ~1200 行**：小端固定头协议 {magic, type, len} /
+HELLO 四指纹握手 {TM_VERSION, sim, assetFNV（assets 树排序 FNV）,
+simConfigHash（sim 键固定表——seed 豁免【WELCOME 权威】/ render 豁免
+【dt 广播归一】）} / WELCOME（fresh = 仅 seed 零字节世界传输）/
+INPUT{frame, FrameState 40B, hash} / FRAME{frame, dtBits raw f64,
+states×N, hash} / CTRL / REJECT 点名；FrameState = keys u64×2 +
+buttons + mouseDx/Dy raw f32 零量化 + Ax/Ay（R8 面板落格）+ wheel +
+locked（R18）；**状态哈希字段清单**（§2.3：frame/day/weather/每玩家
+全态 + 会话计时器 + 36 格库存 + 效果 / 每维实体插入序含 mob rng /
+每维 journal 全集 / spawnCounter×3 / 粒子 / fires）每 30 帧交换双向
+检测。**player 多人化重构（双别名最小方案）**：m_players vector +
+m_localSlot + m_player raw pointer primary 别名（354 处零改动）/
+PlayerSession 吸收 10 成员族 + 14 引用别名绑 session 0（~430 处零
+改动）/ pass 归属二分（primary 锚不动：mob 目标/教程/龙/portal；×N
+循环化：物理/生存/效果/骑乘/珍珠/交互 17 函数/拾取磁吸三拾取/眼接触/
+箭扫掠/面板/教程 toast/渲染 local 化）/ per-player aim（solo 相机
+路径位级，net 第一人称形 D17）/ R2 simTime 2 处 / R10 xpSeed 盐族 /
+R9 出生点 i。**streaming 2 处修正**：回退门 pool.pendingCount()（本机
+吞吐 = desync 根）→ streamPending.size() 共享账本（盘锚经别名自动
+primary）。**host/client 双循环**：单 runGameplayLoop + net 钩子
+（主机 poll + **lockstep 屏障**【等客户端 INPUT[N−D】；客户端等包
+阻塞模拟）+ 哈希交换 + **断线移除**（EOF/RST 同形：库存 100% 掉落
++ 落乘 + 会话 solo 续跑；客户端见主机 EOF = 全体退 D2）+ CLI
+`--listen/--connect/--script`（demo 时间线第四消费方 = 确定性输入，
+× demo 族互斥，--connect×--save 点名 R7）。**12b 偏离 D16-D20**：净
+世界 fresh only / net aim 第一人称形 / 远程体静态姿态 / window parity
+= config 几何 / client 退出 = RST。
+
+**门 219**：S1 结构免疫第 100 次（≡ base19 逐字节 ×2 + EXACT）/
+**S2 双进程 headless 锁步臂**【无输入 600f ×2 run：两进程 net hash
+f0/f300 逐字同 + 主机档 savenorm 跨 run EXACT + 各进程截图 RAW ×2；
+输入注入臂 ×2：哈希逐字同 + **client 挖掘经中继落主机 journal【跨
+进程世界收敛铁证】**；断线臂 ×2：removed f302 + 起始库存 20 件 100%
+掉落 + 主机档跨 run EXACT】/ S6 八面点名（sim/magic/asset/config/
+window/connect×save/listen×demo/端口占用 全 rc 1）/ canary 4 EXACT【
+sim 2 不 bump】/ 性能 A/B 同档【旧 = a8259c8 v3.28.0 + g139 双树：banner 实证 v3.28.0/v3.29.0 + OW 900f 无输入：PERF-WIN 三窗 upd med 0.524/0.560/0.581 vs 0.544/0.582/0.586 同档 + render 0.556/0.674/0.637 vs 0.564/0.666/0.656 同档 + swap 15.3 同档 + changesApplied 9/3/1 逐位 + 终档 savenorm EXACT 零 format 最强形 = 多人化重构的 solo 路径（净面全冷 m_net null + size 1）结构性零成本；净自成本（新树 mobs-off 600f）：solo upd med 0.574/0.587 vs 2P 主机 0.642/0.638 = +~0.06ms/帧（player-2 sim pass + 环 + socket，sub-100µs 同档），render/swap 同档】/ 2974/2974（+10
+NetProto/NetSession 族）。PITS 410（九坑：client 环槽偏 1【f150 哈希
+点名】/ 主机快跑屏障 / RST≠FIN / WM 平铺竞态 / HELLO uiScale 时序 /
+seed 豁免 parity / 无火种子扫描 / --new 净主机 / 起始库存 per-
+session）。详见 `docs/archive/phase-3.29.0.md`。
+
 ## v3.28.0（2026-11-07）— V3-12a 多人设计定案（门 218 全 PASS，纯文档版）
 
 **矩阵最后项 V3-12 多人（唯一「超大」架构级）相位 12a = 立项设计

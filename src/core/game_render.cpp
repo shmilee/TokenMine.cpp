@@ -493,7 +493,7 @@ void Game::drawRain(const Mat4& view, const Mat4& projection) {
     // The kRainBoxSize^3 box centered on the player's cell (the floor on
     // each axis — the box origin uniform's documented meaning; the hard
     // rule 1 floor on the exact player position).
-    const Vec3 p = m_player->position();
+    const Vec3 p = localPlayer()->position();
     const float ox = static_cast<float>(std::floor(p.x)) - kRainBoxHalf;
     const float oy = static_cast<float>(std::floor(p.y)) - kRainBoxHalf;
     const float oz = static_cast<float>(std::floor(p.z)) - kRainBoxHalf;
@@ -540,7 +540,7 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
                                panelOpen())) {
         return;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = localSession().inventory.at(localSession().selectedSlot);
     // Animation offsets (camera frame): the bow draw pulls the hand back
     // and tilts the bow toward the face with the charge; the eat channel
     // raises the hand toward the face with the progress. The arm shares
@@ -670,7 +670,7 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
         const Block& block =
             m_blocks.at(currentWorld().getBlock(b.x, b.y, b.z));
         const double duration = breakDurationSeconds(
-            block.properties.hardness, selectedBreakSpeed(block));
+            block.properties.hardness, selectedBreakSpeedFor(localSession(), block));
         const int stage =
             duration > 0.0
                 ? std::clamp(
@@ -913,7 +913,7 @@ void Game::render() {
     const float rEffBlocks = static_cast<float>(
                                  std::min(m_streaming.streamRadius, kStreamCapRadius)) *
                              kChunkSize;
-    const Vec3 fogPlayerPos = m_player->position();
+    const Vec3 fogPlayerPos = localPlayer()->position();
     const ColumnPos fogPlayerColumn{
         floorDiv(static_cast<int>(std::floor(fogPlayerPos.x)), kChunkSize),
         floorDiv(static_cast<int>(std::floor(fogPlayerPos.z)), kChunkSize)};

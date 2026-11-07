@@ -255,6 +255,51 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
                 argv[i + 1][0] != '-') {
                 args.demoRecordOut = argv[++i];
             }
+        } else if (arg == "--listen") {
+            // V3-12b: the net HOST (the --port's fixed shape:
+            // --listen <port>, the 12b's LAN loopback gate's form).
+            const char* v = nextValue(i, "--listen");
+            if (!v) {
+                return false;
+            }
+            const long port = std::strtol(v, nullptr, 10);
+            if (port < 1 || port > 65535) {
+                err = "invalid --listen port: '" + std::string(v) +
+                      "' (1-65535)";
+                return false;
+            }
+            args.listenPort = static_cast<std::uint16_t>(port);
+        } else if (arg == "--connect") {
+            // V3-12b: the net CLIENT (--connect <host:port>).
+            const char* v = nextValue(i, "--connect");
+            if (!v) {
+                return false;
+            }
+            const std::string spec(v);
+            const auto colon = spec.rfind(':');
+            if (colon == std::string::npos || colon == 0 ||
+                colon + 1 >= spec.size()) {
+                err = "invalid --connect: '" + spec +
+                      "' (use <host:port>)";
+                return false;
+            }
+            args.connectHost = spec.substr(0, colon);
+            const long port = std::strtol(spec.c_str() + colon + 1,
+                                          nullptr, 10);
+            if (port < 1 || port > 65535) {
+                err = "invalid --connect port: '" + spec + "' (1-65535)";
+                return false;
+            }
+            args.connectPort = static_cast<std::uint16_t>(port);
+        } else if (arg == "--script") {
+            // V3-12b: the net's deterministic input source (the demo
+            // timeline's fourth consumer — the gate arm's zero-
+            // xdotool input).
+            const char* v = nextValue(i, "--script");
+            if (!v) {
+                return false;
+            }
+            args.script = v;
         } else if (arg == "--log-level") {
             const char* v = nextValue(i, "--log-level");
             if (!v) return false;
@@ -271,8 +316,14 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             return false;
         }
     }
-    if (args.newWorld && !args.saveSlot.has_value()) {
-        err = "--new requires --save <slot>";
+    // V3-12b: the net host's --new is the world shape's flag (the
+    // WELCOME's fresh spec — the save form is the 12c's face), so the
+    // --new x --save requirement is the solo's (a --listen run's fresh
+    // world needs no slot).
+    if (args.newWorld && !args.saveSlot.has_value() &&
+        args.listenPort == 0) {
+        err = "--new requires --save <slot> (or the --listen's net "
+              "fresh-world shape)";
         return false;
     }
     // SAVE-3: the save management flags are STANDALONE — at most one per
@@ -309,6 +360,41 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
               "exclusive (one per run)";
         return false;
     }
+    // V3-12b: the NET family's exclusions (the demo family's twin —
+    // one entry point per run; the script is the net's input source,
+    // never standalone; the client never writes a save, the R7's
+    // named face; the 12b's world shape is the FRESH one — the
+    // host's --save is the 12c's reconnect snapshot's reserved form).
+    const int netCount = (args.listenPort != 0 ? 1 : 0) +
+                         (args.connectHost.empty() ? 0 : 1);
+    if (netCount > 1) {
+        err = "--listen / --connect are mutually exclusive (one per "
+              "run — the host OR the client, never both)";
+        return false;
+    }
+    if (netCount == 1 && demoCount > 0) {
+        err = "the net family (--listen / --connect) is mutually "
+              "exclusive with the demo family (--demo / --demo-author "
+              "/ --demo-record — the replay's audience Input is the "
+              "net's relay's distinct consumer)";
+        return false;
+    }
+    if (!args.script.empty() && netCount == 0) {
+        err = "--script requires --listen or --connect (the net's "
+              "deterministic input source — the solo's input is the "
+              "live pump)";
+        return false;
+    }
+    if (!args.connectHost.empty() && args.saveSlot.has_value()) {
+        err = "--connect x --save is rejected (the R7's client-never-"
+              "writes — the save is the host's world state; the "
+              "client's exit is the disconnect, not the write)";
+        return false;
+    }
+    // The host's --save composes (the R7's host single save — the
+    // exit's world write; the SAVE-FORM WELCOME (joining a loaded
+    // world) is the handshake's named reject, the 12c's reconnect
+    // snapshot's reserved face).
     // v3.13.0: --demo-force is the sim-mismatch ESCAPE of the --demo
     // replay (it needs the replay entry point to be present).
     if (args.demoForce && args.demo.empty()) {
@@ -499,6 +585,25 @@ int main(int argc, char** argv) {
             args.saveSlot = d.world.slot;
         }
         args.demoFile = std::move(demo).value();
+    }
+
+    // V3-12b: the --script's headless parse (the --demo's twin — the
+    // timeline's validation BEFORE the game boots; the net's WELCOME
+    // is the world spec's authority, the script's world key rides
+    // along ignored).
+    if (!args.script.empty()) {
+        auto script = parseScriptTimeline(args.script);
+        if (!script.ok()) {
+            std::fprintf(stderr, "Script error: %s\n",
+                         script.error().message.c_str());
+            return 1;
+        }
+        args.scriptFile = std::move(script).value();
+        std::fprintf(stderr,
+                     "Script timeline: '%s' (%d frames, %zu events)\n",
+                     args.script.string().c_str(),
+                     static_cast<int>(args.scriptFile->dts.size()),
+                     args.scriptFile->events.size());
     }
 
     Game game;

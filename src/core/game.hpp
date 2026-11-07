@@ -17,6 +17,7 @@
 #pragma once
 
 #include <array>
+#include <array>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
@@ -41,6 +42,8 @@
 #include "core/fly.hpp"
 #include "core/food.hpp"
 #include "core/input.hpp"
+#include "net/net_proto.hpp"
+#include "net/net_session.hpp"
 #include "core/end_portal.hpp"
 #include "core/logger.hpp"
 #include "core/portal.hpp"
@@ -180,13 +183,44 @@ struct GameArgs {
     // printed when the forced sim differs). Requires --demo.
     bool demoForce = false;
     std::optional<DemoFile> demoFile;
+    // V3-12b: the NET family (main.cpp enforces the mutual exclusion:
+    // one of --listen / --connect per run, never with the demo family;
+    // --connect x --save is rejected, R7; --listen x --save is rejected
+    // (the 12b net session is the FRESH-world shape — the save form is
+    // the 12c reconnect snapshot). --script = the gate arm's
+    // deterministic input source (the demo timeline's fourth consumer —
+    // its 'world' key rides along for the shape's strictness, ignored
+    // in net: the WELCOME's spec is the world's authority).
+    std::uint16_t listenPort = 0; // --listen <port> (the host)
+    std::string connectHost;      // --connect <host:port> (the client)
+    std::uint16_t connectPort = 0;
+    std::filesystem::path script; // --script <timeline.json>
+    std::optional<DemoFile> scriptFile;
     std::filesystem::path demoAuthor;
     bool demoRecord = false;
     std::filesystem::path demoRecordOut;
 };
 
+// V3-12b: the state hash FNV primitive (net/net_proto.hpp).
+struct Fnv64;
+
 class Game {
+    // V3-12b: forward declaration — the PlayerSession's full definition
+    // lands later in the class (it absorbs the PanelState / SessionStats
+    // nested types), but the ×N method declarations reference it by
+    // reference (an incomplete type is legal in a reference parameter).
+    struct PlayerSession;
+
 public:
+    // V3-12b: the state hash (net_proto.cpp's netStateHash) reads the
+    // full sim truth — the desync detector's friend (the field list is
+    // the design §2.3's, the FNV primitive is net_proto's). The feeder
+    // friend names the PlayerSession's private nested type (the hash's
+    // per-player field list).
+    friend std::uint64_t netStateHash(const Game& g);
+    friend void netFeedPlayer(struct Fnv64& h, std::size_t i,
+                              const Player& p, const PlayerSession& s);
+
     // V3-1 Phase B (D1): the two dimensions (the fixed pair — a >2
     // dimension future is the structural re-merge point, the design's
     // documented deviation 1: the incremental parallel members, not the
@@ -229,8 +263,27 @@ public:
     // to the player's own grid (bound once, in the constructor body), the
     // table panel to the clicked block's per-block grid (bound on every
     // open — see openTablePanel).
-    Game() : m_panel(m_inventory, m_items, m_recipes) {
-        m_panel.inventoryUi.bind(m_panel.inventoryGrid);
+    // V3-12b: the session family is created FIRST (one primary session —
+    // the reference aliases below bind into it; a net session ADDS the
+    // remote player's session at the connect, the aliases never move —
+    // they stay the primary's storage, design §3.1). The panel's
+    // grid-bind moved into the PlayerSession constructor (per-session).
+    Game() : m_sessions(makeSessions(m_items, m_recipes)),
+             m_inventory(m_sessions[0]->inventory),
+             m_selectedSlot(m_sessions[0]->selectedSlot),
+             m_interaction(m_sessions[0]->interaction),
+             m_playerEffects(m_sessions[0]->effects),
+             m_drown(m_sessions[0]->drown),
+             m_hurtFlash(m_sessions[0]->hurtFlash),
+             m_prevHealth(m_sessions[0]->prevHealth),
+             m_pearlThrowCooldownFrames(m_sessions[0]->pearlThrowCooldownFrames),
+             m_ridingMount(m_sessions[0]->ridingMount),
+             m_sessionStats(m_sessions[0]->sessionStats),
+             m_stats(m_sessions[0]->stats),
+             m_tutorial(m_sessions[0]->tutorial),
+             m_tutorialEnabled(m_sessions[0]->tutorialEnabled),
+             m_tutorialToastFrames(m_sessions[0]->tutorialToastFrames),
+             m_lastSpacePressTime(m_sessions[0]->lastSpacePressTime) {
     }
     ~Game();
 
@@ -274,6 +327,7 @@ public:
     const Config& config() const { return m_config; }
     AssetManager& assets() { return m_assets; }
     const World& world() const { return m_world; }
+
 
 private:
     // CPU geometry of one chunk (the mesher's output, kept in CPU memory
@@ -344,6 +398,9 @@ private:
         const Texture* texture = nullptr;
     };
 
+    // V3-12b: the starter inventory's per-session fill (buildScene's
+    // hotbar.json block, extracted — the net connect's player-2's gift).
+    Result<void> fillStarterInventory(PlayerSession& s);
     Result<void> buildScene();
     void update(double dt);
     void render();
@@ -463,7 +520,7 @@ private:
                         int viewportHeight);
 
     // Pointer-lock state machine + block interaction (called from update).
-    void handleInteraction(double dt);
+    void handleInteraction(Player& p, PlayerSession& s, const Input& in, double dt);
     // The block the crosshair is aiming at (raycast from the eye, within
     // aimReach), if any.
     std::optional<BlockHit> targetBlock() const;
@@ -480,8 +537,8 @@ private:
     // Hold-to-break state machine (Phase 11): advances the progress while
     // the crosshair stays on the same destroyable block and breaks it when
     // the data-driven duration elapses (see breakDurationSeconds).
-    void updateBreaking(double dt);
-    void resetBreaking();
+    void updateBreaking(Player& p, PlayerSession& s, double dt);
+    void resetBreaking(PlayerSession& s);
     // Mob targeting + attacking (Phase 20): the mob under the crosshair
     // (the nearer of the block hit and the mob AABB hits wins — blocks
     // occlude), and the swing state machine (one hit per kSwingInterval
@@ -490,17 +547,20 @@ private:
         MobEntity* mob;
         float distance;
     };
-    std::optional<MobHit> targetMob() const;
-    void updateAttacking(double dt, MobEntity& mob);
+        Vec3 playerAimForwardFor(const Player& p) const;
+    std::optional<BlockHit> targetBlockFor(const Player& p) const;
+    std::optional<MobHit> targetMobFor(const Player& p) const;
+std::optional<MobHit> targetMob() const;
+    void updateAttacking(Player& p, PlayerSession& s, double dt, MobEntity& mob);
     // Melee damage of the selected item (data; bare hand = 1.0). V2-12:
     // includes the held SHARPNESS bonus (the (L+1) points).
-    float selectedAttackDamage() const;
+    float selectedAttackDamageFor(PlayerSession& s) const;
     // V2-12 (protection): the armor protection BONUS points (4 * min(20,
     // the sum of the protection levels over the four worn pieces) — 0 when
     // no protection is worn). The game pushes this to the player each frame
     // (setProtectionBonus); damage() adds it to the equipped points before
     // the shared kArmorMaxPoints cap.
-    int armorProtectionPoints() const;
+    int armorProtectionPoints(const Player& p) const;
     // V2-12 (unbreaking): apply `wear` to `stack`, respecting its unbreaking
     // enchantment (the per-point skip roll — the state from the world seed,
     // the stack's damage BEFORE this event, and the item id). Returns true
@@ -520,18 +580,19 @@ private:
     // holds it). The LEFT button is the bow's melee swing (the item's
     // data attack_damage) on a mob under the crosshair; a launcher never
     // mines.
-    float selectedShootSpeed() const;
+    float selectedShootSpeedFor(PlayerSession& s) const;
     float selectedShootDamage() const;
     // True when the selected launcher can fire: no 'ammo' data = always;
     // otherwise at least one ammo item in the inventory.
-    bool ammoAvailable() const;
+    bool ammoAvailableFor(PlayerSession& s) const;
     void updateBowDraw(double dt);
+    void updateBowDrawFor(Player& p, PlayerSession& s, const Input& in, double dt);
     // Fires one arrow with the charge's power (see updateBowDraw),
     // consuming one ammo item; a draw with no ammo left is cancelled
     // silently. Resets the draw state.
-    void fireBow();
+    void fireBow(Player& p, PlayerSession& s);
     // Cancels an in-progress draw (item switch, unlock, panel, ...).
-    void resetBowDraw();
+    void resetBowDraw(PlayerSession& s);
     // The single choke point for every in-game block change (break,
     // place, dye recolor): the raw world setBlock (which marks the chunk
     // dirty) plus, Phase 42, releasing any STUCK arrow whose box overlaps
@@ -568,17 +629,17 @@ private:
     void deactivatePortal(World& world, const PortalFrame& frame);
     // Performs the break: air + relight + data-driven drop (ItemEntity).
     // The caller guarantees the hit is destroyable.
-    void breakBlock(const BlockHit& hit);
+    void breakBlock(Player& p, PlayerSession& s, const BlockHit& hit);
     // Places one from the selected hotbar slot (block items only) and
     // consumes it from the stack.
-    void placeBlock();
+    void placeBlock(Player& p, PlayerSession& s);
     // Eats one from the selected hotbar slot when it holds food (Phase 23)
     // and the player is not at full hunger: restores the item's data
     // restore_hunger, consumes the stack entry, and plays the eat sound.
     // Returns true when the click was consumed by eating (food selected,
     // including the no-op case at full hunger), so the caller skips the
     // normal right-click (interact/place) behavior for that click.
-    bool tryEat();
+    bool tryEatFor(Player& p, PlayerSession& s);
     // Drinks one from the selected hotbar slot when it holds a drinkable
     // container (Phase 43, item data 'drink_time'): arms the shared eat
     // channel with the item's DATA-DRIVEN duration. Completing it consumes
@@ -587,14 +648,14 @@ private:
     // drink starts only when the returned container would fit (a full
     // inventory is a no-op, the click is still consumed). Returns true
     // when the click was consumed by drinking.
-    bool tryDrink();
+    bool tryDrinkFor(Player& p, PlayerSession& s);
     // Milks a milkable mob (Phase 43, mob data 'milk_with' / 'milk_gives'):
     // the crosshair must be on a mob whose 'milk_with' names the selected
     // item (melee targeting: kReach + block occlusion). Consumes one held
     // item, adds one 'milk_gives' item; the mob is unharmed (v1). Returns
     // true when the click was consumed (crosshair on the mob, including
     // the no-milk case of a full inventory).
-    bool tryMilk();
+    bool tryMilk(Player& p, PlayerSession& s);
     // V2-15 (sheep): shears a wool mob — the crosshair on a mob whose
     // data carries 'wool_drops', the selected item carrying the 'shears'
     // data flag, and the instance still WOOLLY (the bare state is a
@@ -607,7 +668,7 @@ private:
     // and the "shear" cue plays spatialized at the mob. Returns true
     // when the click was consumed (crosshair on the target mob, the
     // bare no-op included).
-    bool tryShear();
+    bool tryShearFor(Player& p, PlayerSession& s);
     // V2-15 (sheep): dyes a wool mob's instance wool — the crosshair on
     // a 'wool_drops' mob, the selected item a DYE (dyeColor non-empty —
     // the data flag, the block recolor's predicate), the instance still
@@ -616,7 +677,7 @@ private:
     // consumed, the "cloth" cue plays (the block recolor's sound twin).
     // Returns true when the click was consumed (crosshair on the target
     // mob, the bare refusal included).
-    bool tryDyeMob();
+    bool tryDyeMobFor(Player& p, PlayerSession& s);
     // V3-14c (piglin): the barter — the crosshair on a 'barter_input'
     // mob, the selected item == the data's barter input name (the data
     // predicate, no species switch): one held input is consumed and the
@@ -628,7 +689,7 @@ private:
     // is consumed even when the held item is wrong — the failed-milk
     // rule); false = fall through (a non-barter mob, the legacy
     // bit-identical).
-    bool tryBarter();
+    bool tryBarter(Player& p, PlayerSession& s);
     // V3-14d (strider riding): the ride pass — the per-frame choke point
     // (the dismount conditions + the carry snap + the steer push). Runs
     // after the input handlers (a panel-open / a Space / a LeftControl
@@ -642,7 +703,7 @@ private:
     // not already riding / flying. The click is consumed on a rideable
     // target (the failed-milk rule); a non-rideable target falls
     // through to the legacy block interact (the bit-identical path).
-    bool tryRide();
+    bool tryRide(Player& p, PlayerSession& s);
     // V3-14d: the dismount exit (every dismount funnels here — the
     // Space / LeftControl keys, the ride pass's conditions: the mount
     // dead, the player dead, the flight toggle, the panel-open, the
@@ -660,7 +721,7 @@ private:
     // the click (a bucket never places a block); a no-action case
     // (flowing water, occupied cell, no target) falls through to the
     // normal right-click (placeBlock is a no-op for a material).
-    bool tryFluidBucket();
+    bool tryFluidBucketFor(Player& p, PlayerSession& s);
     // Armor (SURV-1): the right-click channel of the armor pieces. A
     // HELD piece equips onto its data slot (an occupied slot SWAPS the
     // piece with the held one — Minecraft); an EMPTY hand unequips the
@@ -672,21 +733,21 @@ private:
     // + nothing worn falls through to the next channel (the sneak-
     // rotate can still fire on an empty hand). Returns true when the
     // click was consumed.
-    bool tryArmor();
+    bool tryArmorFor(Player& p, PlayerSession& s);
     // Advances the eat/drink channel in real dt (Phase 28, drinkable
     // extension Phase 43): interrupts (damage, death, unlock, panel,
     // selection change) and the terminal events (complete = consume +
     // food restore OR drink return-container + clear status effects,
     // early release = cancel).
-    void updateEatChannel(double dt);
-    void resetEatChannel();
+    void updateEatChannel(Player& p, PlayerSession& s, const Input& in, double dt);
+    void resetEatChannel(PlayerSession& s);
     // Clears the player's status effects on a completed drink (Phase 43,
     // completed by the Phase 46 system): resets the red damage veil
     // (m_hurtFlash) and removes every NEGATIVE active effect (Minecraft
     // milk; the positive effects, like regeneration, survive). Fall
     // damage is deliberately NOT cleared (Minecraft parity: it is not a
     // status effect).
-    void clearStatusEffects();
+    void clearStatusEffectsFor(PlayerSession& s);
     // Advances the player's active status effects by REAL dt (Phase 46,
     // the survival-timer class): durations count down, tick effects fire
     // their damage (the min_health floor — poison never kills) / healing
@@ -832,6 +893,7 @@ private:
     // call this: the format-12 pool is authoritative (it may sit below
     // the total) and the format-11 migration derives it (applySave).
     void syncAbsorption();
+    void syncAbsorptionFor(Player& p, PlayerSession& s);
     // SURV-4 (potions): the single choke point for applying a NAMED status
     // effect to the player. Resolves the effect (init cross-checks every
     // grant source names an existing effect, so idForName cannot fail),
@@ -848,6 +910,9 @@ private:
     // bit-identical).
     void applyPlayerEffect(const std::string& name, double duration,
                            int tier = 0);
+    void applyPlayerEffectFor(Player& p, PlayerSession& s,
+                              const std::string& name, double duration,
+                              int tier);
     // UX-7 / V2-3: the SINGLE choke point for tutorial events — every
     // game-world event of the closed vocabulary (walk / jump / eat /
     // break.<block> / place.<block> / craft.<item> / kill.<mob> /
@@ -863,18 +928,19 @@ private:
     // one-shot info log (the E2E evidence — the PRE-4 ambience-log
     // pattern). Frame-locked: only called from update-frame code paths
     // (hard rule 8).
-    void emitTutorialEvent(const std::string& name, int n);
+    void emitTutorialEvent(const std::string& name, int n,
+                    Player* actor = nullptr);
     // Cycles the hotbar selection; resets break progress (the selected
     // tool changed, Minecraft behavior).
-    void cycleHotbar();
+    void cycleHotbar(PlayerSession& s);
     // Drops one from the selected hotbar slot at the player's feet (Q).
-    void dropSelectedItem();
+    void dropSelectedItem(Player& p, PlayerSession& s);
     // Effective break speed of the selected item against `target`
     // (Phase 67): tools use their data break_speed — times the
     // fast_against multiplier when the target block is one the tool is
     // fast against (effectiveBreakSpeed); hand (empty slot) and block
     // items break at 1.0.
-    float selectedBreakSpeed(const Block& target) const;
+    float selectedBreakSpeedFor(PlayerSession& s, const Block& target) const;
 
     // Entity simulation (Phase 10): per-entity physics, then the item merge
     // pass and despawn (removal is deferred so the merge order — and
@@ -1086,14 +1152,17 @@ private:
     // Click routing while a crafting panel is open (Phase 17): shapeless
     // craft rows (the E panel only), then the output slot, a grid cell or
     // an inventory slot (the active panel's InventoryUI).
-    void handlePanelClicks();
+    void handlePanelClicks(Player& p, PlayerSession& s, const Input& in);
     // Opens the given panel (releasing the pointer) / closes the open one.
     void openPanel(OpenPanel panel);
+    void openPanelFor(Player& p, PlayerSession& s, OpenPanel panel);
     void closePanel();
+    void closePanelFor(Player& p, PlayerSession& s);
     // Phase 44: opens the furnace panel for the block at `pos` — binds the
     // panel's UI to that block's state (created on demand; a furnace block
     // always owns one — see setBlock).
     void openFurnacePanel(const BlockPos& pos);
+    void openFurnacePanelFor(Player& p, PlayerSession& s, const BlockPos& pos);
     // The state of the furnace block at `pos` (default-constructs one when
     // absent — defensive: the setBlock invariant makes that unreachable).
     FurnaceState& furnaceAt(const BlockPos& pos);
@@ -1102,6 +1171,7 @@ private:
     // crafting_table block always owns one — see setBlock). The
     // openFurnacePanel twin (Phase 44).
     void openTablePanel(const BlockPos& pos);
+    void openTablePanelFor(Player& p, PlayerSession& s, const BlockPos& pos);
     // The grid of the table block at `pos` (default-constructs one when
     // absent — defensive: the setBlock invariant makes that unreachable).
     CraftingGrid& tableAt(const BlockPos& pos);
@@ -1110,11 +1180,13 @@ private:
     // The openTablePanel twin (the session-state variant: no per-block
     // state — the offers are derived on demand).
     void openEnchantPanel(const BlockPos& pos);
+    void openEnchantPanelFor(Player& p, PlayerSession& s, const BlockPos& pos);
     // V2-12: re-derives the panel's offers from the CURRENT item slot (the
     // deterministic roll — bookshelfCount around the table + the item's
     // class/enchantability + the player's xpSeed). Called on open and after
     // any item-slot change. An empty item slot clears the offers.
     void regenEnchantOffers();
+    void regenEnchantOffersFor(Player& p, PlayerSession& s);
     // V2-12: applies the offer at `row` (0..2) to the item slot when the
     // four gates pass (item has a class + not yet enchanted + level >=
     // xpCost + lapis >= lapisCost): sets the enchants, deducts the whole
@@ -1123,9 +1195,11 @@ private:
     // applied (the game's click routing uses the cue for nothing else —
     // the sound is played here).
     bool applyEnchantOffer(int row);
+    bool applyEnchantOfferFor(Player& p, PlayerSession& s, int row);
     // V2-12: return one enchant panel slot's stack to the inventory (a full
     // inventory drops it at the player's feet). The closePanel cleanup.
     void returnEnchantSlot(ItemStack& stack);
+    void returnEnchantSlotFor(Player& p, PlayerSession& s, ItemStack& stack);
     // Phase 71: the right-click campfire cooking interaction (the
     // kInteractCampfire branch of the right-click chain): a selected
     // smeltable item places one unit on an EMPTY slot (consumed from the
@@ -1134,6 +1208,7 @@ private:
     // consumed either way (a campfire is never placed through this
     // branch).
     void tryCampfireCook(const BlockPos& pos);
+    void tryCampfireCookFor(PlayerSession& s, const BlockPos& pos);
     // The state of the campfire block at `pos` (default-constructs one
     // when absent — defensive: the setBlock invariant makes that
     // unreachable).
@@ -1160,7 +1235,7 @@ private:
     // (spatialized at the bed) and the "sleep" tutorial event emits
     // (the closed vocabulary's new bare word — no series JSON change).
     // The click is consumed either way (no placement fall-through).
-    void trySleep(const BlockHit& hit);
+    void trySleepFor(Player& p, const BlockHit& hit);
     // Footstep sound timer (moving + on ground, pointer captured).
     void updateSoundTimers(double dt);
     // SAVE-1: the auto-save pass (REAL dt, the survival-timer class —
@@ -1194,6 +1269,7 @@ private:
     // the world spawn PERMANENTLY (the Minecraft rule — the coordinate
     // memory is re-pinned to what the respawn actually used).
     void respawnPlayer();
+    void respawnPlayerFor(Player& p, PlayerSession& s);
     // World-space overlay: the break crack on the target block + the
     // target outline (drawn in the blending pass, depth test on).
     void drawWorldOverlay(const Mat4& view, const Mat4& projection);
@@ -1223,6 +1299,7 @@ private:
     // The mouse position in UI pixels: SDL delivers LOGICAL coordinates,
     // which divide by ui.scale (the drawable stretch is a uniform scale).
     std::pair<int, int> uiMouse() const;
+    std::pair<int, int> uiMouseFor(const Input& in) const;
     // Screen-space ortho projection (y-down: y = 0 is the window top).
     Mat4 uiProjection(int w, int h) const;
     // Uploads one UI vertex batch and draws it with the UI shader.
@@ -1556,7 +1633,7 @@ private:
     // path, deviation). The click is consumed on a frame cell (the
     // failed-milk rule); a non-frame target falls through (the
     // bit-identical legacy path).
-    bool tryEyePortal();
+    bool tryEyePortal(Player& p, PlayerSession& s);
     // V3-10b (the ender pearl): the TELEPORT-THROW — the crosshair is
     // the aim (the aimForward twin), the selected item carries the data
     // predicate throws_teleport, the cooldown is 0 and the player is
@@ -1569,19 +1646,16 @@ private:
     // cooldown shape); a non-throwable item returns false (the legacy
     // bit-identical fall-through). The landing's teleport is the
     // pearlLanding seam (the stuck pass's twin branch).
-    bool tryThrowPearl();
+    bool tryThrowPearl(Player& p, PlayerSession& s);
 
     // V3-10a: the ender_eye item's resolved id (the init name lookup —
     // invalid = the embed interaction is structurally inert, the
     // absent-asset twin).
     ItemID m_enderEyeId = ItemID::invalid();
-    // V3-10b: the pearl's throw cooldown in FRAMES (the frame-locked
-    // session state — the kPearlThrowCooldownFrames window after a
-    // throw; 0 = ready. Never saved, the fly-toggle / portal-cooldown
-    // precedent class). The gate's one member: the tryThrowPearl's
-    // predicate reads it, the throw decrements nothing (the pass runs
-    // it, the update's frame-locked bookkeeping).
-    int m_pearlThrowCooldownFrames = 0;
+    // V3-10b: the pearl's throw cooldown moved into the PlayerSession
+    // (V3-12b's per-player family — the frame-locked session state, the
+    // kPearlThrowCooldownFrames window after a throw; 0 = ready, never
+    // saved, the fly-toggle / portal-cooldown precedent class).
 
     GameArgs m_args;
     Config m_config;
@@ -1619,13 +1693,68 @@ private:
     // (GL upload) at the end of updateChunkMeshes.
     std::set<ColumnPos> m_columnRebuildPending;
 
+    // V3-12b (R2): the shared SIM clock (seconds): incremented every
+    // frame by the frame's dt (solo: the local wall dt, net: the
+    // host-broadcast dt — the two machines accumulate the identical
+    // sequence). The wall-clock double-tap windows (the Space fly
+    // toggle, the inventory double-click collect) read this in NET
+    // mode; the solo path keeps nowSeconds() verbatim (the bit-level
+    // red line — the accumulator is written, never read, in solo).
+    double m_simTime = 0.0;
+
     // Seeded world generator (built in buildScene). Optional: the game only
     // touches it after init succeeded.
     std::optional<WorldGenerator> m_generator;
 
+    // V3-12b (the Player multi-ification, design §3.1): the PLAYER LIST
+    // — every player's body (position / orientation / health / hunger /
+    // XP: the Player-intrinsic state). Index 0 = the PRIMARY (the host
+    // player on every machine — the R1 red line: every "the player" sim
+    // anchor is primary-indexed, a local-relative anchor is the double-
+    // machine divergence root). m_localSlot = the LOCAL machine's own
+    // player (0 in solo / on the host, 1 on the client — the camera /
+    // HUD / death screen read localPlayer()). Solo: size 1, primary ==
+    // local — the bit-identical red line.
+    std::vector<std::unique_ptr<Player>> m_players;
+    int m_localSlot = 0;
+    // V3-12b (R9): the valid spawn candidates collected at init (the
+    // net connect's player-2 spawn reads index 1 — the
+    // spawnPositionForIndex's source).
+    std::vector<Vec3> m_spawnCandidates;
     // The first-person actor (built in buildScene after the world exists;
-    // it holds references to the world and the block registry).
-    std::optional<Player> m_player;
+    // it holds references to the world and the block registry). V3-12b:
+    // a cached PRIMARY alias (m_players[0].get(), set at the single
+    // construction site) — the 354-site m_player reference family keeps
+    // compiling unchanged and points at the host player in every net
+    // session (the "the player" sim-semantic anchors, design §3.1's
+    // pass-ownership table). nullptr before init (the pre-V3-12b
+    // std::optional's empty state, the has_value checks' twin).
+    Player* m_player = nullptr;
+    // The dual-alias accessors (design §3.1): primary = index 0 (every
+    // machine's shared definition — the sim anchors), local = the
+    // machine's own player (camera / HUD / death screen / the first-
+    // person arm). Solo they return the same object (the bit-level
+    // root); a null list (pre-init) returns nullptr / defaults.
+    Player* primaryPlayer() const {
+        return m_players.empty() ? nullptr : m_players[0].get();
+    }
+    Player* localPlayer() const {
+        return m_players.empty() ? nullptr
+             : m_players[static_cast<std::size_t>(m_localSlot)].get();
+    }
+    // V3-12b (R9): the i-th valid spawn candidate (the init's collected
+    // list; the index wraps when the world has fewer candidates than
+    // players — the single-player world's shape). -safe: an empty list
+    // returns the world origin surface (the init's spawnPos fallback).
+    Vec3 spawnPositionForIndex(std::size_t i) const {
+        if (m_spawnCandidates.empty()) {
+            return Vec3 {0.5f,
+                         m_generator ? m_generator->surfaceHeight(0, 0) + 1.0f
+                                     : 64.0f,
+                         0.5f};
+        }
+        return m_spawnCandidates[i % m_spawnCandidates.size()];
+    }
 
     // Chunk streaming (Phase 14) + worker meshing (PIPE-1): worker pool
     // for out-of-area terrain and off-main-thread remeshing. The
@@ -2098,13 +2227,13 @@ private:
     // V3-14d (strider riding): the ridden mount — SESSION state (never
     // saved: mobs are not persisted, so the ride cannot outlive the
     // session, the portal-cooldown / flight precedent). Non-null while
-    // the player is carried; the ride pass (updateRide) is the single
-    // choke point (the dismount conditions + the carry snap + the steer
-    // push), the tryRide the mount entry, the dismountRide the exit.
-    // Null in every no-ride session (the structural-immunity root: the
-    // pass is one null check, the tryRide never fires without an RMB on
-    // a rideable mob).
-    MobEntity* m_ridingMount = nullptr;
+    // V3-10d: the ride mount moved into the PlayerSession (V3-12b's
+    // per-player family): the rideable mob the player is carried; the
+    // ride pass (updateRide) is the single choke point (the dismount
+    // conditions + the carry snap + the steer push), the tryRide the
+    // mount entry, the dismountRide the exit. Null in every no-ride
+    // session (the structural-immunity root: the pass is one null
+    // check, the tryRide never fires without an RMB on a rideable mob).
     // V3-10a: the End portal's entry countdown in FRAMES (the
     // m_portalEntryFrames' twin — the two dimensions' portals never
     // co-arm (the player is in one), so the states are separate; the
@@ -2162,12 +2291,6 @@ private:
     // (the Input's per-frame wheelDelta, reset in frameBegin — input
     // state, never a persisted level).
     float m_thirdPersonDistance = kThirdPersonDistance;
-    // V2-19: the last Space press's real-dt timestamp (-1 = no press yet)
-    // — the double-tap FLY window's state (the CRAFT-7 kDoubleClickSeconds
-    // input-state discipline, hard rule 8: never frame state, never saved
-    // — a no-input run never presses Space, so it is structurally immune
-    // to the toggle). The decision is the pure core/fly function.
-    double m_lastSpacePressTime = -1.0;
     // The player input-channel family (UX-2 B4): everything the pointer-
     // locked interaction maintains — the swing cooldown (Phase 20, the
     // attack input), the bow draw (Phase 24), the eat channel (Phase 28,
@@ -2221,7 +2344,6 @@ private:
         // Footstep timer (seconds since the last step sound; Phase 15).
         double stepTimer = 0.0;
     };
-    InteractionState m_interaction;
     // The three shared arrow-part meshes (Phase 21; PRE-9 three-part:
     // shaft/tip/fletching; built lazily on first render) + the V3-14b
     // fireball's glow cube (the exploding shooter's projectile — built
@@ -2238,8 +2360,6 @@ private:
     // hotbar slot. Crafting recipes (Phase 12) are loaded and validated at
     // startup; the in-game crafting UI/trigger is Phase 15.
     ItemRegistry m_items;
-    Inventory m_inventory;
-    std::size_t m_selectedSlot = 0;
     RecipeRegistry m_recipes;
     // V2-12 (format 27): the enchantment registry (loaded from assets/data/
     // enchantments/*.json at init — the ItemRegistry / RecipeRegistry
@@ -2353,10 +2473,117 @@ private:
               enchantUi(inventory, items),
               creativeUi(inventory, items) {}
     };
-    PanelState m_panel {m_inventory, m_items, m_recipes};
-    bool panelOpen() const {
-        return m_panel.openPanel != OpenPanel::None;
+
+    // V3-13: the session stats (the death screen's panel — SESSION
+    // ONLY, not serialized, the documented deviation: the counters
+    // reset with the process, Minecraft's scoreboard persists).
+    // V3-12b: the per-player definition (the PlayerSession's absorbed
+    // member's type — the struct moved here for the declaration order).
+    struct SessionStats {
+        int blocksMined = 0;
+        int blocksPlaced = 0;
+        int mobsKilled = 0;
+    };
+
+    // V3-12b: the PER-PLAYER session state (design §3.1's migration
+    // list): the inventory + selected slot, the input-channel family
+    // (InteractionState), the local panel (bound to THIS session's
+    // inventory — the remote player's panel is disabled in 12b, D11),
+    // the survival timers (hurt flash / the prev-health hurt event),
+    // the drowning state, the status effects, the pearl-throw cooldown,
+    // the ride mount, the session stats, the tutorial state + the
+    // double-tap fly window's last-Space timestamp (R2's simTime keeps
+    // the real-dt value — the solo path's bit-level), and the R18
+    // pointer-lock SIM mirror (solo: synced from the SDL state at every
+    // sim read site = the original code's value; net: carried in the
+    // FrameState — the local fact enters the simulation through it).
+    struct PlayerSession {
+        Inventory inventory;
+        std::size_t selectedSlot = 0;
+        InteractionState interaction;
+        PanelState panel;
+        StatusEffects effects;
+        DrownState drown;
+        double hurtFlash = 0.0; // seconds remaining of the red flash
+        float prevHealth = -1.0f; // -1 = first frame (no hurt event)
+        int pearlThrowCooldownFrames = 0;
+        MobEntity* ridingMount = nullptr;
+        SessionStats sessionStats;
+        // SURV-7: the per-player death-related statistics (format 21):
+        // "deathCount" + one "kill.<mob name>" per registered mob. Only
+        // NON-ZERO counters are held (the save omits zeros — the
+        // omit-when-default discipline). Frame-locked events (the death
+        // transition, the mob despawn pass) increment them; deterministic.
+        // V3-12b: per-player (the death count is the player's own; the
+        // mob-death counters anchor the PRIMARY session — the world
+        // event's D10-style primary read, the tutorial anchor's twin).
+        std::map<std::string, std::uint64_t> stats;
+        TutorialState tutorial;
+        bool tutorialEnabled = true;
+        int tutorialToastFrames = 0;
+        double lastSpacePressTime = -1.0;
+        bool inputLocked = false; // the R18 mirror (see above)
+        // The member order = the original declaration order of the
+        // family it absorbed (the construction-order red line, the
+        // InteractionState comment's discipline): inventory first
+        // (the panel binds to it), the interaction family next.
+        PlayerSession(const ItemRegistry& items, const RecipeRegistry& recipes)
+            : panel(inventory, items, recipes) {
+            // The Game constructor's original bind call (the crafting
+            // grid -> the inventory UI's slot mapping), now per-session.
+            panel.inventoryUi.bind(panel.inventoryGrid);
+        }
+    };
+
+    std::vector<std::unique_ptr<PlayerSession>> m_sessions;
+    // V3-12b: the session family's factory (the constructor's init list
+    // cannot push_back — the reference aliases below bind into
+    // m_sessions[0] at init, before the body runs): one primary session.
+    static std::vector<std::unique_ptr<PlayerSession>> makeSessions(
+        const ItemRegistry& items, const RecipeRegistry& recipes) {
+        std::vector<std::unique_ptr<PlayerSession>> sessions;
+        sessions.push_back(std::make_unique<PlayerSession>(items, recipes));
+        return sessions;
     }
+    // The PRIMARY (index 0) reference aliases: every pre-V3-12b member
+    // use keeps compiling and — in solo, where primary == local == the
+    // only session — stays bit-identical. The ×N sim passes (design
+    // §3.1's looped table) index m_sessions[i] explicitly instead; the
+    // local UI (the render / HUD / death screen) reads the local
+    // session through localSession() / localPanel().
+    Inventory& m_inventory;
+    std::size_t& m_selectedSlot;
+    InteractionState& m_interaction;
+    StatusEffects& m_playerEffects;
+    DrownState& m_drown;
+    double& m_hurtFlash;
+    float& m_prevHealth;
+    int& m_pearlThrowCooldownFrames;
+    MobEntity*& m_ridingMount;
+    SessionStats& m_sessionStats;
+    std::map<std::string, std::uint64_t>& m_stats;
+    TutorialState& m_tutorial;
+    bool& m_tutorialEnabled;
+    int& m_tutorialToastFrames;
+    double& m_lastSpacePressTime;
+    PlayerSession& localSession() const {
+        return *m_sessions[static_cast<std::size_t>(m_localSlot)];
+    }
+    PanelState& localPanel() const {
+        return localSession().panel;
+    }
+    bool panelOpen() const {
+        return localPanel().openPanel != OpenPanel::None;
+    }
+    // V3-12b: the ×N pass's per-player forms (declared after the
+    // PlayerSession type — the nested-class parameter-order rule).
+    // inputFor = the per-player SIM input source (solo: the live pump,
+    // the pre-V3-12b value; net: the N−D reconstructed frame state —
+    // wired in the loop step). dismountRideFor / syncAbsorptionFor =
+    // the per-player ride-exit + absorption-sync (the alias methods
+    // above delegate the primary to them).
+    const Input& inputFor(std::size_t i) const;
+    void dismountRideFor(Player& p, PlayerSession& s);
 
     // Phase 83 beacon: the (x, y, z) of a beacon block plus its power
     // level (the beam is taller at higher levels, Minecraft). Filled by
@@ -2660,8 +2887,6 @@ private:
     // player owns the health; the game polls it each frame (a drop = hurt
     // flash + sound, a death = pointer release + sound; R respawns).
     Texture m_healthTexture;
-    double m_hurtFlash = 0.0; // seconds remaining of the red flash
-    float m_prevHealth = -1.0f; // -1 = first frame (no hurt event)
     // Phase 23 hunger: the drumstick strip (same 48x16 three-tile layout as
     // the health strip). The player owns the hunger; the game only draws it
     // and feeds it (tryEat).
@@ -2672,7 +2897,6 @@ private:
     // player's drowning state (the pure step lives in player/drown,
     // the unit tests own it — the campfire pattern).
     Texture m_oxygenTexture;
-    DrownState m_drown;
     // Phase 46 status effects: the data-driven definitions
     // (assets/data/effects) + the player's active instances (core/
     // status_effect.hpp) + the 16 px icon strip (assets/textures/
@@ -2680,22 +2904,6 @@ private:
     // owns the instances and their real-dt tick; the HUD draws one icon
     // per active effect (left-aligned on the heart row).
     EffectRegistry m_effects;
-    StatusEffects m_playerEffects;
-    // V3-13: the session stats (the death screen's panel — SESSION
-    // ONLY, not serialized, the documented deviation: the counters
-    // reset with the process, Minecraft's scoreboard persists).
-    struct SessionStats {
-        int blocksMined = 0;
-        int blocksPlaced = 0;
-        int mobsKilled = 0;
-    };
-    SessionStats m_sessionStats;
-    // SURV-7: the player's death-related statistics (format 21):
-    // "deathCount" + one "kill.<mob name>" per registered mob. Only
-    // NON-ZERO counters are held (the save omits zeros — the
-    // omit-when-default discipline). Frame-locked events (the death
-    // transition, the mob despawn pass) increment it; deterministic.
-    std::map<std::string, std::uint64_t> m_stats;
     // UX-7 / V2-3: the tutorial SERIES (the objective-style onboarding)
     // — the step data (assets/data/tutorials/*.json, one file per
     // series, file-name byte order = the series order; strict-parsed at
@@ -2713,9 +2921,6 @@ private:
     // single choke point emitTutorialEvent (game_frame) over the pure
     // state machine (core/tutorial, the unit tests own it).
     std::vector<std::vector<TutorialStep>> m_tutorialSeries;
-    TutorialState m_tutorial;
-    bool m_tutorialEnabled = true;
-    int m_tutorialToastFrames = 0;
     // Phase 57: the ignites_on_lava effect (the fire) — its id, or -1
     // when no registered effect carries the flag (init cross-checks that
     // AT MOST ONE does). (Re-)applied every frame while the player is in
@@ -2784,6 +2989,67 @@ private:
     // Record (--demo-record): the boundary-tap kernel (the Input's
     // event tap closure; the world spec set in init).
     DemoRecorder m_demoRecorder;
+
+    // -- V3-12b: the NET session (the 2-player lockstep PoC) ------------
+    // The transport (one TCP connection; the host owns the session —
+    // the client's EOF is the D2's all-exit, the host's EOF is the
+    // client's removal + the solo continuation). nullptr = no net
+    // session (the structural-immunity root: every net hook gates on
+    // m_netActive, the solo loop is the pre-V3-12b sequence).
+    std::unique_ptr<NetSession> m_net;
+    bool m_netActive = false;
+    bool m_netIsHost = false;
+    bool netActive() const { return m_netActive; }
+    // The client's WELCOME seed (the world spec's authority — the
+    // config's world.seed override before buildScene; -1 = none).
+    std::int64_t m_netSeedOverride = -1;
+    // The per-player FrameState rings (the depth D+1 — the frame N's
+    // read is (N-D) % (D+1); the unified delay rule, design D3's
+    // no-prediction: the local player's own frame is relayed like the
+    // remote's, no local fast-path).
+    std::array<std::vector<FrameState>, kNetMaxPlayers> m_frameRings;
+    // The per-player SIM Input (the preloadFrame's target — the
+    // inputFor's net branch; the solo's live m_input stays the sim
+    // source in the no-net run).
+    std::array<Input, kNetMaxPlayers> m_netInputs;
+    // The host's own frame hashes (the client's hash compare — the
+    // INPUT's carried hash vs the host's computed-for-that-frame, the
+    // ring depth = the hash interval).
+    std::array<std::uint64_t, kNetHashInterval> m_hostHashRing {};
+    // The host's lockstep barrier's watermark (the highest client
+    // frame whose INPUT has arrived — the host's pre(N) blocks until
+    // the client's INPUT[N-D] lands, the mutual barrier's host half:
+    // a fast host eating the client's not-yet-sent input = the
+    // silent-desync root the barrier's existence).
+    std::uint32_t m_clientFrameMax = 0;
+    // --script: the timeline's injection kernel (the demo player's
+    // shape, the dts ignored — the net's dt is the broadcast's).
+    std::optional<DemoPlayer> m_scriptPlayer;
+    bool m_scriptActive = false;
+    // The client's pending host hash (the FRAME's carried value for
+    // this frame — the netFramePost's compare after the sim).
+    std::uint64_t m_pendingHostHash = 0;
+    std::uint32_t m_pendingHostHashFrame = ~0u;
+
+    // The net hooks (init's handshake + the loop's pre/post frame).
+    Result<void> netClientHandshake();
+    Result<void> netHostHandshake();
+    // The frame's net face: the poll / the capture / the preload / the
+    // send + the hash exchange (the error string = the fatal's named
+    // face, the loop's break signal). dt IN/OUT = the host's wall dt
+    // (the broadcast's source) / the client's received dt (the sim's
+    // ONLY time source).
+    std::string netFramePre(double& dt);
+    std::string netFramePost(double dt, std::size_t F);
+    FrameState captureLocalFrameState() const;
+    void preloadNetInputs();
+    // The player add / remove (the connect's slot 1 / the disconnect's
+    // R19 removal — the 100% drop + the dismount + the effect clear).
+    void netAddPlayer(std::size_t slot);
+    void netRemovePlayer(std::size_t slot, const std::string& why);
+    // The state-hash's exchange (the 30-frame cadence's compute +
+    // compare — the desync's named exit).
+    std::uint64_t netComputeHash();
 };
 
 } // namespace mc

@@ -79,7 +79,7 @@ Vec3 Game::aimForward() const {
     return m_camera.forward();
 }
 
-void Game::handleInteraction(double dt) {
+void Game::handleInteraction(Player& p, PlayerSession& s, const Input& in, double dt) {
     // CRAFT-3: the listener for the spatialized sounds (the material dig /
     // place / break at the block, the pickup at the item) — the camera
     // state at the frame start. The camera was synced from the player at
@@ -89,31 +89,44 @@ void Game::handleInteraction(double dt) {
     // The 2D paths (step / shoot / eat / ui_*, the held-item breaks)
     // ignore the listener entirely.
     m_sound.setListener(m_camera.position, m_camera.yaw);
-    const bool locked = m_window.relativeMouseMode();
+    // R18: the SIM lock read — solo: the SDL state (the original value,
+    // bit-identical); net: the player's N−D FrameState flag (the local
+    // fact enters the simulation through it).
+    const bool locked =
+        (m_players.size() == 1) ? m_window.relativeMouseMode()
+                                : s.inputLocked;
     if (!locked) {
         // Left click captures the pointer (standard first-person behavior)
         // — but never while dead (the death screen owns the input; R
-        // respawns first).
-        if (!m_player->isDead() && m_input.wasPressed(MouseButton::Left)) {
-            m_window.setRelativeMouseMode(true);
+        // respawns first). Net: the SDL capture is the LOCAL machine's
+        // presentation act (the local player's own click only — the
+        // remote player's capture is its machine's fact, the FrameState
+        // carries the result).
+        if (!p.isDead() && in.wasPressed(MouseButton::Left)) {
+            if (m_players.size() == 1 || &p == localPlayer()) {
+                m_window.setRelativeMouseMode(true);
+            }
             // Debug line: the E2E input scripts verify the capture landed
             // by waiting for this (a covering window can steal the click
             // silently — P25-class pollution, 2026-10-21 STRM-1 E2E).
             MC_LOG_DEBUG("Pointer captured");
         }
-        resetBreaking();
-        m_interaction.swingCooldown = 0.0;
-        resetBowDraw();
-        resetEatChannel();
+        resetBreaking(s);
+        s.interaction.swingCooldown = 0.0;
+        resetBowDraw(s);
+        resetEatChannel(s);
         return;
     }
 
-    if (m_input.wasPressed(GameKey::Escape)) {
+    // Solo only: the ESC's pointer release + the interaction reset (the
+    // net's ESC is the loop's local quit act — the relayed ESC carries no
+    // sim pointer state, the panel ESC lives in handleUiKeys).
+    if (m_players.size() == 1 && in.wasPressed(GameKey::Escape)) {
         m_window.setRelativeMouseMode(false);
-        resetBreaking();
-        m_interaction.swingCooldown = 0.0;
-        resetBowDraw();
-        resetEatChannel();
+        resetBreaking(s);
+        s.interaction.swingCooldown = 0.0;
+        resetBowDraw(s);
+        resetEatChannel(s);
         return;
     }
     // V2-19: the double-tap Space toggles the player's FLY (the creative-
@@ -131,32 +144,37 @@ void Game::handleInteraction(double dt) {
     // grant (Player::suppressJumpGrant — the creative's toggle consumes
     // it: on the toggle-ON frame the fly branch owns Space, on the
     // toggle-OFF frame the grant gate does).
-    if (m_input.wasPressed(GameKey::Space) && !m_player->isDead()) {
+    if (in.wasPressed(GameKey::Space) && !p.isDead()) {
         // V3-14d: Space while riding = DISMOUNT (the task's "jump off"
         // ruling) — the press is consumed and NEVER records the
         // double-tap window (the dismount tap must not arm the fly
         // toggle: a quick second tap after dismounting would otherwise
         // open the flight, the recon's risk ④).
-        if (m_ridingMount != nullptr) {
-            dismountRide();
+        if (s.ridingMount != nullptr) {
+            dismountRideFor(p, s);
         } else {
-            const double now = nowSeconds();
+            // R2: the double-tap window's clock — solo: the wall clock
+            // (the original read, bit-identical); net: the shared sim
+            // clock (the broadcast dt's accumulator — the two machines'
+            // wall clocks differ, the sim clock does not).
+            const double now =
+                (m_players.size() == 1) ? nowSeconds() : m_simTime;
             const FlyToggleDecision d =
-                flyToggleDecision(now, m_lastSpacePressTime,
-                                  m_player->isFlying());
-            m_lastSpacePressTime = now;
+                flyToggleDecision(now, s.lastSpacePressTime,
+                                  p.isFlying());
+            s.lastSpacePressTime = now;
             if (d.doubleTap) {
-                m_player->setFlying(d.nowFlying);
-                m_player->suppressJumpGrant();
+                p.setFlying(d.nowFlying);
+                p.suppressJumpGrant();
             }
         }
     }
     // V3-14d: LeftControl (the crouch key) while riding = DISMOUNT (the
     // Minecraft dismount key's twin — crouching has no meaning while
     // carried, the press owns the exit).
-    if (m_input.wasPressed(GameKey::LeftControl) &&
-        !m_player->isDead() && m_ridingMount != nullptr) {
-        dismountRide();
+    if (in.wasPressed(GameKey::LeftControl) &&
+        !p.isDead() && s.ridingMount != nullptr) {
+        dismountRideFor(p, s);
     }
     // V3-8b: the gamepad's DEDICATED flight toggle (the B/EAST button —
     // GameKey::FlyToggle is gamepad-only, mapKey never returns it): a
@@ -166,10 +184,10 @@ void Game::handleInteraction(double dt) {
     // only). The A's double-tap through the Space's path still works —
     // the documented redundancy (the user's ruling: the dedicated
     // button, the keyboard convention untouched).
-    if (m_input.wasPressed(GameKey::FlyToggle) && !m_player->isDead()) {
-        m_player->setFlying(!m_player->isFlying());
+    if (in.wasPressed(GameKey::FlyToggle) && !p.isDead()) {
+        p.setFlying(!p.isFlying());
     }
-    if (m_input.wasPressed(MouseButton::Right)) {
+    if (in.wasPressed(MouseButton::Right)) {
         // Campfire cooking (Phase 71): a campfire under the crosshair
         // owns the click BEFORE the item channels — Minecraft places the
         // held food on the fire instead of starting to eat (essential:
@@ -184,12 +202,12 @@ void Game::handleInteraction(double dt) {
         // the item channels). V3-10a: the triple (the End's closed set
         // is the nether's twin — no campfire state there either).
         if (inOverworld()) {
-            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+            if (const std::optional<BlockHit> hit = (m_players.size() == 1 ? targetBlock() : targetBlockFor(p)); hit) {
                 const Block& b = m_blocks.at(
                     currentWorld().getBlock(hit->block.x, hit->block.y,
                                              hit->block.z));
                 if (b.properties.interact == kInteractCampfire) {
-                    tryCampfireCook(hit->block);
+                    tryCampfireCookFor(s, hit->block);
                     return;
                 }
             }
@@ -198,7 +216,7 @@ void Game::handleInteraction(double dt) {
         // click is consumed (no interact, no placement). At full hunger the
         // eat is a no-op but the click is still consumed (Minecraft: you
         // cannot place while "eating" a full bar).
-        if (tryEat()) {
+        if (tryEatFor(p, s)) {
             return;
         }
         // Drinkable container (Phase 43): a selected item with a
@@ -207,17 +225,17 @@ void Game::handleInteraction(double dt) {
         // the empty container and clears the status effects (v1: the hurt
         // flash). The click is consumed either way (no interact, no
         // placement — a milk bucket in hand never places).
-        if (tryDrink()) {
+        if (tryDrinkFor(p, s)) {
             return;
         }
         // Launcher (Phase 24): the right button is the DRAW. Starting it
         // consumes the click entirely (no interact, no placement — a bow
         // in hand never places). The draw starts only when ammo is
         // available (Minecraft: no draw without arrows).
-        if (selectedShootSpeed() > 0.0f) {
-            if (ammoAvailable()) {
-                m_interaction.bowDrawing = true;
-                m_interaction.bowDrawSeconds = 0.0;
+        if (selectedShootSpeedFor(s) > 0.0f) {
+            if (ammoAvailableFor(s)) {
+                s.interaction.bowDrawing = true;
+                s.interaction.bowDrawSeconds = 0.0;
                 m_sound.play("bow");
             }
             return;
@@ -229,7 +247,7 @@ void Game::handleInteraction(double dt) {
         // unharmed (no damage, death or drop) but put on the 5-minute
         // Minecraft milking cooldown (re-milking early does nothing; the
         // click is still consumed, the failed-milk rule).
-        if (tryMilk()) {
+        if (tryMilk(p, s)) {
             return;
         }
         // V2-15 (sheep): shearing — a selected item carrying the 'shears'
@@ -239,7 +257,7 @@ void Game::handleInteraction(double dt) {
         // enters the bare regrow window, the shears wear kShearWear and
         // the "shear" cue plays at the mob. The bare state is a no-op
         // that still consumes the click (Minecraft, the failed-milk rule).
-        if (tryShear()) {
+        if (tryShearFor(p, s)) {
             return;
         }
         // V2-15 (sheep): the mob dye — a selected DYE (dyeColor
@@ -248,14 +266,14 @@ void Game::handleInteraction(double dt) {
         // the "cloth" cue (the block recolor's sound twin). Minecraft: a
         // sheared (bare) mob refuses the dye — the click is still
         // consumed.
-        if (tryDyeMob()) {
+        if (tryDyeMobFor(p, s)) {
             return;
         }
         // V3-14c (piglin): the barter — a selected item == the mob's
         // data 'barter_input' on a bartering mob trades: one input
         // consumed, the rolled output drops at the mob (ground items),
         // the mob unharmed (a neutral barter never enrages).
-        if (tryBarter()) {
+        if (tryBarter(p, s)) {
             return;
         }
         // V3-14d (strider): the ride — the crosshair on a 'rideable'
@@ -263,14 +281,14 @@ void Game::handleInteraction(double dt) {
         // pass, before the player's update); Space / LeftControl
         // dismount, the ride pass's conditions (the mount dead, the
         // flight, the panel, the water) own the rest.
-        if (tryRide()) {
+        if (tryRide(p, s)) {
             return;
         }
         // V3-10a (the End): the embed-eye — the crosshair on an
         // end_frame cell, the selected item an ender_eye: one eye
         // consumed, the cell becomes the eyed frame, the ring's scan
         // activates the center (all 12 eyed + center air).
-        if (tryEyePortal()) {
+        if (tryEyePortal(p, s)) {
             return;
         }
         // Data-driven interaction (Phase 17): a block whose `interact`
@@ -283,7 +301,7 @@ void Game::handleInteraction(double dt) {
             // nether container would bind an overworld-state entry to a
             // nether position, the cross-dimension key collision; the
             // nether's container state is Phase C).
-            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+            if (const std::optional<BlockHit> hit = (m_players.size() == 1 ? targetBlock() : targetBlockFor(p)); hit) {
                 const Block& b = m_blocks.at(
                     currentWorld().getBlock(hit->block.x, hit->block.y,
                                              hit->block.z));
@@ -291,12 +309,12 @@ void Game::handleInteraction(double dt) {
                     // CRAFT-1: the panel is bound to THIS block's grid
                     // (per-block table states — the Phase 44 furnace
                     // pattern).
-                    openTablePanel(hit->block);
+                    openTablePanelFor(p, s, hit->block);
                     return;
                 }
                 if (b.properties.interact == kInteractFurnace) {
                     // Phase 44: the panel is bound to THIS block's state.
-                    openFurnacePanel(hit->block);
+                    openFurnacePanelFor(p, s, hit->block);
                     return;
                 }
                 if (b.properties.interact == kInteractEnchant) {
@@ -304,7 +322,7 @@ void Game::handleInteraction(double dt) {
                     // position (bookshelfCount around it) + the item the
                     // player places in the slot (session state, the
                     // furnace twin).
-                    openEnchantPanel(hit->block);
+                    openEnchantPanelFor(p, s, hit->block);
                     return;
                 }
                 // The campfire (Phase 71) is handled at the TOP of this
@@ -328,15 +346,15 @@ void Game::handleInteraction(double dt) {
         // — the respawn point is always the overworld's, the D8
         // triple).
         if (inOverworld()) {
-            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+            if (const std::optional<BlockHit> hit = (m_players.size() == 1 ? targetBlock() : targetBlockFor(p)); hit) {
                 const Block& b = m_blocks.at(
                     currentWorld().getBlock(hit->block.x, hit->block.y,
                                              hit->block.z));
                 if (b.properties.dyeBase == kDyeBaseBed) {
-                    const ItemStack& held = m_inventory.at(m_selectedSlot);
+                    const ItemStack& held = s.inventory.at(s.selectedSlot);
                     if (held.empty() ||
                         m_items.at(held.item).dyeColor.empty()) {
-                        trySleep(*hit);
+                        trySleepFor(p, *hit);
                         return;
                     }
                 }
@@ -349,12 +367,12 @@ void Game::handleInteraction(double dt) {
         // already in that color is left alone and the click falls through
         // (the dye is not a block item, so placeBlock is a no-op — the
         // documented v1 rule: a duplicate dye is not consumed).
-        if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+        if (const std::optional<BlockHit> hit = (m_players.size() == 1 ? targetBlock() : targetBlockFor(p)); hit) {
             const Block& b = m_blocks.at(
                 currentWorld().getBlock(hit->block.x, hit->block.y,
                                          hit->block.z));
             if (!b.properties.dyeBase.empty()) {
-                const ItemStack& held = m_inventory.at(m_selectedSlot);
+                const ItemStack& held = s.inventory.at(s.selectedSlot);
                 if (!held.empty() &&
                     !m_items.at(held.item).dyeColor.empty()) {
                     const std::string variant =
@@ -374,8 +392,8 @@ void Game::handleInteraction(double dt) {
                                                   hit->block);
                             // V3-11a: the creative's free placement
                             // (no item consumption).
-                            if (!m_player->isCreative()) {
-                                m_inventory.take(m_selectedSlot, 1);
+                            if (!p.isCreative()) {
+                                s.inventory.take(s.selectedSlot, 1);
                             }
                             m_sound.play("cloth");
                         }
@@ -389,7 +407,7 @@ void Game::handleInteraction(double dt) {
         // (a bucket never places a block). Runs AFTER the block
         // interactions: a furnace or crafting table under the crosshair
         // still opens its panel even when a bucket is selected (Minecraft).
-        if (tryFluidBucket()) {
+        if (tryFluidBucketFor(p, s)) {
             return;
         }
         // Ignition (Phase 60, fire visuals Phase 64, the relight target
@@ -409,9 +427,9 @@ void Game::handleInteraction(double dt) {
         // still opens its panel even when an igniter is selected. Other
         // targets fall through (the item is a material, so placeBlock is
         // a no-op).
-        if (const ItemStack& held = m_inventory.at(m_selectedSlot);
+        if (const ItemStack& held = s.inventory.at(s.selectedSlot);
             !held.empty() && m_items.at(held.item).ignitesFlamable) {
-            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+            if (const std::optional<BlockHit> hit = (m_players.size() == 1 ? targetBlock() : targetBlockFor(p)); hit) {
                 const Block& b = m_blocks.at(
                     currentWorld().getBlock(hit->block.x, hit->block.y,
                                              hit->block.z));
@@ -430,7 +448,7 @@ void Game::handleInteraction(double dt) {
                     // igniter one point (the action completed — a
                     // flint and steel that breaks is simply gone).
                     if (m_items.at(held.item).durability > 0.0f) {
-                        if (wearItem(m_inventory.at(m_selectedSlot),
+                        if (wearItem(s.inventory.at(s.selectedSlot),
                                      kIgniteWear)) {
                             m_sound.play("break"); // it broke on the
                                                    // successful ignition
@@ -448,7 +466,7 @@ void Game::handleInteraction(double dt) {
                     // SURV-3: the successful burn wears the held igniter
                     // one point (the action completed).
                     if (m_items.at(held.item).durability > 0.0f) {
-                        if (wearItem(m_inventory.at(m_selectedSlot),
+                        if (wearItem(s.inventory.at(s.selectedSlot),
                                      kIgniteWear)) {
                             m_sound.play("break"); // it broke on the
                                                    // successful ignition
@@ -508,7 +526,7 @@ void Game::handleInteraction(double dt) {
                             // held igniter one point (the action
                             // completed — the (a) / (b) twin).
                             if (m_items.at(held.item).durability > 0.0f) {
-                                if (wearItem(m_inventory.at(m_selectedSlot),
+                                if (wearItem(s.inventory.at(s.selectedSlot),
                                              kIgniteWear)) {
                                     m_sound.play("break"); // it broke on
                                                            // the ignition
@@ -531,7 +549,7 @@ void Game::handleInteraction(double dt) {
         // still cooks (it owns the click at the top of the handler),
         // food still eats, a bucket still scoops, an igniter still
         // lights (the channel-ownership precedence, unchanged).
-        if (tryArmor()) {
+        if (tryArmorFor(p, s)) {
             return;
         }
         // Block-state rotation (Phase 92 stair ring, per-instance in
@@ -546,8 +564,8 @@ void Game::handleInteraction(double dt) {
         // (no panel) rotates. (Phase 92 used the block-ID ring — the 4
         // variants; Phase 94 replaced it with the per-instance facing;
         // ENT-2 generalizes the gate to hasState.)
-        if (m_player->isCrouching()) {
-            if (const std::optional<BlockHit> hit = targetBlock(); hit) {
+        if (p.isCrouching()) {
+            if (const std::optional<BlockHit> hit = (m_players.size() == 1 ? targetBlock() : targetBlockFor(p)); hit) {
                 const Block& b = m_blocks.at(
                     currentWorld().getBlock(hit->block.x, hit->block.y,
                                              hit->block.z));
@@ -589,16 +607,16 @@ void Game::handleInteraction(double dt) {
         // clicks a furnace's panel, a bed's sleep, a frame's eye, a
         // mob's ride — the throw is the last item channel before the
         // placement, which a material pearl no-ops).
-        if (tryThrowPearl()) {
+        if (tryThrowPearl(p, s)) {
             return;
         }
-        placeBlock();
+        placeBlock(p, s);
     }
-    if (m_input.wasPressed(GameKey::Tab)) {
-        cycleHotbar();
+    if (in.wasPressed(GameKey::Tab)) {
+        cycleHotbar(s);
     }
-    if (m_input.wasPressed(GameKey::Q)) {
-        dropSelectedItem();
+    if (in.wasPressed(GameKey::Q)) {
+        dropSelectedItem(p, s);
     }
     // Left button (Phases 11/20/21/24): a launcher item selected (the bow
     // — data 'shoot_speed' > 0) MELEE-attacks a mob under the crosshair
@@ -609,41 +627,41 @@ void Game::handleInteraction(double dt) {
     // (damage + knockback, the block behind it is NOT mined); on a block
     // it mines (hold-to-break progress). Leaving either target resets
     // the other's state.
-    if (m_input.isDown(MouseButton::Left)) {
+    if (in.isDown(MouseButton::Left)) {
         // A swing cancels an in-progress eat (Phase 28, Minecraft) — the
         // food is not consumed; the swing itself proceeds normally.
-        if (m_interaction.eatChannel.active) {
-            resetEatChannel();
+        if (s.interaction.eatChannel.active) {
+            resetEatChannel(s);
         }
-        if (selectedShootSpeed() > 0.0f) {
-            resetBreaking();
-            if (const std::optional<MobHit> mob = targetMob()) {
-                updateAttacking(dt, *mob->mob);
+        if (selectedShootSpeedFor(s) > 0.0f) {
+            resetBreaking(s);
+            if (const std::optional<MobHit> mob = targetMobFor(p)) {
+                updateAttacking(p, s, dt, *mob->mob);
             } else {
-                m_interaction.swingCooldown = 0.0;
+                s.interaction.swingCooldown = 0.0;
             }
-        } else if (const std::optional<MobHit> mob = targetMob()) {
-            resetBreaking();
-            updateAttacking(dt, *mob->mob);
+        } else if (const std::optional<MobHit> mob = targetMobFor(p)) {
+            resetBreaking(s);
+            updateAttacking(p, s, dt, *mob->mob);
         } else {
-            m_interaction.swingCooldown = 0.0;
-            updateBreaking(dt);
+            s.interaction.swingCooldown = 0.0;
+            updateBreaking(p, s, dt);
         }
     } else {
-        resetBreaking();
-        m_interaction.swingCooldown = 0.0;
+        resetBreaking(s);
+        s.interaction.swingCooldown = 0.0;
     }
     // Draw charge (Phase 24): with a launcher selected, the held right
     // button accumulates draw time (real dt, like the survival timers)
     // and the release fires one arrow with the charge's power.
-    if (selectedShootSpeed() > 0.0f) {
-        updateBowDraw(dt);
+    if (selectedShootSpeedFor(s) > 0.0f) {
+        updateBowDrawFor(p, s, in, dt);
     }
     // Eat channel (Phase 28): the held right button fills the 1.6 s eat
     // (real dt, like the survival timers); completion consumes the food.
     // No-op while inactive (food and launcher are exclusive in the
     // selected slot, so the two channels never overlap).
-    updateEatChannel(dt);
+    updateEatChannel(p, s, in, dt);
 }
 
 std::optional<BlockHit> Game::targetBlock() const {
@@ -669,16 +687,17 @@ std::optional<BlockHit> Game::targetBlock() const {
                         aimForward(), aimReach());
 }
 
-void Game::resetBreaking() {
-    m_interaction.breakTarget.reset();
-    m_interaction.breakProgress = 0.0;
-    m_interaction.lastDigProgress = 0.0;
+void Game::resetBreaking(PlayerSession& s) {
+    s.interaction.breakTarget.reset();
+    s.interaction.breakProgress = 0.0;
+    s.interaction.lastDigProgress = 0.0;
 }
 
-void Game::updateBreaking(double dt) {
-    const std::optional<BlockHit> hit = targetBlock();
+void Game::updateBreaking(Player& p, PlayerSession& s, double dt) {
+    const std::optional<BlockHit> hit =
+            (m_players.size() == 1) ? targetBlock() : targetBlockFor(p);
     if (!hit) {
-        resetBreaking();
+        resetBreaking(s);
         return;
     }
     const Block& block =
@@ -686,27 +705,27 @@ void Game::updateBreaking(double dt) {
                                             hit->block.z));
     // Breakability is data-driven: water/bedrock set destroyable=false.
     if (!block.properties.destroyable) {
-        resetBreaking();
+        resetBreaking(s);
         return;
     }
-    if (!m_interaction.breakTarget.has_value() || *m_interaction.breakTarget != hit->block) {
-        m_interaction.breakTarget = hit->block;
-        m_interaction.breakProgress = 0.0;
+    if (!s.interaction.breakTarget.has_value() || *s.interaction.breakTarget != hit->block) {
+        s.interaction.breakTarget = hit->block;
+        s.interaction.breakProgress = 0.0;
     }
     // V3-11a: the creative's instant break (the mode overrides the
     // tool pace — duration 0 lands the break this frame, the existing
     // data-driven instant-break path).
-    const double duration = m_player->isCreative()
+    const double duration = p.isCreative()
         ? 0.0
         : breakDurationSeconds(block.properties.hardness,
-                               selectedBreakSpeed(block));
+                               selectedBreakSpeedFor(s, block));
     if (duration <= 0.0) {
         // Data-driven instant break (hardness 0 while destroyable).
-        breakBlock(*hit);
-        resetBreaking();
+        breakBlock(p, s, *hit);
+        resetBreaking(s);
         return;
     }
-    m_interaction.breakProgress += dt;
+    s.interaction.breakProgress += dt;
     // Mining tick (Phase 15): a dig sound every kDigSoundInterval of held
     // progress (the crack overlay renders the same progress, see render).
     // CRAFT-3: the broken block's material timbre at the block center
@@ -714,25 +733,45 @@ void Game::updateBreaking(double dt) {
     const Vec3 digPos {static_cast<float>(hit->block.x) + 0.5f,
                        static_cast<float>(hit->block.y) + 0.5f,
                        static_cast<float>(hit->block.z) + 0.5f};
-    while (m_interaction.breakProgress >= m_interaction.lastDigProgress + kDigSoundInterval) {
+    while (s.interaction.breakProgress >= s.interaction.lastDigProgress + kDigSoundInterval) {
         m_sound.play(blockSoundName(block, "dig"), digPos);
-        m_interaction.lastDigProgress += kDigSoundInterval;
+        s.interaction.lastDigProgress += kDigSoundInterval;
     }
-    if (m_interaction.breakProgress >= duration) {
-        breakBlock(*hit);
-        resetBreaking();
+    if (s.interaction.breakProgress >= duration) {
+        breakBlock(p, s, *hit);
+        resetBreaking(s);
     }
 }
 
-std::optional<Game::MobHit> Game::targetMob() const {
+// V3-12b: the per-player AIM (the net sessions' first-person form —
+// the player's own yaw/pitch forward + the kReach budget: the camera
+// mode is a LOCAL setting (never relayed, the 12b deviation — the
+// remote player's aim is its view's own first-person read; the local
+// player uses the same form in net for the uniform rule). SOLO: the
+// callers keep the camera path (aimForward / aimReach / targetBlock —
+// the bit-identical original reads; the gate is the size check).
+Vec3 Game::playerAimForwardFor(const Player& p) const {
+    const float cp = std::cos(p.pitch);
+    return {std::sin(p.yaw) * -cp, std::sin(p.pitch), std::cos(p.yaw) * -cp};
+}
+
+std::optional<BlockHit> Game::targetBlockFor(const Player& p) const {
+    return raycastBlock(currentWorld(), m_blocks, p.eyePosition(),
+                        playerAimForwardFor(p), kReach);
+}
+
+std::optional<Game::MobHit> Game::targetMobFor(const Player& p) const {
     // The block occludes: the nearer of the block hit and the mob AABB
     // hits wins (a mob behind the aimed block is not hit; a mob in front
     // of the block is). V2-1: the initial budget is aimReach() (the
     // block hit that sets bestT comes from targetBlock with the SAME
     // budget, so the occlusion comparison stays consistent in every
     // mode; First / ThirdBack: aimReach() = kReach, bit-identical).
-    float bestT = aimReach();
-    if (const std::optional<BlockHit> b = targetBlock()) {
+    // V3-12b: the per-player aim gate (solo: the camera path — the
+    // original reads, bit-identical; net: the first-person form).
+    float bestT = (m_players.size() == 1) ? aimReach() : kReach;
+    if (const std::optional<BlockHit> b =
+            (m_players.size() == 1) ? targetBlock() : targetBlockFor(p)) {
         bestT = b->distance;
     }
     MobEntity* best = nullptr;
@@ -740,8 +779,9 @@ std::optional<Game::MobHit> Game::targetMob() const {
     // (the block hit that sets the initial bestT is measured from the
     // SAME point, so the block-vs-mob occlusion comparison stays
     // consistent; first person is bit-identical as above).
-    const Vec3 o = m_player->eyePosition();
-    const Vec3 d = aimForward();
+    const Vec3 o = p.eyePosition();
+    const Vec3 d = (m_players.size() == 1) ? aimForward()
+                              : playerAimForwardFor(p);
     for (const auto& entity : currentEntities()) {
         const MobEntity* mob =
             dynamic_cast<const MobEntity*>(entity.get());
@@ -761,17 +801,24 @@ std::optional<Game::MobHit> Game::targetMob() const {
     return MobHit {best, bestT};
 }
 
-void Game::updateAttacking(double dt, MobEntity& mob) {
-    if (m_interaction.swingCooldown > 0.0) {
-        m_interaction.swingCooldown -= dt;
+std::optional<Game::MobHit> Game::targetMob() const {
+    // V3-12b: the primary's target (solo: the only player, the
+    // pre-V3-12b behavior; the ×N callers use targetMobFor).
+    return targetMobFor(*m_player);
+}
+
+
+void Game::updateAttacking(Player& p, PlayerSession& s, double dt, MobEntity& mob) {
+    if (s.interaction.swingCooldown > 0.0) {
+        s.interaction.swingCooldown -= dt;
         return;
     }
     // A swing landed: data damage (selected item) + knockback along the
     // aim (horizontal) with a lift. Removal + drops happen in the
     // updateEntities despawn pass (same frame).
-    m_interaction.swingCooldown = kSwingInterval;
-    if (mob.damage(selectedAttackDamage())) {
-        m_sessionStats.mobsKilled += 1; // V3-13: the kill stat (the lethal hit)
+    s.interaction.swingCooldown = kSwingInterval;
+    if (mob.damage(selectedAttackDamageFor(s))) {
+        s.sessionStats.mobsKilled += 1; // V3-13: the kill stat (the lethal hit)
     }
     // SURV-3 (durability): the held TOOL wears two points per melee hit
     // that LANDS (the event table: pickaxe / axe / shovel +2). A bow's
@@ -780,7 +827,7 @@ void Game::updateAttacking(double dt, MobEntity& mob) {
     // hit completed (the damage + knockback landed) — a tool that breaks
     // on this swing is simply gone.
     {
-        ItemStack& held = m_inventory.at(m_selectedSlot);
+        ItemStack& held = s.inventory.at(s.selectedSlot);
         if (!held.empty()) {
             const Item& heldItem = m_items.at(held.item);
             if (heldItem.type == ItemType::Tool &&
@@ -791,7 +838,12 @@ void Game::updateAttacking(double dt, MobEntity& mob) {
             }
         }
     }
-    const Vec3 f = aimForward();
+        // V3-12b: the per-frame aim gate (solo: the camera path —
+    // the original reads bit-identical; net: the first-person
+    // form, the 12b deviation).
+    const Vec3 aimDir =
+        (m_players.size() == 1) ? aimForward() : playerAimForwardFor(p);
+    const Vec3 f = aimDir;
     Vec3 kb {f.x, 0.0f, f.z};
     const float len = std::sqrt(kb.x * kb.x + kb.z * kb.z);
     if (len > 1e-4f) {
@@ -803,8 +855,8 @@ void Game::updateAttacking(double dt, MobEntity& mob) {
     m_sound.play("hurt");
 }
 
-float Game::selectedAttackDamage() const {
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+float Game::selectedAttackDamageFor(PlayerSession& s) const {
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     const float base =
         stack.empty() ? 1.0f  // bare hand
                       : m_items.at(stack.item).attackDamage;  // data (1.0)
@@ -819,20 +871,21 @@ float Game::selectedAttackDamage() const {
     // net is clamped at 0, so a fully weakened hand deals no damage even
     // with no strength).
     return std::max(0.0f, base + sharpBonus -
-                               m_playerEffects.totalMeleePenalty(m_effects) +
-                               m_playerEffects.totalMeleeBonus(m_effects));
+                               s.effects.totalMeleePenalty(m_effects) +
+                               s.effects.totalMeleeBonus(m_effects));
 }
 
-float Game::selectedShootSpeed() const {
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+float Game::selectedShootSpeedFor(PlayerSession& s) const {
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return 0.0f;  // no launcher
     }
     return m_items.at(stack.item).shootSpeed;  // data (0 = not a launcher)
 }
 
-bool Game::ammoAvailable() const {
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+bool Game::ammoAvailableFor(PlayerSession& s) const
+{
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return false; // not a launcher (selectedShootSpeed guards callers)
     }
@@ -841,36 +894,42 @@ bool Game::ammoAvailable() const {
         return true; // no 'ammo' data = unlimited (pre-Phase-24 semantics)
     }
     const ItemID ammo = m_items.idForName(item.ammo); // init cross-checked
-    for (std::size_t i = 0; i < m_inventory.size(); ++i) {
-        if (m_inventory.at(i).item == ammo) {
+    for (std::size_t i = 0; i < s.inventory.size(); ++i) {
+        if (s.inventory.at(i).item == ammo) {
             return true;
         }
     }
     return false;
 }
 
-void Game::updateBowDraw(double dt) {
-    if (!m_interaction.bowDrawing) {
+void Game::updateBowDrawFor(Player& p, PlayerSession& s, const Input& in, double dt) {
+    if (!s.interaction.bowDrawing) {
         return;
     }
-    if (m_input.isDown(MouseButton::Right)) {
+    if (in.isDown(MouseButton::Right)) {
         // The charge fills in real dt, capped at the full-draw time
         // (core/bow.hpp). A press and a release in the same frame still
         // fire (at the minimum power), like a Minecraft quick click.
-        m_interaction.bowDrawSeconds =
-            std::min(m_interaction.bowDrawSeconds + dt, kBowFullDrawSeconds);
-    } else if (m_input.wasReleased(MouseButton::Right)) {
-        fireBow();
+        s.interaction.bowDrawSeconds =
+            std::min(s.interaction.bowDrawSeconds + dt, kBowFullDrawSeconds);
+    } else if (in.wasReleased(MouseButton::Right)) {
+        fireBow(p, s);
     } else {
         // The button is up without a release edge this frame (a stale
         // event, or the lock was lost): cancel the draw rather than hang
         // it.
-        resetBowDraw();
+        resetBowDraw(s);
     }
 }
 
-void Game::fireBow() {
-    ItemStack& stack = m_inventory.at(m_selectedSlot);
+void Game::updateBowDraw(double dt) {
+    // V3-12b: the primary's draw (solo: the only player, the pre-V3-12b
+    // behavior).
+    updateBowDrawFor(*m_player, *m_sessions[0], m_input, dt);
+}
+
+void Game::fireBow(Player& p, PlayerSession& s) {
+    ItemStack& stack = s.inventory.at(s.selectedSlot);
     const Item& item = m_items.at(stack.item);
     // V2-12: the held bow's enchant bonuses (the pure accessors — 0 for an
     // unenchanted bow, the pre-V2-12 bit-identical shot).
@@ -890,18 +949,18 @@ void Game::fireBow() {
     if (!item.ammo.empty()) {
         const ItemID ammo = m_items.idForName(item.ammo);
         int slot = -1;
-        for (std::size_t i = 0; i < m_inventory.size(); ++i) {
-            if (m_inventory.at(i).item == ammo) {
+        for (std::size_t i = 0; i < s.inventory.size(); ++i) {
+            if (s.inventory.at(i).item == ammo) {
                 slot = static_cast<int>(i);
                 break;
             }
         }
         if (slot < 0) {
-            resetBowDraw();
+            resetBowDraw(s);
             return;
         }
         if (!infinite) {
-            m_inventory.take(static_cast<std::size_t>(slot), 1);
+            s.inventory.take(static_cast<std::size_t>(slot), 1);
         }
     }
     // The arrow spawns in front of the eye along the aim (the launch
@@ -911,15 +970,20 @@ void Game::fireBow() {
     // its swept arrow-vs-mob hit test; the despawn pass removes it on
     // age / kill plane, and a block impact STICKS it (Phase 24). Arrows
     // are not saved (ephemeral, like mobs).
-    const float power = bowPower(m_interaction.bowDrawSeconds);
-    const Vec3 f = aimForward();
+    const float power = bowPower(s.interaction.bowDrawSeconds);
+        // V3-12b: the per-frame aim gate (solo: the camera path —
+    // the original reads bit-identical; net: the first-person
+    // form, the 12b deviation).
+    const Vec3 aimDir =
+        (m_players.size() == 1) ? aimForward() : playerAimForwardFor(p);
+    const Vec3 f = aimDir;
     // UX-8g: the arrow leaves from in front of the EYE in both modes
     // (first person: m_camera.position == eyePosition = the bit-
     // identical legacy origin). Third person the camera sits 4 blocks
     // behind the eye, so the old origin made the shot appear out of
     // the player's back; the eye origin = the Minecraft shot from in
     // front, on the aim line.
-    const Vec3 o = m_player->eyePosition() + f * kArrowSpawnOffset;
+    const Vec3 o = p.eyePosition() + f * kArrowSpawnOffset;
     // Phase 42: the arrow carries the shot's charge (power — scales the
     // mob-hit knockback) and the launcher's ammo item (a stuck arrow
     // picked up returns it to the inventory).
@@ -954,12 +1018,12 @@ void Game::fireBow() {
         }
     }
     m_sound.play("shoot");
-    resetBowDraw();
+    resetBowDraw(s);
 }
 
-void Game::resetBowDraw() {
-    m_interaction.bowDrawing = false;
-    m_interaction.bowDrawSeconds = 0.0;
+void Game::resetBowDraw(PlayerSession& s) {
+    s.interaction.bowDrawing = false;
+    s.interaction.bowDrawSeconds = 0.0;
 }
 
 void Game::setBlock(int x, int y, int z, BlockID id) {
@@ -1336,8 +1400,8 @@ void Game::deactivatePortal(World& world, const PortalFrame& frame) {
                 std::to_string(frame.height()) + ")");
 }
 
-void Game::breakBlock(const BlockHit& hit) {
-    m_sessionStats.blocksMined += 1; // V3-13: the mining stat (player path only)
+void Game::breakBlock(Player& p, PlayerSession& s, const BlockHit& hit) {
+    s.sessionStats.blocksMined += 1; // V3-13: the mining stat (player path only)
     const BlockID id = currentWorld().getBlock(hit.block.x, hit.block.y,
                                                 hit.block.z);
     // V2-17: the broken cell's per-instance state, read BEFORE the
@@ -1366,7 +1430,7 @@ void Game::breakBlock(const BlockHit& hit) {
     // block, not the drop). Frame-locked: breakBlock only runs from the
     // hold-to-break completion / the instant-break path inside the update
     // frame.
-    emitTutorialEvent("break." + m_blocks.at(id).name, 1);
+    emitTutorialEvent("break." + m_blocks.at(id).name, 1, &p);
 
     // V3-10d (the end crystal): the break-explosion (the data flag's
     // consumer — a block with explodeRadius > 0 detonates from its own
@@ -1427,7 +1491,7 @@ void Game::breakBlock(const BlockHit& hit) {
                                          hit.block.z, dropIndex);
         return Vec3 {dropPos.x + off.x, dropPos.y, dropPos.z + off.y};
     };
-    if (!m_player->isCreative()) {
+    if (!p.isCreative()) {
         // V3-11a: the creative's no-drops rule (Minecraft) — the block
         // is gone, nothing drops, no XP orb, no item economy. The
         // break PARTICLES below still fire (the creative's break feel).
@@ -1533,8 +1597,8 @@ void Game::breakBlock(const BlockHit& hit) {
     // that breaks on this block is simply gone from the slot.
     // V3-11a: the creative's zero wear (the mode owns the economy —
     // the tool never wears on a creative break, the MC rule).
-    if (block.properties.hardness != 0.0f && !m_player->isCreative()) {
-        ItemStack& held = m_inventory.at(m_selectedSlot);
+    if (block.properties.hardness != 0.0f && !p.isCreative()) {
+        ItemStack& held = s.inventory.at(s.selectedSlot);
         if (!held.empty()) {
             const Item& heldItem = m_items.at(held.item);
             if (heldItem.type == ItemType::Tool &&
@@ -1556,9 +1620,9 @@ void Game::breakBlock(const BlockHit& hit) {
     m_sound.play(blockSoundName(block, "break"), dropPos);
 }
 
-void Game::placeBlock() {
+void Game::placeBlock(Player& p, PlayerSession& s) {
     // The selected inventory slot must hold a placeable block item.
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return;
     }
@@ -1566,7 +1630,7 @@ void Game::placeBlock() {
     if (item.type != ItemType::Block) {
         return; // tools (and future non-block items) are not placeable
     }
-    const std::optional<BlockHit> hit = targetBlock();
+    const std::optional<BlockHit> hit = (m_players.size() == 1 ? targetBlock() : targetBlockFor(p));
     if (!hit) {
         return;
     }
@@ -1611,7 +1675,7 @@ void Game::placeBlock() {
         // targetBlock ray — the BlockHit's distance is the ray parameter,
         // so the hit point is reconstructible, the targetBlock contract).
         const Vec3 hitPoint =
-            m_player->eyePosition() + aimForward() * hit->distance;
+            p.eyePosition() + ((m_players.size() == 1) ? aimForward() : playerAimForwardFor(p)) * hit->distance;
         slabPlaceState =
             slabStateFromHit(hitPoint, hit->normal,
                              static_cast<float>(target.y));
@@ -1639,8 +1703,8 @@ void Game::placeBlock() {
         if (target.y < 0 || target.y >= kWorldHeight) {
             return;
         }
-        const Vec3& pmin = m_player->aabbMin();
-        const Vec3& pmax = m_player->aabbMax();
+        const Vec3& pmin = p.aabbMin();
+        const Vec3& pmax = p.aabbMax();
         const float cx = static_cast<float>(target.x);
         const float cy = static_cast<float>(target.y);
         const float cz = static_cast<float>(target.z);
@@ -1654,12 +1718,12 @@ void Game::placeBlock() {
         currentWorld().setBlockState(target.x, target.y, target.z, 2);
         Lighting::updateLocal(currentWorld(), m_blocks, target);
         // V3-11a: the creative's free placement (no item consumption).
-        if (!m_player->isCreative()) {
-            m_inventory.take(m_selectedSlot, 1);
+        if (!p.isCreative()) {
+            s.inventory.take(s.selectedSlot, 1);
         }
-        m_sessionStats.blocksPlaced += 1; // V3-13: the merge completion counts
+        s.sessionStats.blocksPlaced += 1; // V3-13: the merge completion counts
                                    // as the placement
-        emitTutorialEvent("place." + placedBlock.name, 1);
+        emitTutorialEvent("place." + placedBlock.name, 1, &p);
         m_sound.play(
             blockSoundName(placedBlock, "place"),
             Vec3{static_cast<float>(target.x) + 0.5f,
@@ -1667,8 +1731,8 @@ void Game::placeBlock() {
                  static_cast<float>(target.z) + 0.5f});
         return;
     }
-    if (!canPlaceAt(currentWorld(), m_blocks, target, m_player->aabbMin(),
-                    m_player->aabbMax())) {
+    if (!canPlaceAt(currentWorld(), m_blocks, target, p.aabbMin(),
+                    p.aabbMax())) {
         return;
     }
     // Planting placement restriction (Phase 53): if the placed block names a
@@ -1685,7 +1749,7 @@ void Game::placeBlock() {
     // Game::setBlock (Phase 42): also releases any arrow stuck in the
     // newly occupied cell (placing into a cell an arrow hangs in).
     setBlock(target.x, target.y, target.z, item.block);
-    m_sessionStats.blocksPlaced += 1; // V3-13: the placement stat (all gates
+    s.sessionStats.blocksPlaced += 1; // V3-13: the placement stat (all gates
                                // passed, one item consumed)
     // Phase 97: stair placement AUTO-ORIENTS (Minecraft): the per-instance
     // facing (Phase 94, the state in ENT-2) is set from the player's yaw —
@@ -1700,7 +1764,7 @@ void Game::placeBlock() {
     if (m_blocks.at(item.block).model.shape == BlockModel::Shape::Stairs) {
         currentWorld().setBlockState(target.x, target.y, target.z,
                                       static_cast<std::uint8_t>(
-                                          stairFacingFromYaw(m_player->yaw)));
+                                          stairFacingFromYaw(p.yaw)));
     } else if (slabPlaceState >= 0) {
         // V2-17: the slab's placement state (slabStateFromHit — the aim
         // rule above). The setBlock choke point seeded the block's state
@@ -1718,12 +1782,12 @@ void Game::placeBlock() {
     // Placing consumes one from the selected stack (the inventory is the
     // source of blocks — no more infinite placement). V3-11a: the
     // creative's placement is free (the mode owns the economy).
-    if (!m_player->isCreative()) {
-        m_inventory.take(m_selectedSlot, 1);
+    if (!p.isCreative()) {
+        s.inventory.take(s.selectedSlot, 1);
     }
     // UX-7: the tutorial place event (the block that was PLACED — the
     // success point: setBlock committed + the item consumed).
-    emitTutorialEvent("place." + m_blocks.at(item.block).name, 1);
+    emitTutorialEvent("place." + m_blocks.at(item.block).name, 1, &p);
     // CRAFT-3: the PLACED block's material timbre at the new cell's
     // center (no material = the generic "place").
     m_sound.play(
@@ -1733,14 +1797,15 @@ void Game::placeBlock() {
              static_cast<float>(target.z) + 0.5f});
 }
 
-bool Game::tryEat() {
+bool Game::tryEatFor(Player& p, PlayerSession& s)
+{
     // Only the selected slot can feed the player (Minecraft). The item is
     // food when its data marks restore_hunger (Item::restoreHunger > 0);
     // there is no hardcoded item list.
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return false;
     }
@@ -1749,31 +1814,32 @@ bool Game::tryEat() {
         return false; // not food: fall through to the normal right-click
     }
     // Food is selected: the click is consumed either way.
-    if (m_player->hunger() >= m_player->maxHunger()) {
+    if (p.hunger() >= p.maxHunger()) {
         return true; // full: the eat is a no-op (nothing placed, no sound)
     }
     // Eat channel (Phase 28): the eat is no longer instant — holding the
     // right button for 1.6 s eats (updateEatChannel owns the completion:
     // consume + restore + sound). An extra press while channeling is
     // ignored (Minecraft: the eat continues).
-    if (m_interaction.eatChannel.active) {
+    if (s.interaction.eatChannel.active) {
         return true;
     }
-    m_interaction.eatChannel.start();
-    m_interaction.eatSlot = m_selectedSlot;
-    m_interaction.eatItem = stack.item;
-    m_interaction.eatStartHealth = m_player->health();
+    s.interaction.eatChannel.start();
+    s.interaction.eatSlot = s.selectedSlot;
+    s.interaction.eatItem = stack.item;
+    s.interaction.eatStartHealth = p.health();
     return true;
 }
 
-bool Game::tryDrink() {
+bool Game::tryDrinkFor(Player& p, PlayerSession& s)
+{
     // Drinkable container (Phase 43): only the selected slot can feed
     // the player (Minecraft). The item is drinkable when its data marks
     // drink_time (Item::drinkTime > 0); there is no hardcoded item list.
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return false;
     }
@@ -1789,7 +1855,7 @@ bool Game::tryDrink() {
     // needs.
     if (!item.returnsItem.empty()) {
         const ItemID ret = m_items.idForName(item.returnsItem);
-        if (ret.valid() && m_inventory.isFull(ret, m_items)) {
+        if (ret.valid() && s.inventory.isFull(ret, m_items)) {
             return true; // no room for the container: no-op (no sound)
         }
     }
@@ -1799,18 +1865,18 @@ bool Game::tryDrink() {
     // while channeling is ignored (the drink continues). The "milk"
     // sound plays on START (Minecraft: the glug is up front, even when
     // the drink is cancelled — same as the bow draw sound).
-    if (m_interaction.eatChannel.active) {
+    if (s.interaction.eatChannel.active) {
         return true;
     }
-    m_interaction.eatChannel.start(static_cast<double>(item.drinkTime));
-    m_interaction.eatSlot = m_selectedSlot;
-    m_interaction.eatItem = stack.item;
-    m_interaction.eatStartHealth = m_player->health();
+    s.interaction.eatChannel.start(static_cast<double>(item.drinkTime));
+    s.interaction.eatSlot = s.selectedSlot;
+    s.interaction.eatItem = stack.item;
+    s.interaction.eatStartHealth = p.health();
     m_sound.play("milk");
     return true;
 }
 
-bool Game::tryMilk() {
+bool Game::tryMilk(Player& p, PlayerSession& s) {
     // Milking (Phase 43, cow): the crosshair must be ON a milkable mob
     // (mob data 'milk_with' == the selected item's name; melee targeting
     // — kReach with block occlusion, see targetMob) and the player must
@@ -1821,15 +1887,15 @@ bool Game::tryMilk() {
     // consumed, the failed-milk rule below). The click is consumed
     // whenever the crosshair is on the mob (Minecraft: a failed milk —
     // e.g. a full inventory — still eats the click).
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return false;
     }
     const Item& item = m_items.at(stack.item);
-    const std::optional<MobHit> mob = targetMob();
+    const std::optional<MobHit> mob = targetMobFor(p);
     if (!mob) {
         return false;
     }
@@ -1849,19 +1915,20 @@ bool Game::tryMilk() {
     if (!gives.valid()) {
         return true;
     }
-    if (m_inventory.isFull(gives, m_items)) {
+    if (s.inventory.isFull(gives, m_items)) {
         return true; // full: no milk, click consumed (Minecraft)
     }
     mob->mob->startMilkCooldown();
-    m_inventory.take(m_selectedSlot, 1);
-    m_inventory.add(gives, 1, m_items);
+    s.inventory.take(s.selectedSlot, 1);
+    s.inventory.add(gives, 1, m_items);
     m_sound.play("milk");
     MC_LOG_DEBUG("milked mob '" + mob->mob->def().name + "' (" +
                  item.name + " -> " + props.milkGives + ")");
     return true;
 }
 
-bool Game::tryShear() {
+bool Game::tryShearFor(Player& p, PlayerSession& s)
+{
     // V2-15 (sheep): the shearing action (the tryMilk paradigm — both
     // data flags, no species switch: the item's 'shears' flag x the mob's
     // 'wool_drops' flag). The crosshair must be on a wool-drops mob
@@ -1879,10 +1946,10 @@ bool Game::tryShear() {
     // cue plays spatialized at the mob. The BARE instance: a no-op that
     // still consumes the click (Minecraft, the failed-milk rule). The
     // click is consumed whenever the crosshair is on the target mob.
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return false;
     }
@@ -1890,7 +1957,7 @@ bool Game::tryShear() {
     if (!item.shearsTool) {
         return false; // not the shears: fall through to the next channel
     }
-    const std::optional<MobHit> mob = targetMob();
+    const std::optional<MobHit> mob = targetMobFor(p);
     if (!mob) {
         return false;
     }
@@ -1922,7 +1989,7 @@ bool Game::tryShear() {
     m_sound.play("shear", mob->mob->position());
     // kShearWear (the successful-action wear — the kIgniteWear twin).
     if (item.durability > 0.0f) {
-        if (wearItem(m_inventory.at(m_selectedSlot), kShearWear)) {
+        if (wearItem(s.inventory.at(s.selectedSlot), kShearWear)) {
             m_sound.play("break"); // the shears broke on the shear
         }
     }
@@ -1931,7 +1998,8 @@ bool Game::tryShear() {
     return true;
 }
 
-bool Game::tryDyeMob() {
+bool Game::tryDyeMobFor(Player& p, PlayerSession& s)
+{
     // V2-15 (sheep): the mob dye (the block recolor's mob twin — the
     // tryMilk paradigm, both data flags: the item's dyeColor x the mob's
     // 'wool_drops'). The crosshair must be on a wool-drops mob and the
@@ -1943,10 +2011,10 @@ bool Game::tryDyeMob() {
     // REFUSES the dye — no color change, no consumption — but the click
     // is still consumed (the failed-milk rule). The click is consumed
     // whenever the crosshair is on the target mob.
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return false;
     }
@@ -1954,7 +2022,7 @@ bool Game::tryDyeMob() {
     if (item.dyeColor.empty()) {
         return false; // not a dye: fall through to the next channel
     }
-    const std::optional<MobHit> mob = targetMob();
+    const std::optional<MobHit> mob = targetMobFor(p);
     if (!mob) {
         return false;
     }
@@ -1968,13 +2036,13 @@ bool Game::tryDyeMob() {
         return true;
     }
     mob->mob->dyeWool(item.dyeColor);
-    m_inventory.take(m_selectedSlot, 1);
+    s.inventory.take(s.selectedSlot, 1);
     m_sound.play("cloth");
     MC_LOG_DEBUG("dyed '" + mob->mob->def().name + "' to " + item.dyeColor);
     return true;
 }
 
-bool Game::tryBarter() {
+bool Game::tryBarter(Player& p, PlayerSession& s) {
     // V3-14c (piglin): the barter — the tryMilk paradigm (both data
     // predicates: the mob's 'barter_input' == the selected item's NAME,
     // melee targeting kReach + block occlusion via targetMob). One held
@@ -1988,15 +2056,15 @@ bool Game::tryBarter() {
     // (the failed-milk rule — e.g. the wrong item in hand still eats it);
     // a non-barter mob returns false (the click falls through to the
     // legacy block interact, the bit-identical path).
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return false;
     }
     const Item& item = m_items.at(stack.item);
-    const std::optional<MobHit> mob = targetMob();
+    const std::optional<MobHit> mob = targetMobFor(p);
     if (!mob) {
         return false;
     }
@@ -2014,7 +2082,7 @@ bool Game::tryBarter() {
     if (outName.empty()) {
         return true; // defensive (init rejects the pairing); click eaten
     }
-    m_inventory.take(m_selectedSlot, 1);
+    s.inventory.take(s.selectedSlot, 1);
     if (outCount > 0) {
         // Init cross-checks guarantee the item exists; the guard is a
         // defensive no-op (the milk pattern).
@@ -2033,7 +2101,7 @@ bool Game::tryBarter() {
     return true;
 }
 
-bool Game::tryRide() {
+bool Game::tryRide(Player& p, PlayerSession& s) {
     // V3-14d (strider): the mount entry (the tryMilk paradigm — the
     // data predicate 'rideable' gates the interaction, no species
     // switch). A non-rideable target falls through (return false —
@@ -2042,10 +2110,10 @@ bool Game::tryRide() {
     // already riding (the mount itself = the no-op; another mob = the
     // fall-through so a riding player can still interact / place) or
     // flying (dismount first — the flight and the carry cannot stack).
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const std::optional<MobHit> mob = targetMob();
+    const std::optional<MobHit> mob = targetMobFor(p);
     if (!mob) {
         return false;
     }
@@ -2053,27 +2121,27 @@ bool Game::tryRide() {
     if (!props.rideable) {
         return false; // not a ride target: the legacy fall-through
     }
-    if (m_ridingMount != nullptr) {
+    if (s.ridingMount != nullptr) {
         // Already riding: the OWN mount = the no-op (the click is
         // consumed — dismounting is Space / LeftControl's); ANOTHER
         // rideable mob = the fall-through (the block channel stays
         // live while riding, the Minecraft ruling).
-        return m_ridingMount == mob->mob;
+        return s.ridingMount == mob->mob;
     }
-    if (m_player->isFlying() || m_player->isCarried()) {
+    if (p.isFlying() || p.isCarried()) {
         return true; // the flight owns the pose: dismount first
                      // (the click is consumed, the failed-ride rule)
     }
-    m_ridingMount = mob->mob;
-    m_ridingMount->setRidden(true);
-    MC_LOG_DEBUG("rode the '" + m_ridingMount->def().name + "'");
+    s.ridingMount = mob->mob;
+    s.ridingMount->setRidden(true);
+    MC_LOG_DEBUG("rode the '" + s.ridingMount->def().name + "'");
     // The carry snap + the m_carried flag run in THIS frame's ride
     // pass (updateRide, after handleInteraction, before the player's
     // update) — the mount's position is the frame-fresh one.
     return true;
 }
 
-bool Game::tryEyePortal() {
+bool Game::tryEyePortal(Player& p, PlayerSession& s) {
     // V3-10a (the End): the embed-eye interaction (the A-lite
     // activation — the tryMilk paradigm's block twin). The crosshair on
     // an end_frame cell + the selected item an ender_eye: one eye is
@@ -2090,10 +2158,10 @@ bool Game::tryEyePortal() {
     // non-eye item / an already-eyed cell fall through or no-op: the
     // bit-identical legacy path (the structural-immunity root — a
     // no-eye run never reaches the write).
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty() || stack.item != m_enderEyeId) {
         return false; // the item predicate (the resolved id — the
                       // m_states.portalId pattern, never a name switch)
@@ -2102,7 +2170,7 @@ bool Game::tryEyePortal() {
         return false; // the structural-inert no-op (the absent-asset
                       // twin — the whole End system is off)
     }
-    const std::optional<BlockHit> hit = targetBlock();
+    const std::optional<BlockHit> hit = (m_players.size() == 1 ? targetBlock() : targetBlockFor(p));
     if (!hit) {
         return false;
     }
@@ -2117,7 +2185,7 @@ bool Game::tryEyePortal() {
                      // the failed-milk rule)
     }
     // The embed: consume one eye + write the eyed frame.
-    m_inventory.take(m_selectedSlot, 1);
+    s.inventory.take(s.selectedSlot, 1);
     setBlock(cell.x, cell.y, cell.z, m_states.endFrameEyedId);
     // The ring scan (the 8 candidate centers, the deterministic order —
     // the FIRST activatable candidate wins; a genuine ring has exactly
@@ -2164,7 +2232,7 @@ bool Game::tryEyePortal() {
     return true;
 }
 
-bool Game::tryThrowPearl() {
+bool Game::tryThrowPearl(Player& p, PlayerSession& s) {
     // V3-10b (the ender pearl): the teleport-throw (the project's first
     // throwable — the data predicate `throws_teleport` gates the
     // channel, never an item name: hard rule 3). The predicate: the
@@ -2181,10 +2249,10 @@ bool Game::tryThrowPearl() {
     // the cooldown armed. The landing's teleport is the pearlLanding
     // seam (the stuck pass's twin branch — zero damage, the MC 5HP's
     // documented deviation).
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return false;
     }
@@ -2192,39 +2260,53 @@ bool Game::tryThrowPearl() {
     if (!item.throwsTeleport) {
         return false; // not a thrower: the legacy fall-through
     }
-    if (m_pearlThrowCooldownFrames > 0) {
+    if (s.pearlThrowCooldownFrames > 0) {
         return true; // the cooldown window: the click is the silent no-op
     }
-    if (!m_player->isCreative()) {
-        m_inventory.take(m_selectedSlot, 1);
+    if (!p.isCreative()) {
+        s.inventory.take(s.selectedSlot, 1);
     }
-    const Vec3 f = aimForward();
+        // V3-12b: the per-frame aim gate (solo: the camera path —
+    // the original reads bit-identical; net: the first-person
+    // form, the 12b deviation).
+    const Vec3 aimDir =
+        (m_players.size() == 1) ? aimForward() : playerAimForwardFor(p);
+    const Vec3 f = aimDir;
     // The eye-ahead origin (the fireBow's UX-8g twin — the launch
     // origin never sits inside the near plane). The constructor's
     // normalized-direction * speed launch is the aim's speed; the
     // THROWER'S velocity is folded in AFTER (the MC 1.9+ motion
     // composition: a running throw flies farther — the setVelocity
     // over the constructor's, the entity's public writer).
-    const Vec3 o = m_player->eyePosition() + f * kArrowSpawnOffset;
+    const Vec3 o = p.eyePosition() + f * kArrowSpawnOffset;
     auto pearl = std::make_unique<Projectile>(
         currentWorld(), m_blocks, o, f, kPearlLaunchSpeed,
         /*damage=*/0.0f, /*hurtPlayer=*/false, /*power=*/1.0f,
         /*ammoItem=*/std::string {}, /*effectId=*/-1,
         /*effectDuration=*/0.0, /*effectTier=*/0, /*explodeRadius=*/0.0f,
         /*explodeSource=*/std::string {}, /*teleports=*/true);
-    pearl->setVelocity(pearl->velocity() + m_player->velocity());
+    pearl->setVelocity(pearl->velocity() + p.velocity());
+    // V3-12b: the thrower's index (the landing teleports THIS player —
+    // the ×N pearl's ownership; solo: index 0, the pre-V3-12b value).
+    for (std::size_t ti = 0; ti < m_players.size(); ++ti) {
+        if (m_players[ti].get() == &p) {
+            pearl->setThrowerIndex(static_cast<int>(ti));
+            break;
+        }
+    }
     currentEntities().push_back(std::move(pearl));
     // The throw's cue (the item's data name — init cross-checked the
     // wav's existence; the 2D-centered class, the "shoot" precedent).
     if (!item.throwSound.empty()) {
         m_sound.play(item.throwSound);
     }
-    m_pearlThrowCooldownFrames = kPearlThrowCooldownFrames;
+    s.pearlThrowCooldownFrames = kPearlThrowCooldownFrames;
     MC_LOG_DEBUG("threw a '" + item.name + "'");
     return true;
 }
 
-bool Game::tryFluidBucket() {
+bool Game::tryFluidBucketFor(Player& p, PlayerSession& s)
+{
     // Fluid bucket (Phase 47; kinds in Phase 51 — water and lava). The
     // selected item must be a bucket side (item data 'collects_fluid' or
     // 'pours_fluid'; the pair symmetry is cross-checked at init). The
@@ -2246,10 +2328,10 @@ bool Game::tryFluidBucket() {
     // already-source cell of the bucket's own kind, a water-on-lava
     // reaction pour with no dry-air placement cell (FLUID-5), or a
     // solid target).
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return false;
     }
@@ -2277,8 +2359,9 @@ bool Game::tryFluidBucket() {
         // (front view: D + kReach, the same convention as targetBlock
         // — First / ThirdBack bit-identical).
         const std::optional<BlockPos> cell =
-            raycastFluid(world, m_blocks, m_player->eyePosition(),
-                         aimForward(), aimReach());
+            raycastFluid(world, m_blocks, p.eyePosition(),
+                         ((m_players.size() == 1) ? aimForward() : playerAimForwardFor(p)),
+            ((m_players.size() == 1) ? aimReach() : kReach));
         // A source cell is level kMaxFluidLevel (flowing cells are lower
         // and cannot be collected, Minecraft). A block cell reads dry.
         const std::optional<FluidKind> kind =
@@ -2305,12 +2388,12 @@ bool Game::tryFluidBucket() {
             return true; // defensive (init cross-check); consume the click
         }
         const ItemID becomes = full->id;
-        if (m_inventory.isFull(becomes, m_items)) {
+        if (s.inventory.isFull(becomes, m_items)) {
             return true; // no room: nothing happens (Minecraft)
         }
         auto finish = [&]() {
-            m_inventory.take(m_selectedSlot, 1);
-            m_inventory.add(becomes, 1, m_items);
+            s.inventory.take(s.selectedSlot, 1);
+            s.inventory.add(becomes, 1, m_items);
             m_sound.play("splash");
         };
         world.setFluid(cell->x, cell->y, cell->z, *kind, 0);
@@ -2352,22 +2435,22 @@ bool Game::tryFluidBucket() {
     // (Minecraft's twin: lava is legal in the nether — the recorded
     // deviation).
     if (netherWaterPourEvaporates(kind, playerInNether())) {
-        if (m_inventory.isFull(becomes, m_items)) {
+        if (s.inventory.isFull(becomes, m_items)) {
             return true; // no room for the companion: nothing happens
         }
-        m_inventory.take(m_selectedSlot, 1);
-        m_inventory.add(becomes, 1, m_items);
+        s.inventory.take(s.selectedSlot, 1);
+        s.inventory.add(becomes, 1, m_items);
         m_sound.play("evaporate");
         MC_LOG_INFO(std::string("Evaporated ") + item.poursFluid +
                     " bucket in the nether (water cannot exist there)");
         return true;
     }
-    if (m_inventory.isFull(becomes, m_items)) {
+    if (s.inventory.isFull(becomes, m_items)) {
         return true; // no room for the companion: nothing happens (Minecraft)
     }
     auto finish = [&]() {
-        m_inventory.take(m_selectedSlot, 1);
-        m_inventory.add(becomes, 1, m_items);
+        s.inventory.take(s.selectedSlot, 1);
+        s.inventory.add(becomes, 1, m_items);
         m_sound.play("splash");
     };
     const std::optional<BlockHit> hit = targetBlock();
@@ -2380,8 +2463,9 @@ bool Game::tryFluidBucket() {
         // matching the targetBlock block hit above — same line and same
         // reach budget in both modes (V2-1: the budget is aimReach() —
         // front view D + kReach; first person bit-identical).
-        fluidHit = raycastFluid(world, m_blocks, m_player->eyePosition(),
-                                aimForward(), aimReach());
+        fluidHit = raycastFluid(world, m_blocks, p.eyePosition(),
+                                ((m_players.size() == 1) ? aimForward() : playerAimForwardFor(p)),
+            ((m_players.size() == 1) ? aimReach() : kReach));
     }
     // The pour cell (bucketPourTarget): the face neighbor of the hit
     // block (the placement-target convention — the block ray passes
@@ -2392,8 +2476,8 @@ bool Game::tryFluidBucket() {
     // kind (FLUID-4 pour onto a water surface — it becomes the source);
     // canPlaceAt keeps the Y range / solid / player-overlap tests.
     const std::optional<BlockPos> target = bucketPourTarget(
-        world, m_blocks, hit, fluidHit, kind, m_player->aabbMin(),
-        m_player->aabbMax());
+        world, m_blocks, hit, fluidHit, kind, p.aabbMin(),
+        p.aabbMax());
 
     if (!target) {
         return false; // no acceptable pour cell: fall through
@@ -2414,7 +2498,8 @@ bool Game::tryFluidBucket() {
     return true;
 }
 
-bool Game::tryArmor() {
+bool Game::tryArmorFor(Player& p, PlayerSession& s)
+{
     // Armor (SURV-1): the right-click channel of the armor pieces. The
     // decision + every state write is the pure armorRightClickUse (item/
     // armor.hpp — the campfire pattern): a HELD piece equips onto its
@@ -2423,11 +2508,11 @@ bool Game::tryArmor() {
     // head -> chest -> legs -> feet. The click is consumed whenever a
     // piece is equipped, swapped or unequipped; otherwise it falls
     // through (the sneak-rotate / place no-op).
-    if (!m_player || m_player->isDead()) {
+    if (p.isDead()) {
         return false;
     }
     const ArmorUseAction action =
-        armorRightClickUse(*m_player, m_inventory, m_items, m_selectedSlot);
+        armorRightClickUse(p, s.inventory, m_items, s.selectedSlot);
     if (action == ArmorUseAction::None) {
         return false;
     }
@@ -2435,7 +2520,8 @@ bool Game::tryArmor() {
     return true;
 }
 
-void Game::trySleep(const BlockHit& hit) {
+void Game::trySleepFor(Player& p, const BlockHit& hit)
+{
     // V2-13 (core/bed): the bed sleep's three gates, in the design's
     // order — the pure predicates own the boundaries (the unit tests
     // pin them), the adapter owns the state writes. The caller
@@ -2445,7 +2531,7 @@ void Game::trySleep(const BlockHit& hit) {
         bedSpawnPosition(hit.block.x, hit.block.y, hit.block.z);
     // Gate b: the player's feet (the AABB bottom center) within 3
     // blocks of the bed's cell center (the Minecraft value).
-    if (!sleepDistanceOk(m_player->position(), bedCenter)) {
+    if (!sleepDistanceOk(p.position(), bedCenter)) {
         return; // refused: the click is consumed, no action (the
                 // documented deviation 6 — the point-set is part of
                 // the sleep, so a refused sleep sets nothing)
@@ -2463,7 +2549,7 @@ void Game::trySleep(const BlockHit& hit) {
     }
     // Gates b + c passed: the respawn point is the bed (the Minecraft
     // rule — a right-click on a bed sets it, night OR day).
-    m_player->setSpawnPos(bedCenter);
+    p.setSpawnPos(bedCenter);
     // Gate a: the night window decides the sleep vs the bare point-set.
     const double t = m_dayCycle.timeOfDay();
     if (!sleepNightWindow(t)) {
@@ -2501,36 +2587,37 @@ void Game::trySleep(const BlockHit& hit) {
                 "to dawn, the spawn is the bed");
 }
 
-void Game::clearStatusEffects() {
+void Game::clearStatusEffectsFor(PlayerSession& s)
+{
     // Phase 43 (completed by Phase 46): a completed drinkable container
-    // resets the red damage veil (m_hurtFlash) and removes every NEGATIVE
+    // resets the red damage veil (s.hurtFlash) and removes every NEGATIVE
     // active status effect — Minecraft's milk semantics (the positive
     // effects, like regeneration, survive the drink). The fall-damage
     // tracking (Player::fallStartY) is deliberately NOT touched —
     // Minecraft's fall damage is not a status effect, so drinking
     // mid-air must not reduce the fall damage owed on landing.
-    m_hurtFlash = 0.0;
-    m_playerEffects.clearNegative(m_effects);
+    s.hurtFlash = 0.0;
+    s.effects.clearNegative(m_effects);
     syncAbsorption(); // Phase 72: the pool drops with the cleared effects
 }
 
-void Game::updateEatChannel(double dt) {
-    if (!m_interaction.eatChannel.active) {
+void Game::updateEatChannel(Player& p, PlayerSession& s, const Input& in, double dt) {
+    if (!s.interaction.eatChannel.active) {
         return;
     }
     // Interrupts (Phase 28, Minecraft): damage, death, pointer unlock, a
     // panel, or the food leaving its slot (selection change, Q-drop, or
     // the stack emptied some other way). Any of them cancels the channel
     // — the food is NOT consumed.
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
-    if (m_player->isDead() || !m_window.relativeMouseMode() ||
-        panelOpen() || m_player->health() < m_interaction.eatStartHealth ||
-        m_selectedSlot != m_interaction.eatSlot || stack.item != m_interaction.eatItem) {
-        resetEatChannel();
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
+    if (p.isDead() || !m_window.relativeMouseMode() ||
+        panelOpen() || p.health() < s.interaction.eatStartHealth ||
+        s.selectedSlot != s.interaction.eatSlot || stack.item != s.interaction.eatItem) {
+        resetEatChannel(s);
         return;
     }
     const EatEvent ev =
-        m_interaction.eatChannel.update(dt, m_input.isDown(MouseButton::Right));
+        s.interaction.eatChannel.update(dt, in.isDown(MouseButton::Right));
     if (ev == EatEvent::Completed) {
         // The channel finished: consume one from the captured slot (its
         // validity was just re-checked). Food restores hunger plus the
@@ -2539,13 +2626,13 @@ void Game::updateEatChannel(double dt) {
         // container to the inventory (start checked the capacity — the
         // add cannot fail) and clears the player's status effects (the
         // v1 set: the hurt flash; see clearStatusEffects).
-        const Item& item = m_items.at(m_interaction.eatItem);
-        m_inventory.take(m_interaction.eatSlot, 1);
+        const Item& item = m_items.at(s.interaction.eatItem);
+        s.inventory.take(s.interaction.eatSlot, 1);
         if (item.restoreHunger > 0) {
-            m_player->restoreHunger(static_cast<float>(item.restoreHunger));
+            p.restoreHunger(static_cast<float>(item.restoreHunger));
             // SURV-9: the per-food satiety (the 'saturation' field, the
             // Minecraft values; absent = the legacy 2x rule).
-            m_player->restoreSaturation(foodSatiety(item));
+            p.restoreSaturation(foodSatiety(item));
             // Food that grants a status effect on a full eat (Phase 49,
             // golden apple; the list form Phase 56): applied through the
             // single choke point (applyPlayerEffect — the name is
@@ -2566,10 +2653,10 @@ void Game::updateEatChannel(double dt) {
             // FULLY COMPLETES — the hunger-grant point). The drink
             // completion (the else branch) does NOT emit (the brief's
             // documented deviation — a drink is not an eat).
-            emitTutorialEvent("eat", 1);
+            emitTutorialEvent("eat", 1, &p);
         } else {
             if (!item.returnsItem.empty()) {
-                m_inventory.add(m_items.idForName(item.returnsItem), 1,
+                s.inventory.add(m_items.idForName(item.returnsItem), 1,
                                 m_items);
             }
             // SURV-4 (potions): a drinkable that GRANTS effects applies them
@@ -2590,45 +2677,45 @@ void Game::updateEatChannel(double dt) {
                 }
                 syncAbsorption(); // Phase 72: the pool takes the new total
             } else {
-                clearStatusEffects(); // milk / water: the original clear
+                clearStatusEffectsFor(s); // milk / water: the original clear
             }
             MC_LOG_DEBUG("drank '" + item.name + "'" +
                          (item.returnsItem.empty()
                               ? std::string()
                               : " (returned '" + item.returnsItem + "')"));
         }
-        resetEatChannel();
+        resetEatChannel(s);
     } else if (ev == EatEvent::Cancelled) {
         // Early release: nothing is consumed, no sound.
-        resetEatChannel();
+        resetEatChannel(s);
     }
 }
 
-void Game::resetEatChannel() {
-    m_interaction.eatChannel.reset();
-    m_interaction.eatItem = ItemID::invalid();
-    m_interaction.eatStartHealth = -1.0f;
+void Game::resetEatChannel(PlayerSession& s) {
+    s.interaction.eatChannel.reset();
+    s.interaction.eatItem = ItemID::invalid();
+    s.interaction.eatStartHealth = -1.0f;
 }
 
-void Game::cycleHotbar() {
-    m_selectedSlot =
-        (m_selectedSlot + 1) % static_cast<std::size_t>(Inventory::kHotbarSize);
+void Game::cycleHotbar(PlayerSession& s) {
+    s.selectedSlot =
+        (s.selectedSlot + 1) % static_cast<std::size_t>(Inventory::kHotbarSize);
     // The selected item (and its break speed) changed: restart any break
     // in progress (Minecraft behavior), cancel an in-progress bow draw
     // (the launcher changed; Phase 24) and an in-progress eat (the food
     // left its slot; Phase 28).
-    resetBreaking();
-    resetBowDraw();
-    resetEatChannel();
+    resetBreaking(s);
+    resetBowDraw(s);
+    resetEatChannel(s);
 }
 
-void Game::dropSelectedItem() {
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+void Game::dropSelectedItem(Player& p, PlayerSession& s) {
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return;
     }
     const Item& item = m_items.at(stack.item);
-    if (m_inventory.take(m_selectedSlot, 1) == 0) {
+    if (s.inventory.take(s.selectedSlot, 1) == 0) {
         return;
     }
     // Spawn at the player's feet (bottom-center) with zero velocity — the
@@ -2641,7 +2728,7 @@ void Game::dropSelectedItem() {
     // too (the same captured-before-take discipline).
     const float droppedDamage = stack.damage;
     const std::map<std::string, int> droppedEnchants = stack.enchants;
-    const Vec3 pos = m_player->position();
+    const Vec3 pos = p.position();
     currentEntities().push_back(std::make_unique<ItemEntity>(
         currentWorld(), m_blocks, item.name, item.maxStack, /*count=*/1, pos,
         droppedDamage, droppedEnchants));
@@ -2651,8 +2738,8 @@ void Game::dropSelectedItem() {
     m_sound.play("pickup", pos);
 }
 
-float Game::selectedBreakSpeed(const Block& target) const {
-    const ItemStack& stack = m_inventory.at(m_selectedSlot);
+float Game::selectedBreakSpeedFor(PlayerSession& s, const Block& target) const {
+    const ItemStack& stack = s.inventory.at(s.selectedSlot);
     if (stack.empty()) {
         return 1.0f; // bare hands
     }

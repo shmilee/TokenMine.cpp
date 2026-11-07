@@ -25,7 +25,7 @@
 | 系统 | ① | ② | ③ | ④ | ⑤ | ⑥ | ⑦ |
 |---|---|---|---|---|---|---|---|
 | STRM 流送与内存 | （方向：双世界流送/内存设计，依赖 V3-1） | | | | | | |
-| PIPE 帧管线与并发 | （方向：传送过渡帧管线，依赖 V3-1） | ⬜ V3-12 多人：✅ V3-12a 设计定案（v3.28.0）/ ⬜ V3-12b 2 人 PoC / ⬜ V3-12c 完整化 | | | | | |
+| PIPE 帧管线与并发 | （方向：传送过渡帧管线，依赖 V3-1） | ⬜ V3-12 多人：✅ V3-12a 设计定案（v3.28.0）+ ✅ V3-12b 2 人 PoC（v3.29.0）/ ⬜ V3-12c 完整化（矩阵收官项） | | | | | |
 | LGT 光照 | | | | | | | |
 | GEN 世界与生成 | ✅ V3-1 下界维度·门与下界（三段） | ✅ V3-2 下界内容族（Part 1+2） | ✅ V3-5 建筑内容族 | ✅ V3-10 末地维度：✅ V3-10a 框架（v3.23.0）+ ✅ V3-10b 内容族（v3.24.0）+ ✅ V3-10c 末影人（v3.25.0）+ ✅ V3-10d1 龙核心（v3.26.0）+ ✅ V3-10d2 召唤复杀（v3.27.0）【V3-10 全 4 相位完成】 | | | |
 | FLUID 流体 | | | | | | | |
@@ -269,19 +269,30 @@
     字段清单）/ Player 双别名最小方案（354 处零改动 + 10 成员迁
     移 + pass 二分表）/ streaming 2 处修正 / 12b = format 32 零
     bump + sim 2 不 bump；R1-R20 / D1-D15
-  - **V3-12b 2 人 PoC**（⬜ 待执行 = **v3.29.0 门 219**，范围/门臂
-    定案见设计稿 §4）：src/net/（协议 + socket ~800 行）+ player
-    多人化重构（双别名 + 10 成员迁移 + per-player pass ~1200 触点）
-    + streaming 2 处 + simTime 2 处 + host/client 双循环 + 断线移
-    除 + 哈希交换 + CLI --listen/--connect/--script；**玩法面 = 全
-    sim 覆盖**（lockstep 验证需全 sim 面）；不做 = 大厅/聊天/重
-    连/预测/跨维度/creative 多人/玩家碰撞（12c）；门臂 = 双进程
-    headless 同帧哈希 ×2（--demo-author 时间线输入）+ 断线臂 + S6
-    八面点名 + canary 4 + S1 第 100 次 + 性能 A/B
-  - **V3-12c 完整化**（⬜ 待执行，范围 PoC 后定案）：大厅/聊天/
-    重连（journal 快照）/ N≤8 / per-player 维度 / 玩家碰撞 / 协作
-    挖掘 / creative 多人 / format 33 players[] / 本地预测复议 /
-    心跳
+  - **V3-12b 2 人 PoC = v3.29.0 门 219（11-07 完成）**：主机权威
+    lockstep 全实现——net/ 协议 + POSIX TCP（HELLO 四指纹 / FrameState
+    40B / D=2 无预测 / 30 帧哈希双向交换 / 流重组 R16）+ player 多人
+    化重构（双别名 + PlayerSession 14 引用别名 + pass 二分 ×N 全 sim
+    覆盖）+ streaming 回退门共享账本 + R2 simTime 2 处 + R10 xpSeed
+    盐 + R9 出生点 i + host/client 双循环（lockstep 屏障 + 等包阻塞）
+    + 断线移除（100% 掉落 solo 续跑 / 客户端见主机 EOF 全退 D2）+
+    CLI --listen/--connect/--script（demo 时间线第四消费方）；
+    format 32 零 bump（D13 主机单存档）/ sim 2 不 bump（canary 4
+    EXACT）/ 偏离 D1-D20；门 219：S1 第 100 次（≡ base19 ×2）+
+    S2 双进程锁步三臂【无输入 ×2 run 哈希逐字 + 主机档跨 run EXACT /
+    输入注入 ×2 run client 挖掘落主机 journal / 断线 ×2 run 20 件
+    掉落 + 主机续跑 EXACT】+ S6 八面点名 + canary 4 EXACT / 2974/
+    2974（+10）/ 性能 A/B 同档；PITS 410 九坑（client 环槽偏 1 /
+    主机快跑屏障 / RST≠FIN / WM 平铺 / uiScale 时序 / seed 豁免 /
+    无火种子 / --new 净主机 / 起始库存 per-session）
+  - **V3-12c 完整化**（⬜ 待执行，范围 PoC 后定案——矩阵收官项）：
+    大厅（MOTD/名单）/ 聊天（frameText 载体 + 字体面复议 R7）/ 重
+    连（save 形 WELCOME journal 快照 = D16 复议）/ N=4（协议 ≤8）/
+    per-player 维度（Entity::setWorld 先例 D9 复议）/ 最近玩家目标
+    （D10）/ 玩家碰撞（D7）/ 协作挖掘（D6）/ 物品交换（D5）/
+    creative 多人（D11）/ format 33 players[]（D13）/ 本地预测复议
+    （D3）/ 心跳（R13）/ per-player swing 体（D18）/ aim 相机形中继
+    （D17）
 - **V3-13 死亡统计屏 / Game Over 屏** = **v3.15.0 门 205（11-06
   完成）**：死亡屏 2 行 → 统计屏（致死原因行 = damage DamageInfo
   重载 9 死因措辞全字体表内【+1 字形「于」428】+ 会话统计 5 行

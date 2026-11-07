@@ -684,7 +684,19 @@ void Game::streamChunks(const DimCtx& ctx) {
     // Skipping the post this frame (not the column) is safe: the loop
     // re-runs next frame and ctx.streaming.streamPending only holds actually-posted
     // columns.
-    if (ctx.pool.pendingCount() >= kMaxStreamBacklog) {
+    // V3-12b (design §1.5, the cross-machine purity fix ②): the backlog
+    // gate reads the SHARED ledger (streamPending = the posted-not-
+    // integrated columns — after the post + the 1-frame flush wait, the
+    // integration is deterministic on EVERY machine), NOT the local
+    // pool's pendingCount (a slow machine's in-flight mesh/light jobs
+    // would change ITS OWN post sequence = the column-integration-frame
+    // fork = the silent desync root: the fluid tick / the spawn scan see
+    // a different chunk set per machine). Solo: the same ledger gate
+    // (the structural change is exercised by the gate's own canary —
+    // the streamPending is the posted generation columns, the mesh /
+    // light jobs were never in its count).
+    if (ctx.streaming.streamPending.size() >=
+        static_cast<std::size_t>(kMaxStreamBacklog)) {
         return;
     }
     int posted = 0;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(TokenMine VERSION 3.28.0 LANGUAGES CXX)
+project(TokenMine VERSION 3.29.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -57,6 +57,9 @@ add_library(mc_core STATIC
     src/core/game_save.cpp
     src/core/game_streaming.cpp
     src/core/game_ui.cpp
+    src/core/game_net.cpp
+    src/net/net_proto.cpp
+    src/net/net_session.cpp
     src/block/block_registry.cpp
     src/block/block_sound.cpp
     src/block/chance_drop.cpp
@@ -224,6 +227,7 @@ add_executable(tokenmine_tests
     tests/test_status_effect.cpp
     tests/test_tutorial.cpp
     tests/test_weather.cpp
+    tests/test_net.cpp
     tests/test_thread_pool.cpp
     tests/test_chunk_streaming.cpp
     tests/test_font.cpp

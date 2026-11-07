@@ -197,6 +197,22 @@ std::uint64_t xpSeedStep(std::uint64_t xpSeed);
 inline constexpr std::uint64_t kXpSeedInit = 0x5EED123456789ABCULL;
 std::uint64_t xpSeedInit(std::uint64_t worldSeed);
 
+// V3-12b (R10): the per-PLAYER xpSeed salts — player i's fresh-world xp
+// seed = xpSeedInit(worldSeed ^ kSaltPlayerXp[i]). Index 0 (the primary)
+// is 0 = the original worldSeed^kXpSeedInit, the solo bit-level red line
+// (a single-player world's seed is unchanged). The remote player's
+// non-zero salt de-collides the two players' enchant / unbreaking wear
+// streams (the kSalt family's continuation discipline — the value is
+// collision-checked against every kSalt* / k*RollSalt in src/: the 0x10D
+// 0E11D5E4D73A2..A6 end family is the nearest, A7 is the next free slot).
+inline constexpr std::uint64_t kSaltPlayerXp[2] = {
+    0x0000000000000000ULL,  // primary (solo bit-level)
+    0x10D0E11D5E4D73A7ULL,  // the remote player (12b's second slot)
+};
+inline std::uint64_t xpSeedInitFor(std::uint64_t worldSeed, std::size_t i) {
+    return xpSeedInit(worldSeed ^ kSaltPlayerXp[i % 2]);
+}
+
 // The UNBREAKING wear roll (the durability-skip): for a wear event of
 // `amount` on an item with unbreaking `level` (isArmor selects the tool vs
 // armor formula), return the wear ACTUALLY applied (0..amount — a skip

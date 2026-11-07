@@ -1095,4 +1095,45 @@ Result<std::filesystem::path> authorDemoFromFile(
     return out;
 }
 
+Result<DemoFile> parseScriptTimeline(const std::filesystem::path& path) {
+    // The authorDemoFromFile's no-write twin (the V3-12b --script's
+    // parse — the net session's deterministic input source, the demo
+    // kernel's fourth consumer). The world key is optional (the net's
+    // WELCOME is the world spec's authority).
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return MC_FAIL("cannot open script timeline: '" + path.string() +
+                       "'");
+    }
+    std::string text((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+    auto js = Json::parse(text);
+    MC_TRY(js);
+    const Json& root = *js;
+    if (!root.isObject()) {
+        return MC_FAIL("script timeline root must be an object");
+    }
+    for (const auto& p : root.members()) {
+        const std::string& key = p.first;
+        if (key != "world" && key != "actions") {
+            return MC_FAIL("script timeline: unexpected top-level key '" +
+                           key + "' (world/actions)");
+        }
+    }
+    const Json* world = root.find("world");
+    DemoWorldSpec spec;
+    if (world != nullptr) {
+        auto specR = parseWorldSpec(*world);
+        MC_TRY(specR);
+        spec = *specR;
+    } // absent: the default fresh-seed-0 (the net ignores it)
+    const Json* actions = root.find("actions");
+    if (actions == nullptr) {
+        return MC_FAIL("script timeline is missing the 'actions' key");
+    }
+    auto list = parseTimelineActions(*actions);
+    MC_TRY(list);
+    return authorDemoFile(spec, *list);
+}
+
 } // namespace mc
