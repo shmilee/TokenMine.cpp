@@ -1394,6 +1394,23 @@ void Game::breakBlock(const BlockHit& hit) {
                         static_cast<float>(hit.block.z) + 0.5f},
                   brokenBlock.properties.explodeRadius, "");
     }
+    // V3-10d2: the egg's PLAYER BREAK arms the session respawn (the
+    // 60-s deadline — the MC ~1-min read; the summon sequence's egg
+    // removal is a different path that clears, not arms, the timer).
+    // The resolved-id read (no species switch — the endPortalId's
+    // m_states pattern): a broken egg cell in the End, and only the
+    // arena's fixed egg cell, arms it.
+    if (playerInEnd() && m_states.dragonEggId.valid() &&
+        id == m_states.dragonEggId) {
+        const int ex = static_cast<int>(std::floor(kEndEggPos.x));
+        const int ey = static_cast<int>(std::floor(kEndEggPos.y));
+        const int ez = static_cast<int>(std::floor(kEndEggPos.z));
+        if (hit.block.x == ex && hit.block.y == ey && hit.block.z == ez) {
+            m_end.m_eggRespawnFrame = m_frameCount + kEggRespawnFrames;
+            MC_LOG_DEBUG("dragon egg broken, respawn scheduled at f" +
+                         std::to_string(m_end.m_eggRespawnFrame));
+        }
+    }
 
     const Block& block = m_blocks.at(id);
     // The break sound stays at the exact block center (the BLOCK is the
@@ -1572,6 +1589,20 @@ void Game::placeBlock() {
     // not a merge (the full cell — canPlaceAt's solid rejection below
     // handles it, the legacy path).
     const Block& placedBlock = m_blocks.at(item.block);
+    // V3-10d2 (the summon): the CRYSTAL-BASE placement rule (the data
+    // gate — no species switch): a block that requires a crystal base
+    // (the end crystal) may only be placed against a face of a
+    // crystal-base block (obsidian / bedrock / the end portal frame
+    // family — the MC's summon-foundation read). A rejected placement
+    // is silent (the every-other-gate convention: no target, no
+    // sound, no log — the reach rejection's twin). The clicked block's
+    // flag is read from the hit cell (the non-air by construction).
+    if (placedBlock.properties.requiresCrystalBase &&
+        !m_blocks.at(currentWorld().getBlock(
+            hit->block.x, hit->block.y, hit->block.z))
+                 .properties.crystalBase) {
+        return;
+    }
     int slabPlaceState = -1;
     bool slabMerge = false;
     if (placedBlock.model.shape == BlockModel::Shape::Slab &&

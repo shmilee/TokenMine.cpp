@@ -2050,6 +2050,32 @@ private:
         MobEntity* m_dragon = nullptr;
         Vec3 m_dragonDeathPos = Vec3::zero();
         int m_dragonHealFrame = 0;
+        // V3-10d2: the RE-KILL's death count (session state — the
+        // ritual's XP read: death #1 = the 200 burst, #2+ = the single
+        // 8-value orb).
+        int m_dragonDeaths = 0;
+        // V3-10d2: the DEFEATED session flag (set on the first kill's
+        // bookkeeping, never cleared — a reload resets it, the D6's
+        // "no egg -> dragon back" reload read). The 10d1 spawn gate's
+        // "no egg -> spawn" is the FIRST-VISIT read: after a defeat the
+        // egg's absence is a BROKEN egg (the summon's precondition),
+        // not a spawn signal — the gate stays closed until a summon
+        // sequence completes (its explicit 60-frame delay). The gate-217
+        // probe's catch: without this flag an egg break re-spawned the
+        // dragon 60 frames later, un-summoned.
+        bool m_dragonDefeated = false;
+        // V3-10d2: the EGG respawn's deadline frame (the player-broken
+        // egg's 60-s session timer — -1 = none pending; a reload loses
+        // it, D7; the summon's removal clears it).
+        int m_eggRespawnFrame = -1;
+        // V3-10d2: the SUMMON sequence's countdown (-1 = disarmed;
+        // > 0 = counting; the 4-face crystals' presence + no egg + no
+        // dragon keep it running, any loss cancels).
+        int m_dragonSummonCountdown = -1;
+        // V3-10d2: the ritual's LAST orb's value (the bookkeeping's
+        // set — the 10d1 first kill's 2, the re-kill's 8; 0 =
+        // unreachable, the release only runs after a bookkeeping).
+        int m_dragonXpLastValue = 0;
         // The heal beam's SOURCE slot (the dragon's nearest live crystal
         // this cadence window — the render's beam start; -1 = no beam
         // (full health / no crystal / no dragon)).

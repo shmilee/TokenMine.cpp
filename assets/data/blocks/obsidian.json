@@ -1,6 +1,7 @@
 {
   "id": "obsidian",
   "properties": {
+    "crystal_base": true,
     "hardness": 10,
     "blast_resistance": 3,
     "drops": "obsidian"

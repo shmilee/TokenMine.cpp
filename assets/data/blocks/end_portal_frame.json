@@ -1,6 +1,7 @@
 {
   "id": "end_portal_frame",
   "properties": {
+    "crystal_base": true,
     "hardness": 0,
     "opaque": true,
     "destroyable": false,

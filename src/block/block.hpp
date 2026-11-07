@@ -197,6 +197,22 @@ struct BlockProperties {
     // arrow-vs-crystal-entity. false = every pre-V3-10d block
     // bit-identical.
     bool shatterOnArrow = false;
+    // V3-10d2 (the summon): the CRYSTAL-BASE flag (data 'crystal_base',
+    // a strict boolean, default false): this block's top/side face is a
+    // legal foundation for an end-crystal placement (the MC's
+    // crystal-base read — obsidian / bedrock / the end portal frame
+    // family in the shipped data). The placeBlock's data gate reads
+    // BOTH flags (this one on the clicked block, requiresCrystalBase
+    // on the placed one) — the core never names a block. false = every
+    // pre-V3-10d2 placement bit-identical (no placed block carries the
+    // requirement today except the crystal).
+    bool crystalBase = false;
+    // V3-10d2: the REQUIRES-CRYSTAL-BASE gate (data
+    // 'requires_crystal_base', a strict boolean, default false): this
+    // block may ONLY be placed against a face of a crystal-base block
+    // (the end crystal's summon foundation — the MC's placement rule's
+    // data twin). false = the pre-V3-10d2 placement path bit-identical.
+    bool requiresCrystalBase = false;
     // Simulated as a fluid (Phase 9; KINDED in Phase 51): the fluid's name
     // (vocabulary: "water", "lava" — validated at data load). Empty = not
     // a fluid. A fluid block is stored as a fluid level in the chunk's

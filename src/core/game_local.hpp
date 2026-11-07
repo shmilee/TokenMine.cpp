@@ -101,4 +101,29 @@ constexpr int kDragonAscentTotalFrames = 240;
 constexpr double kDragonFireballCloudDuration = 5.0;
 constexpr float kDragonFireballCloudRadius = 2.5f;
 
+// V3-10d: the XP burst's orb count + the every-5-frames release
+// cadence (the MC 155-tick/5-tick read's frame scale; 22 x 9 + 1 x 2 =
+// 200 — the first kill's project-scale XP).
+constexpr int kDragonXpOrbs = 23;
+constexpr int kDragonXpOrbValue = 9;
+constexpr int kDragonXpLastOrbValue = 2;
+constexpr int kDragonXpReleaseFrames = 5;
+
+// V3-10d2 (the summon / the re-kill): the EGG session respawn's
+// deadline in FRAMES (the player-broken egg rewrites at (0,54,0) after
+// 60 s — the MC ~1-min read; SESSION state, a reload resets the timer
+// = D7's documented deviation; the summon-sequence's egg REMOVAL is a
+// player break NOT — it clears the pending timer, the MC read).
+constexpr int kEggRespawnFrames = 3600;
+// The SUMMON sequence's countdown in FRAMES (the 4 face crystals'
+// presence gate — breaking any one during it cancels; the sequence's
+// completion leaves the arena egg-free + tower-complete, and the 10d1
+// spawn gate's 60-frame delay then brings the dragon back — the MC's
+// "crystals, then the dragon" read).
+constexpr int kDragonSummonCountdownFrames = 60;
+// The RE-KILL's XP (one orb's value — the MC 500/12000 ratio's 1/24
+// over the project's 200 = 8, the D5's read; the first kill's 200
+// burst is the 10d1's scheduler, this is its re-kill's single orb).
+constexpr int kDragonRekillXpValue = 8;
+
 } // namespace mc

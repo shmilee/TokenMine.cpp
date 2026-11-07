@@ -1685,12 +1685,6 @@ constexpr CrystalCell kCrystalCells[6] = {
 };
 // The egg's CELL (the kEndEggPos center's floor).
 constexpr CrystalCell kEggCell {0, 54, 0};
-// The XP burst's orb count + the every-5-frames release cadence (the
-// MC 155-tick/5-tick read's frame scale; 22 x 9 + 1 x 2 = 200).
-constexpr int kDragonXpOrbs = 23;
-constexpr int kDragonXpOrbValue = 9;
-constexpr int kDragonXpLastOrbValue = 2;
-constexpr int kDragonXpReleaseFrames = 5;
 } // namespace
 
 void Game::spawnDragon() {
@@ -1801,6 +1795,18 @@ void Game::spawnDragon() {
                  std::to_string(kDragonSpawnPos.y) + ", " +
                  std::to_string(kDragonSpawnPos.z) + ") f" +
                  std::to_string(m_frameCount));
+    // V3-10d2: the --dragon-damage seam (PER-SPAWN — the 10d1 one-shot
+    // read re-armed on every (re)spawn so one run can walk the full
+    // kill -> egg -> summon -> re-kill cycle deterministically; absent
+    // = every pre-seam run bit-identical, the 10d1 behavior on a single
+    // spawn is unchanged — the application frame is the spawn frame).
+    if (m_args.dragonDamage.has_value() && !raw->dead()) {
+        MC_LOG_INFO("--dragon-damage: " +
+                    std::to_string(*m_args.dragonDamage) +
+                    " to the End dragon (spawn " +
+                    std::to_string(m_end.m_dragonDeaths + 1) + ")");
+        raw->damage(static_cast<float>(*m_args.dragonDamage));
+    }
 }
 
 bool Game::shatterCrystalAt(int x, int y, int z) {
@@ -1881,8 +1887,12 @@ void Game::updateDragonGameplay() {
             dragon = nullptr;
         }
     }
+    // V3-10d2: the FIRST-VISIT read (the 10d1 gate + the defeated's
+    // closure): after a defeat the egg's absence is a broken egg, not a
+    // spawn signal — the summon sequence's explicit delay is the only
+    // re-spawn path (the MC read, the gate-217 probe's fix).
     if (dragon == nullptr && m_end.m_dragonSpawnDelay < 0 &&
-        m_mobs.mobsEnabled &&
+        m_mobs.mobsEnabled && !m_end.m_dragonDefeated &&
         world.getBlock(kEggCell.x, kEggCell.y, kEggCell.z) !=
             m_states.dragonEggId) {
         m_end.m_dragonSpawnDelay = kDragonAscentFlyFrames; // the 1-s read
@@ -1894,23 +1904,115 @@ void Game::updateDragonGameplay() {
             spawnDragon();
         }
     }
-    // The --dragon-damage seam (the gate's deterministic kill trigger —
-    // the --explode twin): applied the first frame the dragon exists
-    // (the spawn's frame, this pass just spawned it), then consumed.
-    // nullopt = the no-seam run's structural-immunity root.
-    if (m_args.dragonDamage.has_value() && m_end.m_dragon != nullptr &&
-        !m_end.m_dragon->dead()) {
-        MC_LOG_INFO("--dragon-damage: " +
-                    std::to_string(*m_args.dragonDamage) + " to the End " +
-                    "dragon");
-        m_end.m_dragon->damage(static_cast<float>(*m_args.dragonDamage));
-        m_args.dragonDamage.reset();
-    }
+    // The --dragon-damage seam moved to spawnDragon's tail (V3-10d2's
+    // per-spawn read — the 10d1 one-shot's same-frame behavior on a
+    // single spawn, re-armed on every re-spawn for the re-kill cycle).
     // Re-capture AFTER the spawn/seam: the same-frame spawn+kill (the
     // gate's seam) must still book its death this frame (the R14's
     // 0-frame-gap ruling — the egg lands on the m_dead frame). A
     // non-spawn frame re-reads the identical pointer.
     dragon = m_end.m_dragon;
+
+    // -- 1b. V3-10d2: the egg session respawn + the summon sequence --
+    const BlockID eggCell =
+        world.getBlock(kEggCell.x, kEggCell.y, kEggCell.z);
+    // The egg's REWRITE (the player-broken egg's 60-s session timer —
+    // D7: a reload resets the timer, the egg's presence is the
+    // persisted state; the summon's removal is NOT a player break and
+    // clears the pending timer instead). The deadline's frame rewrites
+    // the cell (air-only belt — an occupied cell keeps its occupant).
+    if (m_end.m_eggRespawnFrame >= 0 &&
+        m_frameCount >= m_end.m_eggRespawnFrame) {
+        m_end.m_eggRespawnFrame = -1;
+        if (eggCell == BlockID::air()) {
+            setBlock(kEggCell.x, kEggCell.y, kEggCell.z,
+                     m_states.dragonEggId);
+            Lighting::updateLocal(world, m_blocks,
+                                  {kEggCell.x, kEggCell.y, kEggCell.z});
+            MC_LOG_DEBUG("dragon egg respawned at (0, 54, 0) f" +
+                         std::to_string(m_frameCount));
+        }
+    }
+    // The SUMMON sequence (the MC's re-summon read): all 4 EXIT-FACE
+    // crystals present (kEndSummonFaceSlots — the ±X pair are the
+    // arena's exit crystals, the ±Z pair worldgen-absent = only a
+    // player placement fills them) + no egg + no dragon = the
+    // countdown arms; any loss (a face crystal broken / the egg back /
+    // a dragon live) cancels it (the mid-sequence break = the MC
+    // rule). At zero: the 4 face crystals detonate (shatterCrystalAt's
+    // single choke — the self-harm's dragon-less no-op, the blast's
+    // no-chain structural property), the pending egg timer clears, the
+    // MISSING tower crystals restore (the worldgen state's idempotent
+    // rewrite — loaded chunks only, an unloaded tower chunk is
+    // worldgen-fresh = intact by the 10d1 census read), and the
+    // EXPLICIT 60-frame spawn delay brings the dragon back (the
+    // first-visit gate stays defeated-closed — the summon is the only
+    // re-spawn path, the "re-kill" of the cycle).
+    int faceCrystals = 0;
+    for (const Vec3& slot : kEndSummonFaceSlots) {
+        const int cx = static_cast<int>(std::floor(slot.x));
+        const int cy = static_cast<int>(std::floor(slot.y));
+        const int cz = static_cast<int>(std::floor(slot.z));
+        // The face slots read the LIVE cell (unlike the arena census's
+        // unloaded-intact read): the ±Z pair is worldgen-ABSENT, so an
+        // unloaded chunk reads air = not present — the summon only
+        // arms at the exit, where the summoning player's own column
+        // keeps the cells loaded (the context's structural read).
+        if (world.getBlock(cx, cy, cz) == m_states.endCrystalId) {
+            ++faceCrystals;
+        }
+    }
+    const bool summonContext =
+        faceCrystals == 4 && eggCell == BlockID::air() && dragon == nullptr;
+    if (m_end.m_dragonSummonCountdown < 0) {
+        if (summonContext) {
+            m_end.m_dragonSummonCountdown = kDragonSummonCountdownFrames;
+            MC_LOG_DEBUG("dragon summon sequence armed (4 face crystals) f" +
+                         std::to_string(m_frameCount));
+        }
+    } else if (!summonContext) {
+        m_end.m_dragonSummonCountdown = -1;
+        MC_LOG_DEBUG("dragon summon sequence cancelled f" +
+                     std::to_string(m_frameCount));
+    } else {
+        --m_end.m_dragonSummonCountdown;
+        if (m_end.m_dragonSummonCountdown == 0) {
+            m_end.m_dragonSummonCountdown = -1; // complete (the armed
+                                                // state's exit — the
+                                                // post-sequence context
+                                                // loss is not a cancel)
+            MC_LOG_DEBUG("dragon summon sequence complete f" +
+                         std::to_string(m_frameCount));
+            for (const Vec3& slot : kEndSummonFaceSlots) {
+                shatterCrystalAt(static_cast<int>(std::floor(slot.x)),
+                                 static_cast<int>(std::floor(slot.y)),
+                                 static_cast<int>(std::floor(slot.z)));
+            }
+            // The summon's egg removal is not a player break (the MC's
+            // no-egg-after-summon read) — clear the pending respawn.
+            m_end.m_eggRespawnFrame = -1;
+            // The explicit re-spawn (the first-visit gate's defeated
+            // closure makes this the summon's own 60-frame delay —
+            // the "crystals, then the dragon" read).
+            m_end.m_dragonSpawnDelay = kDragonAscentFlyFrames;
+            for (const Vec3& t : kEndTowerSlots) {
+                const int cx = static_cast<int>(std::floor(t.x));
+                const int cz = static_cast<int>(std::floor(t.z));
+                const ChunkPos cp =
+                    worldToChunk(BlockPos {cx, 59, cz});
+                if (world.hasChunk(cp) &&
+                    world.getBlock(cx, 59, cz) != m_states.endCrystalId) {
+                    setBlock(cx, 59, cz, m_states.endCrystalId);
+                    Lighting::updateLocal(world, m_blocks,
+                                          {cx, 59, cz});
+                    MC_LOG_DEBUG("tower crystal restored at (" +
+                                 std::to_string(cx) + ", 59, " +
+                                 std::to_string(cz) + ") f" +
+                                 std::to_string(m_frameCount));
+                }
+            }
+        }
+    }
 
     // -- 2. the crystal census + fire + heal cadence -------------------
     // UNLOADED-CHUNK INDEPENDENCE (the gate-216 streaming probe): a
@@ -2083,9 +2185,28 @@ void Game::updateDragonGameplay() {
                          std::to_string(dragon->position().y) + ", " +
                          std::to_string(dragon->position().z) + ") f" +
                          std::to_string(m_frameCount));
-            MC_LOG_INFO("dragon death: egg placed, 200 XP burst "
-                        "scheduled");
-            m_end.m_dragonXpRemaining = kDragonXpOrbs;
+            // V3-10d2: the RE-KILL's XP (death #1 = the 10d1's 200
+            // burst, #2+ = one 8-value orb — the MC 500/12000 ratio's
+            // 1/24 over the project's 200, the D5's read) + the
+            // defeated's latch (the spawn gate's closure).
+            ++m_end.m_dragonDeaths;
+            m_end.m_dragonDefeated = true;
+            const bool rekill = m_end.m_dragonDeaths > 1;
+            const int burstTotal = rekill
+                ? kDragonRekillXpValue
+                : (kDragonXpOrbs - 1) * kDragonXpOrbValue +
+                      kDragonXpLastOrbValue; // the 22 x 9 + 2 = 200
+            MC_LOG_INFO("dragon death: egg placed, " +
+                        std::to_string(burstTotal) + " XP burst " +
+                        std::string(rekill ? "scheduled (re-kill)"
+                                           : "scheduled"));
+            if (rekill) {
+                m_end.m_dragonXpRemaining = 1;
+                m_end.m_dragonXpLastValue = kDragonRekillXpValue;
+            } else {
+                m_end.m_dragonXpRemaining = kDragonXpOrbs;
+                m_end.m_dragonXpLastValue = kDragonXpLastOrbValue;
+            }
             m_end.m_dragonXpFrame = 0;
         } else if (f < kDragonAscentTotalFrames) {
             const int nf = f + 1;
@@ -2126,9 +2247,13 @@ void Game::updateDragonGameplay() {
                 m_end.m_dragonXpFrame =
                     (m_end.m_dragonXpFrame + 1) % kDragonXpReleaseFrames;
                 if (m_end.m_dragonXpFrame == 0) {
+                    // The last orb's value is the RITUAL's (the 10d1's
+                    // 2, the 10d2 re-kill's 8 — m_dragonXpLastValue's
+                    // bookkeeping set).
                     const int value =
                         m_end.m_dragonXpRemaining == 1
-                            ? kDragonXpLastOrbValue : kDragonXpOrbValue;
+                            ? m_end.m_dragonXpLastValue
+                            : kDragonXpOrbValue;
                     MC_LOG_DEBUG("dragon XP orb " +
                                  std::to_string(kDragonXpOrbs -
                                                  m_end.m_dragonXpRemaining +

@@ -85,6 +85,12 @@ struct DebugInfo {
     // Empty (a unit-test DebugInfo with no dimension filled) renders the
     // baseline "overworld" — the no-nether session's value.
     std::string dimension = "overworld";
+    // V3-10d2: the dragon line's data (the F3 stays English): "none" /
+    // "spawn Nf" / "orbit" / "strafe" / "perch" / "ascend N/240" /
+    // "summon Nf" / "egg" / "egg respawn Nf" — the boss's session state
+    // readout (the developer tool's cycle visibility). Empty renders
+    // the baseline "(none)" (a unit-test DebugInfo / a no-End session).
+    std::string dragon;
 };
 
 // PRE-12 (the SURV-6 display boundary): the amplifier roman numeral for

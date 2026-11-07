@@ -1,6 +1,7 @@
 {
   "id": "end_crystal",
   "properties": {
+    "requires_crystal_base": true,
     "hardness": 0.0,
     "solid": false,
     "opaque": false,

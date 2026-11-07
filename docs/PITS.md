@@ -68,6 +68,29 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **负 cell 中心 + 无蛋 ≠ 首访 + demo 死点击 + 旋转 dy 累计 +
+  /tmp 路径重写五坑（PITS 409，门 217 v3.27.0 V3-10d2 召唤与复
+  杀）**——① **负坐标 cell 中心 = -N + 0.5 非 -N - 0.5**（硬规
+  则 1 的 floorDiv 纪律的中心侧）：10d1 的 kEndCrystalSlots/
+  kEndTowerSlots 负侧中心全写成 -2.5/-50.5（= cell -3/-51 的中
+  心）——晶普查走整数 cell 词表（kCrystalCells）故玩法正确，但
+  箭碎扫掠 floor(中心) 在 -X/-Z 侧**静默测错格**（-X 晶箭永不
+  碎）；10d2 面晶词表的单测 pin（floor == 意图 cell）首跑抓获；
+  纪律 = **Vec3 中心词表入库前逐格 floor 回验**。② **无蛋 ≠ 首
+  访**：10d1 生成门「无蛋 → 生成」在玩家破蛋后 60f 把龙无召唤
+  复生（MC：破蛋 ≠ 复生，只有召唤复生）——门臂首跑 f381 实证；
+  修 = **败亡会话旗**封闭首访门 + 召唤显式延迟（重载复位旗 =
+  D6 重载读保持）。③ **demo 同帧 mouse_down+mouse_up = 死点
+  击**（边沿同帧抵消——press 不落地）：点击须 ≥2 帧 hold；**hold
+  续帧按新瞄准重新取目标**（创造即挖沿射线续破 reach 内下一块
+  ——破晶 → 续帧自动破蛋 = 一 hold 两用，门臂据此设计）。④
+  **demo 旋转 dy 逐目标累计**（mouse_move dy 改 pitch 是绝对姿
+  势增量——两个同 pitch 目标之间只发 dx；门内对第二目标重发
+  dy = pitch 过旋 0.16 rad 瞄准落空 1 次返工）。⑤ **门脚本的
+  /tmp 路径被重写**（`mv x /tmp/x.bak` 的 bak 落源目录——/tmp
+  前缀被吃 = 文件"失踪"假象 + 后续 case 串染）：备份用
+  cp+rm 到显式目录（/tmp/opencode 子目录）+ 每 case 后 diff -rq
+  资产完整性回验。
 - **init 交叉检顺序 + 数值累加器泄漏 + demo 存档红线 + 流送依赖
   锚点 + 哨兵首帧 delta + 同帧 spawn+kill + 血条 margin + CJK
   边界八坑（PITS 408，门 216 v3.26.0 V3-10d1 末影龙）**——①

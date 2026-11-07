@@ -7,6 +7,7 @@
     "transparent": true,
     "cutout": true,
     "light_emission": 1,
+    "blast_resistance": 3,
     "drops": "dragon_egg"
   },
   "model": {

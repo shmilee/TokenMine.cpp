@@ -118,6 +118,11 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
         // nether session's value) / "nether" (the player is in the nether
         // dimension).
         fmt("dimension %s", info.dimension.c_str()),
+        // V3-10d2: the dragon line (the F3 stays English — the boss's
+        // session state; empty renders the "(none)" baseline for the
+        // no-End session / a unit-test DebugInfo with no data filled).
+        info.dragon.empty() ? std::string("dragon (none)")
+                            : fmt("dragon %s", info.dragon.c_str()),
     };
 }
 

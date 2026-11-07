@@ -11,6 +11,46 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.27.0（2026-11-07）— V3-10d2 召唤与复杀（门 217 全 PASS）
+
+**矩阵唯一真大项收官相位 D2/2**（召唤序列 + 复杀闭环；format 32 不
+变【召唤/蛋计时/败亡旗全会话态，蛋 = 世界态既有面】/ **sim 2 不
+bump**（canary 4 全 OW EXACT）/ 零 config / 块 135 不变【crystal_
+base = 既有 4 块新旗非新块】/ 字体零新增【F3 龙态行全英文，
+528/528 满区不碰】）。
+
+**召唤**：`crystal_base` 块旗（strict bool，obsidian/bedrock/出口
+双帧 4 块置 true）+ `requires_crystal_base`（end_crystal 独占）=
+放置门（placeBlock 数据门零物种 switch——end_crystal 生存可放置，
+10d1 配方闭环）；**4 出口面晶全在 ∧ 无蛋 ∧ 无龙**（面晶词表：±X
+对 = arena 出口晶算数，±Z 对 worldgen 缺席只能玩家放置）→ 60f 倒
+计（任一损失取消）→ 完成时 4 晶引爆【相邻晶爆波及 = MC 4 晶同爆
+读】+ 蛋计时清除 + 缺位塔晶回写（已载 only）+ 显式 60f 复生。**败
+亡旗**（首杀置位不清除，重载复位）：10d1 生成门「无蛋 → 生成」=
+首访读——败亡后蛋缺席 = 破蛋非生成信号【门内捕获：破蛋 60f 后无
+召唤复生】。**蛋会话重生** = 玩家破蛋 → 3600f 回写（重载复位计时
+= D7）；**蛋 blast_resistance 3**（晶爆 r3 局域 1.0 < 3 存活——MC
+蛋近不可晶爆毁读）。**复杀 XP = 8**（单 8 值 orb——MC 500/12000
+比例 1/24 × 200 的 D5 读；首杀 200 burst 不变）。--dragon-damage
+改每生成施加（单次生成行为不变，同跑可走全循环）。F3 +第 21 行
+dragon（none/spawn/orbit/strafe/perch/ascend/summon/egg/egg
+respawn）。
+
+**门 217**：S1 结构免疫第 98 次（≡ base19 逐字节 ×2 + EXACT）/
+**S2 召唤+复杀臂 = authored demo ×2 RAW + 逐字**（f59 杀1 + 200
+XP burst 23 orb 逐位 / f321 破晶【蛋 br3 存活】/ f322 破蛋 →
+f3922 调度 / f340-373 三面晶放置 / f373 summon armed / f433
+sequence complete【2 shatter + 2 爆波及】/ **f493 杀2 + 8 XP burst
+单 orb value 8 f558** + 蛋2）/ S2a 无输入末地回归（summon 行 0 =
+门惰性）/ 10d1 三臂回归全同（kill f59 + 200XP / 破晶 f151→strafe
+f152 / 重载蛋在无复生）/ S6 十六面点名 / canary 4 ×2 RAW +
+EXACT【sim 2 不 bump】/ **2964/2964**（+5：DragonSummon 4 +
+DragonLine 1）/ 性能 A/B 同档【旧 = 94dc3d9 v3.26.0 + g139：banner 实证 v3.26.0/v3.27.0 + 双场景——OW 900f 无输入：PERF-WIN 三窗 upd med 0.561/0.562/0.571 vs 0.556/0.571/0.573 同档 + render 0.619/0.656/0.661 vs 0.630/0.697/0.638 + swap 15.3 同档 + changesApplied 9/3/1 全逐位 + 终档 savenorm EXACT 零 format 最强形；末地战斗 600f（mobs-on 变体，双侧龙在场）：upd med 0.870/1.017 vs 0.841/1.023 同档 + render 0.502/0.584 vs 0.503/0.569 + swap 15.2 同档 + ents 0.39/0.46 vs 0.36/0.47 同档 = 10d2 增量（放置门/蛋/召唤/F3 全冷）无可测自成本】。PITS 409（五
+坑：负 cell 中心 -N+0.5 非 -N-0.5【10d1 词表负侧偏 1 格静默】/
+无蛋 ≠ 首访 / demo 同帧 down+up 死点击 + hold 续帧重新取目标 /
+demo 旋转 dy 逐目标累计 / 门脚本 /tmp 路径重写）。详见
+`docs/archive/phase-3.27.0.md`。
+
 ## v3.26.0（2026-11-07）— V3-10d1 末影龙核心 + 首杀闭环（门 216 全 PASS）
 
 **矩阵唯一真大项的首相位**（末影龙 boss 核心 + 首杀闭环；侦察全采纳

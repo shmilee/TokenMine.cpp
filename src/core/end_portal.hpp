@@ -140,22 +140,42 @@ inline constexpr Vec3 kDragonSpawnPos {0.5f, 58.0f, 0.5f};
 // pass / the worldgen pass 4 / the arrow shatter sweep / the heal
 // source all read THIS vocabulary (the single source, zero per-world
 // state; the fire sits at cell +1y above a live crystal).
+// The negative-side centers are the floorDiv discipline (hard rule 1):
+// cell -N's center is -N + 0.5 (the -2 crystal's center is -1.5, NOT
+// -2.5 — the 10d2 face-slot pin's catch: a -2.5 center floors to cell
+// -3, the arrow shatter sweep's wrong-cell silent miss on the -X side).
 inline constexpr Vec3 kEndCrystalSlots[6] = {
     {50.5f, 59.5f, 50.5f},
-    {-50.5f, 59.5f, 50.5f},
-    {50.5f, 59.5f, -50.5f},
-    {-50.5f, 59.5f, -50.5f},
+    {-49.5f, 59.5f, 50.5f},
+    {50.5f, 59.5f, -49.5f},
+    {-49.5f, 59.5f, -49.5f},
     {2.5f, 54.5f, 0.5f},
-    {-2.5f, 54.5f, 0.5f},
+    {-1.5f, 54.5f, 0.5f},
 };
 // The four TOWER footprints' centers (the 5x5 obsidian columns'
 // (±50, ±50) — the worldgen pass 4's writer vocabulary, the slot
 // array's tower quartet shared).
 inline constexpr Vec3 kEndTowerSlots[4] = {
     {50.5f, 0.0f, 50.5f},
-    {-50.5f, 0.0f, 50.5f},
-    {50.5f, 0.0f, -50.5f},
-    {-50.5f, 0.0f, -50.5f},
+    {-49.5f, 0.0f, 50.5f},
+    {50.5f, 0.0f, -49.5f},
+    {-49.5f, 0.0f, -49.5f},
+};
+// V3-10d2 (the summon): the four EXIT-FACE crystal cells (the MC's
+// "4 crystals on the exit's four sides" read — the ±X pair are the
+// arena's exit crystals (kEndCrystalSlots[4..5]'s cells), the ±Z pair
+// the frame ring's other mid-edge tops (0, y54, ±2), worldgen-ABSENT
+// — only a player placement can fill them). All four crystal = the
+// summon sequence's arm (the countdown's gate); the sequence's
+// detonation consumes all four. The single source: the game's summon
+// pass / the F3 readout / the tests share it.
+// The centers' floor = the cells (the negative-side floorDiv discipline
+// — the kEndCrystalSlots' twin read).
+inline constexpr Vec3 kEndSummonFaceSlots[4] = {
+    {2.5f, 54.5f, 0.5f},
+    {-1.5f, 54.5f, 0.5f},
+    {0.5f, 54.5f, 2.5f},
+    {0.5f, 54.5f, -1.5f},
 };
 
 } // namespace mc

@@ -2448,6 +2448,46 @@ void Game::renderUi() {
         info.dimension =
             playerInNether() ? "nether"
             : playerInEnd() ? "end" : "overworld";
+        // V3-10d2: the dragon line (the boss's session-state readout —
+        // the End only; a no-End session renders the "(none)" baseline,
+        // the F3's English developer-tool discipline).
+        if (playerInEnd() && m_end.world) {
+            if (m_end.m_dragonSummonCountdown >= 0) {
+                info.dragon = "summon " +
+                    std::to_string(m_end.m_dragonSummonCountdown) + "f";
+            } else if (m_end.m_dragon != nullptr) {
+                if (m_end.m_dragon->dead()) {
+                    info.dragon = "ascend " +
+                        std::to_string(m_end.m_dragon->ascensionFrames()) +
+                        "/" + std::to_string(kDragonAscentTotalFrames);
+                } else {
+                    info.dragon =
+                        m_end.m_dragon->state() == MobState::Wander
+                            ? "orbit"
+                            : (m_end.m_dragon->state() ==
+                                     MobState::RangedAttack
+                                   ? "strafe"
+                                   : "perch");
+                }
+            } else if (m_end.m_dragonSpawnDelay >= 0) {
+                info.dragon = "spawn " +
+                    std::to_string(m_end.m_dragonSpawnDelay) + "f";
+            } else if (m_end.world->getBlock(
+                           static_cast<int>(std::floor(kEndEggPos.x)),
+                           static_cast<int>(std::floor(kEndEggPos.y)),
+                           static_cast<int>(std::floor(kEndEggPos.z))) ==
+                       m_states.dragonEggId) {
+                info.dragon =
+                    m_end.m_eggRespawnFrame >= 0
+                        ? "egg respawn " +
+                              std::to_string(m_end.m_eggRespawnFrame -
+                                             m_frameCount) +
+                          "f"
+                        : "egg";
+            } else {
+                info.dragon = "none";
+            }
+        }
         // UX-8e: the F3 line step is a TEXT-STACK pitch — it grows with
         // the glyphs (lround, identity at fs = 1.0); the margin (an
         // icon-space inset) does not.

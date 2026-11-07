@@ -124,6 +124,15 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "shatter_on_arrow", "boolean",
                    [&](const Json& v) { out.shatterOnArrow = v.asBool(); });
     MC_TRY(r);
+    // V3-10d2: the crystal-base / requires-crystal-base pair (the
+    // strict-bool family — the placement gate's two data predicates,
+    // the carriable's twin shape).
+    r = checkField(*p, "crystal_base", "boolean",
+                   [&](const Json& v) { out.crystalBase = v.asBool(); });
+    MC_TRY(r);
+    r = checkField(*p, "requires_crystal_base", "boolean",
+                   [&](const Json& v) { out.requiresCrystalBase = v.asBool(); });
+    MC_TRY(r);
     r = checkField(*p, "destroyable", "boolean",
                    [&](const Json& v) { out.destroyable = v.asBool(); });
     MC_TRY(r);

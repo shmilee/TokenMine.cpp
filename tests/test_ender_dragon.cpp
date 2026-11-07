@@ -17,6 +17,8 @@
 
 #include "block/block_registry.hpp"
 #include "core/asset_manager.hpp"
+#include "core/end_portal.hpp"
+#include "core/game_local.hpp"
 #include "core/json.hpp"
 #include "core/status_effect.hpp"
 #include "entity/breath_cloud.hpp"
@@ -706,4 +708,118 @@ TEST(ShippedDragon, DataPinned) {
             EXPECT_FALSE(mob.properties.boss) << mob.name;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// V3-10d2 (the summon / the re-kill): the crystal-base pair's strict
+// parse, the shipped base set, the face-slot vocabulary, the named
+// constants.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::string blockDef(const std::string& props) {
+    return std::string("{\"id\":\"b\",\"properties\":{") + props +
+           "},\"model\":{\"textures\":{\"top\":\"t\",\"side\":\"t\","
+           "\"bottom\":\"t\"}}}";
+}
+
+} // namespace
+
+TEST(DragonSummon, CrystalBaseFlagsAreStrictBool) {
+    // The pair's strict-bool family (the carriable's twin shape): the
+    // string / the number are named, the true registers, the absent is
+    // the false default (the bit root).
+    for (const char* bad : {"\"yes\"", "1"}) {
+        for (const char* key : {"crystal_base", "requires_crystal_base"}) {
+            const std::string def = blockDef(
+                std::string("\"") + key + "\": " + bad);
+            auto r = BlockRegistry().registerBlock(parseDef(def));
+            EXPECT_FALSE(r.ok()) << key << " = " << bad;
+        }
+    }
+    auto ok1 = BlockRegistry().registerBlock(
+        parseDef(blockDef("\"crystal_base\": true")));
+    ASSERT_TRUE(ok1.ok());
+    auto ok2 = BlockRegistry().registerBlock(
+        parseDef(blockDef("\"requires_crystal_base\": true")));
+    ASSERT_TRUE(ok2.ok());
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.registerBlock(parseDef(blockDef(""))).ok());
+    EXPECT_FALSE(reg.at(ok1.value()).properties.crystalBase)
+        << "the other block's flag stays false (the registry's isolation)";
+}
+
+TEST(DragonSummon, ShippedBaseSetIsExact) {
+    // The REAL assets: crystal_base is the MC's foundation set —
+    // obsidian / bedrock / the end portal frame family, NOTHING else;
+    // requires_crystal_base is the crystal alone (the placement gate's
+    // data twin); the egg's blast_resistance 3 (the crystal blast's
+    // survivor — the MC egg's near-indestructible read, the obsidian's
+    // br-3 project twin).
+    AssetManager assets;
+    ASSERT_TRUE(assets.setRoot("assets").ok())
+        << "run the tests from the repository root";
+    BlockRegistry reg;
+    ASSERT_TRUE(reg.loadDirectory(assets, "data/blocks").ok());
+    std::vector<std::string> bases;
+    std::vector<std::string> requirers;
+    for (std::size_t i = 0; i < reg.count(); ++i) {
+        const Block& b = reg.at(BlockID{static_cast<int>(i)});
+        if (b.properties.crystalBase) {
+            bases.push_back(b.name);
+        }
+        if (b.properties.requiresCrystalBase) {
+            requirers.push_back(b.name);
+        }
+    }
+    std::sort(bases.begin(), bases.end());
+    std::sort(requirers.begin(), requirers.end());
+    EXPECT_EQ(bases,
+              (std::vector<std::string> {
+                  "bedrock", "end_portal_frame", "end_portal_frame_eyed",
+                  "obsidian"}));
+    EXPECT_EQ(requirers, (std::vector<std::string> {"end_crystal"}));
+    // The egg's blast resistance (the summon's face-crystal blast's
+    // survivor — without it a face shatter eats the egg, the MC
+    // deviation the br-3 closes).
+    const Block& egg = reg.at(reg.idForName("dragon_egg"));
+    EXPECT_FLOAT_EQ(egg.properties.blastResistance, 3.0f);
+}
+
+TEST(DragonSummon, FaceSlotsVocabularyPinned) {
+    // The summon's 4 EXIT-FACE cells (the MC's "four sides" read): the
+    // ±X pair ARE the arena's exit crystals (kEndCrystalSlots[4..5]'s
+    // cells), the ±Z pair are worldgen-ABSENT (only a placement fills
+    // them — the summon's player-action core). The single source's pin.
+    const int want[4][3] = {{2, 54, 0}, {-2, 54, 0},
+                            {0, 54, 2}, {0, 54, -2}};
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_EQ(static_cast<int>(std::floor(kEndSummonFaceSlots[i].x)),
+                  want[i][0]) << i;
+        EXPECT_EQ(static_cast<int>(std::floor(kEndSummonFaceSlots[i].y)),
+                  want[i][1]) << i;
+        EXPECT_EQ(static_cast<int>(std::floor(kEndSummonFaceSlots[i].z)),
+                  want[i][2]) << i;
+    }
+    // The ±X pair's cells == the arena exit slots' cells (the shared
+    // vocabulary's witness — the arena crystal counts toward the
+    // summon).
+    EXPECT_EQ(static_cast<int>(std::floor(kEndSummonFaceSlots[0].x)),
+              static_cast<int>(std::floor(kEndCrystalSlots[4].x)));
+    EXPECT_EQ(static_cast<int>(std::floor(kEndSummonFaceSlots[1].x)),
+              static_cast<int>(std::floor(kEndCrystalSlots[5].x)));
+}
+
+TEST(DragonSummon, NamedConstantsPinned) {
+    // The session timers' + the re-kill XP's named values (the D5's
+    // read: the MC 500/12000 ratio's 1/24 over the project's 200).
+    EXPECT_EQ(kEggRespawnFrames, 3600); // the 60 s (the MC ~1-min read)
+    EXPECT_EQ(kDragonSummonCountdownFrames, 60); // the 1 s countdown
+    EXPECT_EQ(kDragonRekillXpValue, 8);
+    // The first kill's 200 = the 23 orbs' sum (22 x 9 + the last 2)
+    // vs the re-kill's 8 (the ratio's witness).
+    EXPECT_EQ((kDragonXpOrbs - 1) * kDragonXpOrbValue +
+                  kDragonXpLastOrbValue,
+              200);
 }

@@ -36,11 +36,13 @@ TEST(DebugOverlayTest, LinesFormat) {
     info.maxHunger = 20.0;
     info.difficulty = "hard";
     const auto lines = debugOverlayLines(info);
-    // V3-1 Phase B: 19 -> 20 (the dimension line — the F3's last line).
-    ASSERT_EQ(lines.size(), 20u);
+    // V3-1 Phase B: 19 -> 20 (the dimension line); V3-10d2: 20 -> 21
+    // (the dragon line — the F3's last line, the boss's session-state
+    // readout).
+    ASSERT_EQ(lines.size(), 21u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v3.26.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v3.27.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -76,6 +78,9 @@ TEST(DebugOverlayTest, LinesFormat) {
     // dimension filled renders the baseline "overworld" (the no-nether
     // session's value).
     EXPECT_EQ(lines[19], "dimension overworld");
+    // V3-10d2: the dragon line — a unit-test DebugInfo with no dragon
+    // data renders the baseline "(none)" (the no-End session's value).
+    EXPECT_EQ(lines[20], "dragon (none)");
 }
 
 TEST(DebugOverlayTest, CamLine) {
@@ -83,7 +88,7 @@ TEST(DebugOverlayTest, CamLine) {
     // distance (the wheel-zoom readout, one decimal: the kZoomStep 0.5
     // grid) + the fly marker (the double-tap Space toggle).
     DebugInfo none;
-    EXPECT_EQ(debugOverlayLines(none).size(), 20u);
+    EXPECT_EQ(debugOverlayLines(none).size(), 21u); // V3-10d2 +dragon line
     EXPECT_EQ(debugOverlayLines(none)[17], "cam (none)");
     DebugInfo back;
     back.camMode = "ThirdBack";
@@ -102,7 +107,7 @@ TEST(DebugOverlayTest, GamepadLine) {
     // "gamepad: <name>" otherwise (the SDL device name; "unknown" when
     // SDL has no mapping for the device).
     DebugInfo none;
-    EXPECT_EQ(debugOverlayLines(none).size(), 20u);
+    EXPECT_EQ(debugOverlayLines(none).size(), 21u); // V3-10d2 +dragon line
     EXPECT_EQ(debugOverlayLines(none)[18], "gamepad: none");
     DebugInfo xbox;
     xbox.gamepadConnected = true;
@@ -217,13 +222,30 @@ TEST(DebugOverlayTest, EngagedStreamingAndOpenInventory) {
 }
 
 TEST(DebugOverlayTest, DimensionLine) {
-    // V3-1 Phase B: the dimension line (the F3's last line — the 19 ->
-    // 20 pin): "dimension overworld" (the default — a unit-test
-    // DebugInfo with no dimension filled, the no-nether session's
-    // value) / "dimension nether" (the player is in the nether).
+    // V3-1 Phase B: the dimension line (the 19 -> 20 pin): "dimension
+    // overworld" (the default — a unit-test DebugInfo with no
+    // dimension filled, the no-nether session's value) / "dimension
+    // nether" (the player is in the nether).
     DebugInfo none;
     EXPECT_EQ(debugOverlayLines(none)[19], "dimension overworld");
     DebugInfo nether;
     nether.dimension = "nether";
     EXPECT_EQ(debugOverlayLines(nether)[19], "dimension nether");
+}
+
+TEST(DebugOverlayTest, DragonLine) {
+    // V3-10d2: the dragon line (the F3's 20 -> 21 pin — the boss's
+    // session-state readout, the F3's English discipline): "(none)"
+    // baseline for the no-End session / a unit-test DebugInfo with no
+    // data, the state words for the filled values.
+    DebugInfo none;
+    EXPECT_EQ(debugOverlayLines(none)[20], "dragon (none)");
+    for (const char* st :
+         {"orbit", "strafe", "perch", "spawn 60f", "ascend 12/240",
+          "summon 45f", "egg", "egg respawn 3210f", "none"}) {
+        DebugInfo d;
+        d.dragon = st;
+        EXPECT_EQ(debugOverlayLines(d)[20], std::string("dragon ") + st)
+            << st;
+    }
 }

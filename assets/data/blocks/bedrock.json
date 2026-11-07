@@ -1,6 +1,7 @@
 {
   "id": "bedrock",
   "properties": {
+    "crystal_base": true,
     "hardness": 0,
     "destroyable": false
   },
