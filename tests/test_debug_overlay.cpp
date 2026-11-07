@@ -39,10 +39,10 @@ TEST(DebugOverlayTest, LinesFormat) {
     // V3-1 Phase B: 19 -> 20 (the dimension line); V3-10d2: 20 -> 21
     // (the dragon line — the F3's last line, the boss's session-state
     // readout).
-    ASSERT_EQ(lines.size(), 21u);
+    ASSERT_EQ(lines.size(), 22u);
     // Pinned literal (deliberately NOT the TM_VERSION macro): a version
     // bump must force a conscious update of this pin.
-    EXPECT_EQ(lines[0], "TokenMine.cpp v3.29.0");
+    EXPECT_EQ(lines[0], "TokenMine.cpp v3.30.0");
     EXPECT_EQ(lines[1], "60 FPS | frame 1234");
     EXPECT_EQ(lines[2], "chunks 2312 | draws 45 | verts 987654");
     EXPECT_EQ(lines[3], "pos 0.50, 54.00, -34.70  yaw 0.00  pitch -0.25");
@@ -81,6 +81,8 @@ TEST(DebugOverlayTest, LinesFormat) {
     // V3-10d2: the dragon line — a unit-test DebugInfo with no dragon
     // data renders the baseline "(none)" (the no-End session's value).
     EXPECT_EQ(lines[20], "dragon (none)");
+    // V3-12c1: the players line — the no-net baseline "solo".
+    EXPECT_EQ(lines[21], "players solo");
 }
 
 TEST(DebugOverlayTest, CamLine) {
@@ -88,7 +90,7 @@ TEST(DebugOverlayTest, CamLine) {
     // distance (the wheel-zoom readout, one decimal: the kZoomStep 0.5
     // grid) + the fly marker (the double-tap Space toggle).
     DebugInfo none;
-    EXPECT_EQ(debugOverlayLines(none).size(), 21u); // V3-10d2 +dragon line
+    EXPECT_EQ(debugOverlayLines(none).size(), 22u); // V3-10d2 +dragon line
     EXPECT_EQ(debugOverlayLines(none)[17], "cam (none)");
     DebugInfo back;
     back.camMode = "ThirdBack";
@@ -107,7 +109,7 @@ TEST(DebugOverlayTest, GamepadLine) {
     // "gamepad: <name>" otherwise (the SDL device name; "unknown" when
     // SDL has no mapping for the device).
     DebugInfo none;
-    EXPECT_EQ(debugOverlayLines(none).size(), 21u); // V3-10d2 +dragon line
+    EXPECT_EQ(debugOverlayLines(none).size(), 22u); // V3-10d2 +dragon line
     EXPECT_EQ(debugOverlayLines(none)[18], "gamepad: none");
     DebugInfo xbox;
     xbox.gamepadConnected = true;

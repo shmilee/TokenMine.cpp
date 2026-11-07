@@ -2871,10 +2871,17 @@ Result<void> Game::init(const GameArgs& args) {
         MC_TRY(netHostHandshake());
     }
     if (m_netActive && !m_netIsHost) {
-        // The client's OWN player (slot 1 — the localPlayer's body;
-        // the host's player 0 is the init's normal construction, the
-        // primary's alias target).
-        netAddPlayer(1);
+        // The c1's N-generalization: the client creates EVERY other
+        // player's body (slots 1..n-1 — the lockstep simulates every
+        // player on every machine; player 0, the host's body, is the
+        // init's normal construction). The 12b's single netAddPlayer(1)
+        // breaks at N>2 (the local slot 2's body missing = the
+        // out-of-range read's segfault, and the client's hash feeding
+        // its own 2-player count against the host's 3 = the f0
+        // desync's twin — the gate-catch pair).
+        for (std::size_t slot = 1; slot < m_frameRings.size(); ++slot) {
+            netAddPlayer(slot);
+        }
     }
     if (m_args.scriptFile.has_value()) {
         m_scriptPlayer.emplace(*m_args.scriptFile);

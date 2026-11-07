@@ -145,6 +145,15 @@ struct Reader {
         off += len;
         return s;
     }
+    std::string str8_len(std::uint16_t len) { // {u16-len bytes, len given}
+        if (off + len > n) {
+            ok = false;
+            return {};
+        }
+        std::string s(reinterpret_cast<const char*>(p + off), len);
+        off += len;
+        return s;
+    }
     void skip(std::size_t k) {
         if (off + k > n) {
             ok = false;
@@ -595,6 +604,33 @@ void netFeedPlayer(Fnv64& h, std::size_t i, const Player& p,
     }
 }
 
+
+std::vector<std::uint8_t> packChat(std::uint8_t slot, const std::string& text) {
+    std::string capped = text;
+    if (capped.size() > 256) {
+        capped = capped.substr(0, 256); // the cap's belt (the client's
+                                        // frameText bound is 256)
+    }
+    std::vector<std::uint8_t> v;
+    putU8(v, slot);
+    putU16(v, static_cast<std::uint16_t>(capped.size()));
+    for (char c : capped) {
+        v.push_back(static_cast<std::uint8_t>(c));
+    }
+    return v;
+}
+
+bool unpackChat(const std::uint8_t* p, std::size_t n, std::uint8_t& slot,
+                std::string& text) {
+    Reader r {p, n};
+    slot = r.u8();
+    const std::uint16_t len = r.u16();
+    if (len > 256) {
+        return false; // the cap's wire face
+    }
+    text = r.str8_len(len);
+    return r.ok;
+}
 
 std::uint64_t netStateHash(const Game& g) {
     // The design §2.3's field list (the R15's single source — the

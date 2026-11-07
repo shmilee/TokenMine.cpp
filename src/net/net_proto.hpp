@@ -42,6 +42,7 @@ enum class NetType : std::uint8_t {
     Input = 4, // client -> host, every frame: the FrameState + the hash
     Frame = 5, // host -> client, every frame: dt + everyone's states
     Ctrl = 6, // host -> client, frame-boundary: the leave / the disconnect
+    Chat = 7, // V3-12c1: the chat relay (client -> host, host rebroadcasts)
 };
 // The input delay D (design §2.4's 38-42ms read: D x 16.7ms + RTT/2).
 inline constexpr std::uint8_t kNetInputDelay = 2;
@@ -51,9 +52,11 @@ inline constexpr std::uint8_t kNetHashInterval = 30;
 // the "FrameState ~40B" of the design; the text stays 0 in 12b, the
 // field is reserved for the 12c chat's carrier).
 inline constexpr std::size_t kNetFrameStateBytes = 40;
-// The 12b player cap (design D14: the protocol is fixed-size for
-// kNetMaxPlayers; 12b runs exactly 2).
-inline constexpr std::uint8_t kNetMaxPlayers = 2;
+// The player cap (design D14: the protocol is fixed-size for
+// kNetMaxPlayers; 12b ran exactly 2 — the c1 N-generalization lifts
+// the host's accept to the cap, the FrameState array's count rides
+// the FRAME's u8).
+inline constexpr std::uint8_t kNetMaxPlayers = 8;
 
 // The FRAME STATE (design §2.3): one player's input for one frame —
 // the level-triggered keys (the OR of the two sources, the V3-8
@@ -160,12 +163,35 @@ bool unpackFrame(const std::uint8_t* p, std::size_t n, std::uint32_t& frame,
 std::vector<std::uint8_t> packCtrl(const NetCtrl& c);
 bool unpackCtrl(const std::uint8_t* p, std::size_t n, NetCtrl& out);
 
+// The CHAT's payload (V3-12c1, the D4's carrier): {slot u8, u16 len,
+// text bytes} — the text is the T-key's typed Latin (the 12b's
+// textLen-0 FrameState reservation's distinct packet shape: chat is
+// PRESENTATION, never the sim — the hash excludes it by construction).
+// The 256-char cap (the MC 256's read, the kFrameTextMax's double).
+std::vector<std::uint8_t> packChat(std::uint8_t slot, const std::string& text);
+bool unpackChat(const std::uint8_t* p, std::size_t n, std::uint8_t& slot,
+                std::string& text);
+
 // The REJECT's payload (host -> client, the HELLO's named refusal): a
 // short reason string (the S6's eight faces each name their own:
 // magic / version / sim / assetFNV / configHash / window / port /
 // the save-mutex — the version-lie's naming precedent).
 std::vector<std::uint8_t> packReject(const std::string& reason);
 bool unpackReject(const std::uint8_t* p, std::size_t n, std::string& reason);
+
+// V3-12c1: the chat's Latin-only sanitizer (the c1's font face: the
+// chat's render is the Latin subset, the zero-glyph discipline — a
+// non-Latin byte drops, the empty result = the send's no-op). The
+// inline (the game_ui's chat input + the game_net's relay share it).
+inline std::string latinOnly(const std::string& in) {
+    std::string out;
+    for (unsigned char c : in) {
+        if (c >= 0x20 && c <= 0x7E) {
+            out.push_back(static_cast<char>(c));
+        }
+    }
+    return out;
+}
 
 // -- The FNV-1a 64 (the project's hash discipline — the
 // tests/test_font.cpp's twin; the incremental feed form: the state

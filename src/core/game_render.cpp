@@ -25,12 +25,6 @@ namespace mc {
 
 namespace {
 
-constexpr float kFovDegrees = 70.0f;
-
-constexpr float kNear = 0.1f;
-
-constexpr float kFar = 1000.0f;
-
 // PRE-3 water ripples: the shimmer's phase period in FRAMES (2.0 s at the
 // 60 FPS cap — the frame-locked class, hard rule 8; the phase is a pure
 // function of m_frameCount, so the animation is byte-reproducible and the

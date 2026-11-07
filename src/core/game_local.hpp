@@ -101,6 +101,14 @@ constexpr int kDragonAscentTotalFrames = 240;
 constexpr double kDragonFireballCloudDuration = 5.0;
 constexpr float kDragonFireballCloudRadius = 2.5f;
 
+// V3-12c1 (the nameplate's projection): the camera's fixed constants
+// (the game_render's file-local trio, moved to the shared header —
+// the nameplate's world->screen read must use the SAME fov / near /
+// far as the 3D pass, the projection's single source).
+inline constexpr float kFovDegrees = 70.0f;
+inline constexpr float kNear = 0.1f;
+inline constexpr float kFar = 1000.0f;
+
 // V3-10d: the XP burst's orb count + the every-5-frames release
 // cadence (the MC 155-tick/5-tick read's frame scale; 22 x 9 + 1 x 2 =
 // 200 — the first kill's project-scale XP).

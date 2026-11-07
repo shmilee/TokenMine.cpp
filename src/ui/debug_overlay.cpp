@@ -123,6 +123,10 @@ std::vector<std::string> debugOverlayLines(const DebugInfo& info) {
         // no-End session / a unit-test DebugInfo with no data filled).
         info.dragon.empty() ? std::string("dragon (none)")
                             : fmt("dragon %s", info.dragon.c_str()),
+        // V3-12c1: the players line (the lobby's developer face — the
+        // F3 stays English, the Latin names; empty = "solo").
+        info.players.empty() ? std::string("players solo")
+                             : fmt("players %s", info.players.c_str()),
     };
 }
 

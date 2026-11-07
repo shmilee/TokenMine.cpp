@@ -2996,7 +2996,11 @@ std::optional<MobHit> targetMob() const;
     // client's removal + the solo continuation). nullptr = no net
     // session (the structural-immunity root: every net hook gates on
     // m_netActive, the solo loop is the pre-V3-12b sequence).
-    std::unique_ptr<NetSession> m_net;
+    // The transport (host: one connection per remote player; client:
+    // the single host connection). nullptr/empty = no net session (the
+    // structural-immunity root: every net hook gates on m_netActive,
+    // the solo loop is the pre-V3-12b sequence).
+    std::vector<std::unique_ptr<NetSession>> m_nets;
     bool m_netActive = false;
     bool m_netIsHost = false;
     bool netActive() const { return m_netActive; }
@@ -3006,22 +3010,42 @@ std::optional<MobHit> targetMob() const;
     // The per-player FrameState rings (the depth D+1 — the frame N's
     // read is (N-D) % (D+1); the unified delay rule, design D3's
     // no-prediction: the local player's own frame is relayed like the
-    // remote's, no local fast-path).
-    std::array<std::vector<FrameState>, kNetMaxPlayers> m_frameRings;
+    // remote's, no local fast-path). Sized by the player count (the
+    // c1 N-generalization — the 12b fixed pair's shape generalizes to
+    // the protocol's kNetMaxPlayers).
+    std::vector<std::vector<FrameState>> m_frameRings;
     // The per-player SIM Input (the preloadFrame's target — the
     // inputFor's net branch; the solo's live m_input stays the sim
     // source in the no-net run).
-    std::array<Input, kNetMaxPlayers> m_netInputs;
+    std::vector<Input> m_netInputs;
     // The host's own frame hashes (the client's hash compare — the
     // INPUT's carried hash vs the host's computed-for-that-frame, the
     // ring depth = the hash interval).
     std::array<std::uint64_t, kNetHashInterval> m_hostHashRing {};
-    // The host's lockstep barrier's watermark (the highest client
-    // frame whose INPUT has arrived — the host's pre(N) blocks until
-    // the client's INPUT[N-D] lands, the mutual barrier's host half:
-    // a fast host eating the client's not-yet-sent input = the
+    // The host's lockstep barrier's watermarks (the highest frame whose
+    // INPUT has arrived, per REMOTE slot — the host's pre(N) blocks
+    // until every remote's INPUT[N-D] lands, the mutual barrier's host
+    // half: a fast host eating a remote's not-yet-sent input = the
     // silent-desync root the barrier's existence).
-    std::uint32_t m_clientFrameMax = 0;
+    std::vector<std::uint32_t> m_remoteFrameMax;
+    // V3-12c1 (the lobby): the per-slot HELLO names (<=12 Latin — the
+    // nameplate's + the F3 player line's carrier; the 12b's "client"
+    // default for slot 1's shape generalizes).
+    std::vector<std::string> m_playerNames;
+    // The c1's chat's overlay (the 8-line ring — the render's face;
+    // the frame stamp's fade). Presentation only (the hash's
+    // exclusion by construction).
+    struct ChatLine {
+        int frame = 0;
+        std::string who;
+        std::string text;
+    };
+    std::vector<ChatLine> m_chatLines;
+    // The chat's INPUT state (the T toggle's local face — the live
+    // pump, never the sim: the chat is presentation, the hash's
+    // exclusion by construction).
+    bool m_chatInputActive = false;
+    std::string m_chatBuffer;
     // --script: the timeline's injection kernel (the demo player's
     // shape, the dts ignored — the net's dt is the broadcast's).
     std::optional<DemoPlayer> m_scriptPlayer;
@@ -3041,6 +3065,16 @@ std::optional<MobHit> targetMob() const;
     // ONLY time source).
     std::string netFramePre(double& dt);
     std::string netFramePost(double dt, std::size_t F);
+    // The c1's per-remote consumption (the poll + the INPUT's file +
+    // the CHAT's relay — the barrier's select's fan-in face).
+    void netConsumeRemote(std::size_t r);
+    // The c1's chat's send / display (the presentation face — the
+    // hash's exclusion by construction).
+    void netSendChat(const std::string& text);
+    void displayChat(int slot, const std::string& text);
+    // The session-end's send tolerance (the final frame's broken pipe
+    // = the peer's clean exit, the gate's --frames face).
+    bool finalFrame(std::size_t F) const;
     FrameState captureLocalFrameState() const;
     void preloadNetInputs();
     // The player add / remove (the connect's slot 1 / the disconnect's

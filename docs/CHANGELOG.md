@@ -11,6 +11,37 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.30.0（2026-11-07）— V3-12c1 大厅/聊天/N 泛化/心跳（门 220 全 PASS）
+
+**V3-12 多人收官相位 c1**（**format 32 不变**【大厅/聊天/名牌全表
+现层】/ **sim 2 不 bump**【canary 4 EXACT 执法】/ kNetMaxPlayers
+2→8 协议形）：**N 泛化** = accept 窗 N 定形【首客 10s 阻塞 + 3s 窗
+250ms 截止重试【单次静默 break = 门内捕获坑】+ WELCOME 窗后统一
+flush 同 N】+ 客户端全槽体【每机模拟每玩家——netAddPlayer(1) 硬编
+码 slot 2 segfault 门内捕获修】；**大厅** = 第三人称名牌【world→
+screen 投影常量三件套 game_local.hpp 共享，本地玩家无牌】+ F3 第
+22 行 players【Latin 零新字形，test re-pin】（MOTD 并入 V3-17 主
+菜单项）；**聊天** = T 切换【net 下 T = 聊天，教程跳过 solo only
+D12 延伸】+ frameText 活 pump 本地面 + CHAT 包 type 7【slot/u16
+len/≤256B 客户端→主机重广播】+ 8 行环浮层 300f 淡出 + Latin only
+零字形 + **打字抑制**【typed 'e' 开面板截断消息的门内捕获修——
+Input 可打印域 owner 机捕获前本地吞，中继态干净零】+ 表现层结构
+不入哈希；**心跳** = 屏障 stall **min 水印** 10s 点名移除最滞后
+【anyProgress 健康同伴遮死者的死锁形门内捕获修】；**E 面板中继
+修** = 边沿全玩家处理 + 窗口/声音动作 localOwner 自门【isLocal 门
+= 主机玩家面板 desync f570 门内捕获根】。门 220：S1 第 101 次（≡
+base19 ×2 + EXACT）+ canary 4 EXACT + mobs-on EXACT / **3P 锁步臂
+×4 批次哈希跨批逐字恒等 + 主机档跨批 EXACT + 零 desync**【截图
+RAW ×2 各进程至少一批全干净；Mesa 无头前缓冲读回竞态纯彩块 = PITS
+环境面】/ 大厅截图臂【--script 确定性视角 yaw -88.8°：名牌 + F3
+players 行 + ThirdBack OCR 实证】/ 聊天臂【xdotool T+type+Return
+双进程日志 "net chat[host]: hello gate" 逐字 + 浮层 OCR】/ S6 八面
+复验 + accept 窗 2 新面【2 客→N=3 / 窗 3.01s 超时→N=2】/ 性能 A/B
+同档【旧 = 1f2e10f v3.29.0 + g139 双树：banner 实证 v3.29.0/v3.30.0 + OW 900f 无输入：PERF-WIN 三窗 upd med 0.426/0.444/0.426 vs 0.399/0.402/0.497 同档 + render 0.495/0.480/0.433 vs 0.464/0.456/0.507 同档 + swap 15.6 同档 + changesApplied 9/3/1 逐位 + 终档 savenorm EXACT 零 format 最强形 = 大厅/聊天/N 泛化/打字抑制的 solo 路径（净面全冷 + 抑制旗 solo 恒 false）结构性零成本；净自成本（新树 mobs-off 600f）：solo upd med 0.472/0.424 vs 2P 主机 0.687/0.729 vs 3P 主机 0.736/0.402 = +~0.2-0.26ms/帧（per-player sim pass + per-remote 轮询/屏障 + socket，sub-ms 同档），render 0.452/0.525/0.561 同档 + swap med 15.5/14.9/14.6 同档【net 跑 swap max ~30ms = 屏障等待尖峰预期】+ 零 desync】/ 2974/2974。PITS 411（九坑：accept 窗单
+次 break / ms-s 混用 / 客户端全槽体 / E isLocal 门 / typed 'e' 截
+断 / Mesa 读回竞态 / WM 平铺几何 / 尾帧 broken pipe / 屏障 min 水
+印）。详见 `docs/archive/phase-3.30.0.md`。
+
 ## v3.29.0（2026-11-07）— V3-12b 2 人多人 PoC（门 219 全 PASS，矩阵收官前最后一版）
 
 **矩阵最后项 V3-12 多人相位 12b = 2 人局域网 lockstep PoC**（设计稿

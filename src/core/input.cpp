@@ -48,6 +48,9 @@ std::optional<GameKey> Input::mapKey(std::uint32_t sdlKeycode) {
         case SDLK_9: return GameKey::Digit9;
         // V3-11a: the creative mode toggle (the C-key's game-mode twin).
         case SDLK_G: return GameKey::G;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER:
+            return GameKey::Enter; // V3-12c1: the chat's send
         default: return std::nullopt;
     }
 }
@@ -218,6 +221,13 @@ void Input::handleKey(std::uint32_t sdlKeycode, bool down) {
     // frame flag is its only carrier.
     if (down && sdlKeycode == SDLK_BACKSPACE) {
         m_frameBackspace = true;
+    }
+    // V3-12c1: the typing's suppression (the net chat's open) — the
+    // printable range is the chat text's carrier only (the
+    // setTypingSuppressed's contract; the Backspace's flag above keeps
+    // its delivery, the chat's delete).
+    if (m_typingSuppressed && sdlKeycode >= 0x20u && sdlKeycode <= 0x7eu) {
+        return;
     }
     auto key = mapKey(sdlKeycode);
     if (!key) {

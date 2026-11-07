@@ -274,6 +274,50 @@ void Game::handleUiKeys() {
             kZoomMin, kZoomMax);
     }
 
+    // V3-12c1: the net's CHAT input (the local machine's act — the T
+    // toggle + the frameText's accumulation + the Enter's send / the
+    // ESC's cancel; the live pump's face, never the sim: the chat is
+    // presentation, the hash's exclusion by construction). The solo's
+    // T stays the tutorial's skip (the ×N group's gate above).
+    if (netActive()) {
+        if (m_chatInputActive) {
+            m_chatBuffer += m_input.frameText();
+            if (m_input.frameBackspace() && !m_chatBuffer.empty()) {
+                m_chatBuffer.pop_back();
+            }
+            if (m_input.wasPressed(GameKey::Enter)) {
+                const std::string text = latinOnly(m_chatBuffer);
+                if (!text.empty()) {
+                    if (m_netIsHost) {
+                        displayChat(0, text);
+                        for (auto& sess : m_nets) {
+                            (void)sess->send(NetType::Chat, packChat(0, text));
+                        }
+                    } else {
+                        displayChat(m_localSlot, text);
+                        netSendChat(text);
+                    }
+                }
+                m_chatBuffer.clear();
+                m_chatInputActive = false;
+                m_window.setTextInputEnabled(false);
+                m_input.setTypingSuppressed(false);
+            } else if (m_input.wasPressed(GameKey::Escape)) {
+                m_chatInputActive = false;
+                m_chatBuffer.clear();
+                m_window.setTextInputEnabled(false);
+                m_input.setTypingSuppressed(false);
+            }
+        } else if (m_input.wasPressed(GameKey::T) &&
+                   m_window.relativeMouseMode() && !panelOpen() &&
+                   !localPlayer()->isDead()) {
+            m_chatInputActive = true;
+            m_chatBuffer.clear();
+            m_window.setTextInputEnabled(true);
+            m_input.setTypingSuppressed(true);
+        }
+    }
+
     // The ×N SIM group.
     for (std::size_t i = 0; i < m_players.size(); ++i) {
         Player& p = *m_players[i];
@@ -316,9 +360,13 @@ void Game::handleUiKeys() {
         }
         // UX-7 / V2-3: T skips the tutorial (locked pointer only). D12:
         // the tutorial anchors the PRIMARY in 12b (host-only — the
-        // client's user's T is a no-op, the host's T relays).
-        if (i == 0 && in.wasPressed(GameKey::T) && locked &&
-            s.tutorialEnabled && !s.tutorial.done) {
+        // client's user's T is a no-op, the host's T relays). V3-12c1:
+        // the SOLO-only gate — the net's T is the chat's toggle (the
+        // local face), the tutorial-skip's net deferral (the D12's
+        // host-only + the c1's chat's distinct key).
+        if (i == 0 && m_players.size() == 1 &&
+            in.wasPressed(GameKey::T) && locked && s.tutorialEnabled &&
+            !s.tutorial.done) {
             if (s.tutorial.seriesIndex + 1 <
                 static_cast<int>(m_tutorialSeries.size())) {
                 s.tutorial.seriesIndex += 1;
@@ -337,22 +385,47 @@ void Game::handleUiKeys() {
         // player's E is a no-op in 12b — its inventory moves only via
         // the Q drop + the pickup's world state).
         const bool isLocal = (i == static_cast<std::size_t>(m_localSlot));
-        if (isLocal && in.wasPressed(GameKey::E)) {
+        // V3-12c1: the E / panel-ESC's edge is the RELAYED input's —
+        // processed for EVERY player on every machine (the panel state
+        // is the simulation; the owner machine's physical press is
+        // what generates the edge, captured + relayed like every other
+        // key). The isLocal gate was the 12b's "the remote's E is a
+        // no-op" reading — it desyncs the host player's panel (the
+        // client ignores the host's E, the host pauses the body, the
+        // frame-N hash trips — the gate-catch's root). The window
+        // acts self-gate inside openPanelFor / closePanelFor (the
+        // localOwner's check), so a remote player's panel never
+        // touches this machine's pointer / text input.
+        if (in.wasPressed(GameKey::E)) {
             if (s.panel.openPanel != OpenPanel::None) {
                 closePanelFor(p, s);
             } else if (locked) {
                 openPanelFor(p, s, OpenPanel::Inventory);
             }
         }
-        if (isLocal && s.panel.openPanel != OpenPanel::None &&
+        if (s.panel.openPanel != OpenPanel::None &&
             in.wasPressed(GameKey::Escape)) {
             closePanelFor(p, s);
         }
+        (void)isLocal;
     }
 }
 
 void Game::openPanelFor(Player& p, PlayerSession& s, OpenPanel panel) {
-    m_window.setRelativeMouseMode(false); // free the cursor for clicking
+    // V3-12c1: the WINDOW + SOUND acts are the LOCAL presentation (the
+    // pointer free / the text input / the ui_open timbre are this
+    // machine's window's facts) — applied only when the panel's owner
+    // is this machine's player. The PANEL STATE (s.panel + the channel
+    // resets) is SIMULATION — it runs for every player's E / RMB edge
+    // on every machine (the relayed input's face — the isLocal-gate's
+    // host-player-panel desync's gate-catch fix: the client ignored
+    // the host player's E, the host paused the body's physics, the
+    // frame-N hash tripped). Solo: the single player is always the
+    // local one — the original acts, bit-identical.
+    const bool localOwner = (&p == localPlayer());
+    if (localOwner) {
+        m_window.setRelativeMouseMode(false); // free the cursor for clicking
+    }
     s.panel.openPanel = panel;
     resetBreaking(s);
     resetBowDraw(s); // a panel interrupts a draw (Phase 24)
@@ -368,9 +441,11 @@ void Game::openPanelFor(Player& p, PlayerSession& s, OpenPanel panel) {
         s.panel.creativeUi.reset();
         s.panel.creativeTab = 0;
     }
-    m_window.setTextInputEnabled(
-        panel == OpenPanel::Inventory && p.isCreative());
-    m_sound.play("ui_open");
+    if (localOwner) {
+        m_window.setTextInputEnabled(
+            panel == OpenPanel::Inventory && p.isCreative());
+        m_sound.play("ui_open");
+    }
 }
 
 void Game::closePanelFor(Player& p, PlayerSession& s) {
@@ -387,9 +462,16 @@ void Game::closePanelFor(Player& p, PlayerSession& s) {
     // V3-11b: the typed text is a creative-Inventory-panel state — a
     // close (of any panel) stops it (the open's twin; SDL3's default
     // stays off, so the no-input run's immunity holds across close).
-    m_window.setTextInputEnabled(false);
+    // V3-12c1: the window/text-input act is the local owner's only
+    // (the openPanelFor's twin — a remote player's close must not
+    // touch this machine's text input).
+    if (&p == localPlayer()) {
+        m_window.setTextInputEnabled(false);
+    }
     s.panel.openPanel = OpenPanel::None;
-    m_sound.play("ui_close");
+    if (&p == localPlayer()) {
+        m_sound.play("ui_close");
+    }
 }
 
 // Phase 44: the furnace panel opens for ONE block — bind the UI to that
@@ -2430,6 +2512,62 @@ void Game::renderUi() {
         } // the ordinaryFace (the 背包 tab / the survival's face)
     }
 
+    // -- V3-12c1: the net's CHAT overlay (the 8-line ring's bottom-
+    // left — the frame stamp's 300-frame = 5-s fade; the Latin's
+    // zero-glyph face; the input prompt's caret line while active) ----
+    if (netActive() && (!m_chatLines.empty() || m_chatInputActive)) {
+        const int chatLineH = 16;
+        const int chatX = kF3Margin;
+        const int nLines =
+            static_cast<int>(m_chatLines.size()) + (m_chatInputActive ? 1 : 0);
+        int chatY = h - kF3Margin - nLines * chatLineH;
+        for (const ChatLine& cl : m_chatLines) {
+            const int age = m_frameCount - cl.frame;
+            if (age <= 300) {
+                addText(cl.who + ": " + cl.text, chatX, chatY, 1.0f, kText);
+            }
+            chatY += chatLineH;
+        }
+        if (m_chatInputActive) {
+            addText("> " + m_chatBuffer + "_", chatX, chatY, 1.0f, kText);
+        }
+    }
+
+    // -- V3-12c1: the NAMEPLATE (the remote player's Latin name above
+    // the head — the lobby's render face; the world->screen
+    // projection's the 3D pass's same fov / near / far, the shared
+    // constants' single source; the local player's no plate, the
+    // first-person's absence). -------------------------------
+    if (netActive() && m_cameraMode != CameraMode::First) {
+        const Mat4 projection = Mat4::perspective(
+            kFovDegrees * static_cast<float>(M_PI) / 180.0f,
+            static_cast<float>(w) / static_cast<float>(h), kNear, kFar);
+        const Mat4 view = m_camera.viewMatrix();
+        const Mat4 vp = Mat4::multiply(projection, view);
+        for (std::size_t i = 0; i < m_players.size(); ++i) {
+            if (i == static_cast<std::size_t>(m_localSlot)) {
+                continue; // the local player's own plate = the first
+                           // person's absence (the MC's twin)
+            }
+            const Player& pl = *m_players[i];
+            const Vec3 head =
+                pl.position() + Vec3 {0.0f, pl.params().height + 0.3f, 0.0f};
+            const Vec3 ndc = vp.transformPoint(head);
+            if (ndc.z < -1.0f || ndc.z > 1.0f) {
+                continue; // behind the camera / past the far plane
+            }
+            const int sx =
+                static_cast<int>(std::lround((ndc.x + 1.0f) * 0.5f * w));
+            const int sy =
+                static_cast<int>(std::lround((1.0f - ndc.y) * 0.5f * h));
+            const std::string name =
+                (i < m_playerNames.size()) ? m_playerNames[i]
+                                           : ("player" + std::to_string(i));
+            const int half = static_cast<int>(name.size()) * 4;
+            addText(name, sx - half, sy - 10, 1.0f, kText);
+        }
+    }
+
     // -- F3 debug overlay (while toggled) ------------------------------------
     if (m_debugOverlay) {
         DebugInfo info;
@@ -2574,6 +2712,20 @@ void Game::renderUi() {
         info.dimension =
             playerInNether() ? "nether"
             : playerInEnd() ? "end" : "overworld";
+        // V3-12c1: the players line (the lobby's developer face — the
+        // Latin names; the solo's "solo" baseline).
+        if (netActive()) {
+            info.players = std::to_string(m_players.size()) + ": ";
+            for (std::size_t i = 0; i < m_players.size(); ++i) {
+                if (i > 0) {
+                    info.players += "; ";
+                }
+                info.players +=
+                    (i < m_playerNames.size())
+                        ? m_playerNames[i]
+                        : ("player" + std::to_string(i));
+            }
+        }
         // V3-10d2: the dragon line (the boss's session-state readout —
         // the End only; a no-End session renders the "(none)" baseline,
         // the F3's English developer-tool discipline).

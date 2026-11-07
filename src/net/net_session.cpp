@@ -40,6 +40,41 @@ bool readable(int fd, int timeoutSec) {
 }
 } // namespace
 
+std::vector<int> NetSession::selectReady(const std::vector<int>& fds,
+                                         int timeoutMs) {
+    std::vector<int> ready;
+    if (fds.empty()) {
+        return ready;
+    }
+    int maxfd = -1;
+    fd_set set;
+    FD_ZERO(&set);
+    for (int fd : fds) {
+        if (fd < 0) {
+            continue;
+        }
+        FD_SET(fd, &set);
+        if (fd > maxfd) {
+            maxfd = fd;
+        }
+    }
+    if (maxfd < 0) {
+        return ready;
+    }
+    timeval tv {0, timeoutMs < 0 ? -1 : timeoutMs * 1000};
+    const int n = select(maxfd + 1, &set, nullptr, nullptr,
+                         timeoutMs < 0 ? nullptr : &tv);
+    if (n <= 0) {
+        return ready;
+    }
+    for (int fd : fds) {
+        if (fd >= 0 && FD_ISSET(fd, &set)) {
+            ready.push_back(fd);
+        }
+    }
+    return ready;
+}
+
 NetSession::~NetSession() {
     close();
 }
@@ -175,7 +210,8 @@ std::string NetSession::waitPacket(NetPacket& out, int timeoutSec) {
     }
 }
 
-std::string NetSession::startHost(std::uint16_t port, NetHello& outHello) {
+std::string NetSession::startHost(std::uint16_t port, NetHello& outHello,
+                                  int timeoutMs) {
     const int listenFd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listenFd < 0) {
         return "net listen socket: " + errnoStr();
@@ -197,14 +233,35 @@ std::string NetSession::startHost(std::uint16_t port, NetHello& outHello) {
         ::close(listenFd);
         return err;
     }
-    MC_LOG_INFO("net: listening on port " + std::to_string(port));
+    MC_LOG_DEBUG("net: listening on port " + std::to_string(port));
+    // The accept's select (the timeout's ms — the first client's
+    // blocking 10-s / the accept window's 250-ms attempt).
     sockaddr_in peer {};
     socklen_t plen = sizeof(peer);
-    m_sock = ::accept(listenFd, reinterpret_cast<sockaddr*>(&peer), &plen);
-    ::close(listenFd);
-    if (m_sock < 0) {
-        return "net accept: " + errnoStr();
+    for (;;) {
+        fd_set set;
+        FD_ZERO(&set);
+        FD_SET(listenFd, &set);
+        timeval tv {timeoutMs / 1000, (timeoutMs % 1000) * 1000};
+        const int sel = ::select(listenFd + 1, &set, nullptr, nullptr, &tv);
+        if (sel < 0) {
+            const std::string err = "net accept select: " + errnoStr();
+            ::close(listenFd);
+            return err;
+        }
+        if (sel == 0) {
+            const std::string err = "net accept timed out (no client in " +
+                                    std::to_string(timeoutMs) + " ms)";
+            ::close(listenFd);
+            return err;
+        }
+        m_sock = ::accept(listenFd, reinterpret_cast<sockaddr*>(&peer), &plen);
+        if (m_sock < 0) {
+            continue; // the spurious wakeup: re-select
+        }
+        break;
     }
+    ::close(listenFd);
     char ip[INET_ADDRSTRLEN] = "?";
     ::inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
     MC_LOG_INFO("net: client connected from " + std::string(ip) + ":" +

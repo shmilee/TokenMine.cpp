@@ -68,7 +68,49 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
-- **client 环槽偏 1 + 主机快跑屏障 + RST≠FIN + WM 平铺 + uiScale 时
+- **accept 窗单次 break + ms/s 混用 + 客户端全槽体 + E isLocal 门
+  + typed 'e' 截断 + Mesa 读回竞态 + WM 几何噪声 + 尾帧 broken
+  pipe + 屏障 min 水印九坑（PITS 411，门 220 v3.30.0 V3-12c1 大厅/
+  聊天/N 泛化/心跳）**——① **accept 窗 250ms 静默尝试单次即 break**：
+  首客后窗内无新客的第一次静默 accept 就关窗 → c2 ~1s 后连接 =
+  refused 实证；修 = 静默尝试**截止前重试**（`now - windowStart <
+  3s → continue`），窗纪律 = 首客 10s + 3s 窗 + WELCOME 窗后统一
+  flush（同 N = lockstep 前提）。② **首客 accept 超时 ms/s 混
+  用**：`kNetStallTimeoutSec`（秒）直接传给 startHost 的毫秒参
+  数 = "no client in 10 ms" 实证；纪律 = 超时常量单位入名（Sec/
+  Ms 后缀）+ 传参处显式换算。③ **客户端 netAddPlayer(1) 硬编
+  码**（12b 双人形）：N>2 下 slot 2 客户端缺自己的体（localPlayer()
+  越界 SIGSEGV）+ 客户端只模拟 2 玩家 vs 主机 3（f0 哈希 desync
+  孪生）——修 = 客户端**全槽** netAddPlayer(1..n-1)（lockstep = 每
+  机模拟每玩家，player 0 = 主机体 = 各机本机构造）；纪律 = 人数
+  泛化时逐处 grep 硬编码 slot。④ **E 面板 isLocal 门 = 主机玩家
+  面板 desync**：12b 的 `isLocal &&` 门让客户端忽略主机玩家的面
+  板边沿（主机按 E 暂停 player 0 物理，客户端不暂停）——f570 哈希
+  点名实证；修 = **E/ESC 边沿对全部玩家处理**（边沿 = 属主机物理
+  按键经捕获中继全机对称）+ 窗口/声音动作 **localOwner 自门**
+  （`&p == localPlayer()`——远程玩家的面板状态是 sim，其窗口动作不
+  碰本机指针/文本输入/声音）。⑤ **typed 'e' 开面板截断消
+  息**：聊天打字含映射键（'e'=E 面板）→ 面板 open 动作关 SDL 文
+  本输入 → 后续字符全丢（"hello gate"→"he" 实证）+ 键边沿进 sim
+  （desync 孪生）；修 = **Input 打字抑制**（可打印域 0x20..0x7e
+  在 owner 机 FrameState 捕获前本地吞，ESC/Enter/Backspace/功能键
+  存活；抑制旗 on 时清 held 键防卡键）——纪律 = **文本输入期一切实
+  键边沿必须在捕获前裁决**（表现/模拟二分在 Input 边界做）。⑥
+  **Mesa 无头前缓冲读回竞态**：3 进程并行 load 下偶发截图 = 纯彩
+  块垃圾帧（进程轮换波及，单批必有一中）——**权威 = net hash 行 +
+  savenorm**（垃圾帧批次哈希/存档全绿），截图 RAW ×2 取各进程干净
+  批次；环境面非代码缺陷，不修（前缓冲语义 PITS 388⑧ 不变）。
+  ⑦ **WM 平铺几何噪声**：3 窗并发 tiled 尺寸各异（679×245 vs
+  679×744）打截图 RAW 面——门臂 config 用 `resizable=false` 钉
+  1280×720（D19 requested parity 的截图延伸；base19 锚 = solo 窗
+  口不受扰）。⑧ **尾帧 send vs 对端干净退出竞态**：双方同
+  --frames N 终帧，主机 frame-limit break 先关 socket → 客户端最
+  后 INPUT send = broken pipe ERROR 噪声（模拟已完成 = 无害）；修
+  = finalFrame 容错（F+1 == frames 的 send 失败 = 干净退出）。
+  ⑨ **屏障 anyProgress 死锁形**：stall 检测用「任一远端达标」基准
+  → 健康同伴持续进展遮死者的静默 = 最滞后永不移除永久阻塞；修 =
+  **min 水印进展基准**（最滞后者的水印 10s 无进展 = 移除，移除后
+  重基准）。- **client 环槽偏 1 + 主机快跑屏障 + RST≠FIN + WM 平铺 + uiScale 时
   序 + seed 豁免 + 无火种子 + --new 净主机 + 起始库存 per-session
   九坑（PITS 410，门 219 v3.29.0 V3-12b 2 人多人 PoC）**——① **lock-
   step 环槽 store 偏 1**：主机侧客户端 INPUT{f} 存 f%3 正确（消费帧

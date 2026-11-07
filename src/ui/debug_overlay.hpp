@@ -91,6 +91,11 @@ struct DebugInfo {
     // readout (the developer tool's cycle visibility). Empty renders
     // the baseline "(none)" (a unit-test DebugInfo / a no-End session).
     std::string dragon;
+    // V3-12c1: the players line's data (the F3 stays English, the
+    // Latin-only names — the lobby's developer face): "solo" (no net)
+    // / "2: host; client" (the net's N + the HELLO names). Empty
+    // renders the baseline "solo".
+    std::string players;
 };
 
 // PRE-12 (the SURV-6 display boundary): the amplifier roman numeral for

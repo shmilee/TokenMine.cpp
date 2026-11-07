@@ -41,9 +41,13 @@ public:
     // shape) + the WELCOME's send (the journal payload = the host's
     // save document, the fresh world's zero-bytes). Returns "" on
     // success, the named error otherwise (the S6's port face).
-    // The accept + the HELLO's receive (the game compares the four
-    // fingerprints and sends the WELCOME / the REJECT via send()).
-    std::string startHost(std::uint16_t port, NetHello& outHello);
+    // The accept + the HELLO's receive (the game compares the HELLO's
+    // four fingerprints and sends the WELCOME / the REJECT via
+    // send()). The timeout's ms (the first client's 10-s blocking
+    // accept / the c1 accept window's 250-ms attempt — a timeout =
+    // the named error, the listen fd's close).
+    std::string startHost(std::uint16_t port, NetHello& outHello,
+                          int timeoutMs);
     // Client: the connect + the HELLO's send + the WELCOME's receive
     // (a REJECT = the named refusal surfaced to the caller, the
     // version-lie's exit-1 precedent). "" on success.
@@ -71,7 +75,15 @@ public:
     bool connected() const {
         return m_sock >= 0;
     }
+    int fd() const { return m_sock; }
     void close();
+    // V3-12c1 (the N-host's barrier): the multi-connection select —
+    // which of the fds is readable within the timeout (-1 = none).
+    // The host's lockstep barrier's wait face (a single waitPacket
+    // blocks on ONE connection — the N>2's per-remote watermark needs
+    // the fan-in).
+    static std::vector<int> selectReady(const std::vector<int>& fds,
+                                        int timeoutMs);
 
     // -- The reassembly seam (the R16's unit-test surface) ------------
     // Feed raw bytes (a split stream) + drain the whole packets —

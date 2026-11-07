@@ -117,6 +117,10 @@ enum class GameKey {
     T, // UX-7: skip the tutorial (locked pointer only)
     G, // V3-11a: the creative mode toggle (the C-key pattern — the
        // game's creative gamemode switch, no other consumer)
+    // V3-12c1: the chat's ENTER (the net's chat send key — the
+    // keyboard's Enter, the gamepad's no mapping; the solo's T
+    // tutorial-skip stays, the net's T becomes the chat's toggle).
+    Enter,
     FlyToggle, // V3-8b: the gamepad's DEDICATED flight toggle (the B/EAST
                // button — a single press flips the fly; the keyboard's
                // Space double-tap is untouched). Gamepad-only: no
@@ -217,6 +221,30 @@ public:
     static constexpr int kFrameTextMax = 256;
     const std::string& frameText() const { return m_frameText; }
     bool frameBackspace() const { return m_frameBackspace; }
+
+    // V3-12c1 (the net chat's typing): the printable-key SUPPRESSION —
+    // while on, the printable keydown/keyup (0x20..0x7e: the letters /
+    // digits / space / punctuation) are consumed by the TEXT_INPUT
+    // path alone and do NOT set the GameKey's level / edge state (the
+    // typed 'e' must not open the panel, the 'a' not steer, the
+    // 'space' not jump — the chat's gate-catch: the typed 'e' opened
+    // the inventory, its open act disabled the text input, the rest of
+    // the message was lost, and the E edge desynced the sim).
+    // Escape / Return / Backspace / the function keys stay live (the
+    // chat's cancel / send / delete). Turning it on also clears the
+    // held-key levels (a held 'w' released while typing must not
+    // stick) — the owner machine's local act, BEFORE the FrameState's
+    // capture, so the relayed state is the clean zero on every machine
+    // (no cross-machine divergence). A no-input run never sets it (the
+    // chat's T is the net's key, the solo's T is the tutorial's skip).
+    void setTypingSuppressed(bool on) {
+        m_typingSuppressed = on;
+        if (on) {
+            for (auto& k : m_keyDown) {
+                k = 0;
+            }
+        }
+    }
 
     // V3-12b (the net relay's injection seam): the FRAME-STATE preload —
     // reset to one captured frame's state (the handle*'s state-form
@@ -339,6 +367,7 @@ private:
     // kFrameTextMax characters (one frame of typing is small; the cap
     // is the synthetic-injection bound).
     std::string m_frameText;
+    bool m_typingSuppressed = false; // V3-12c1 (see setTypingSuppressed)
     // V3-11b: the frame's backspace press (the key's frame state, reset
     // by frameBegin — the search's delete; Backspace maps to no
     // GameKey, so this flag is its only carrier).
