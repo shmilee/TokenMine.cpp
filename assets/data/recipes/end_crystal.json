@@ -1,0 +1,9 @@
+{
+  "id": "end_crystal",
+  "output": { "item": "end_crystal", "count": 1 },
+  "ingredients": [
+    { "item": "glass", "count": 10 },
+    { "item": "ender_eye", "count": 1 },
+    { "item": "ghast_membrane", "count": 1 }
+  ]
+}

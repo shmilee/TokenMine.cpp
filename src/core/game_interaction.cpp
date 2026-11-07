@@ -1368,6 +1368,33 @@ void Game::breakBlock(const BlockHit& hit) {
     // frame.
     emitTutorialEvent("break." + m_blocks.at(id).name, 1);
 
+    // V3-10d (the end crystal): the break-explosion (the data flag's
+    // consumer — a block with explodeRadius > 0 detonates from its own
+    // center the moment it is broken). The explosion runs AFTER the
+    // setBlock(air) + relight (the cell is already air — the blast's
+    // scanExplosion sees the post-break world) and BEFORE the drop
+    // scatter below (the crystal ships no drops — its break is the
+    // blast itself; a drop-bearing exploding block would scatter first,
+    // the belt). explodeAt's blast damage reaches the player (the
+    // linear falloff) and mobs (the V3-14a wiring — the dragon's
+    // crystal-break self-harm is a SEPARATE data gate, not the blast:
+    // MC's crystal blast does not hurt the dragon, the
+    // crystal_break_damage's read). Radius 0 = every pre-V3-10d block
+    // bit-identical (the structural root).
+    if (brokenBlock.properties.explodeRadius > 0.0f) {
+        MC_LOG_DEBUG("block '" + brokenBlock.name + "' shattered with "
+                        "explode_radius " +
+                    std::to_string(brokenBlock.properties.explodeRadius) +
+                    " at (" + std::to_string(hit.block.x) + ", " +
+                    std::to_string(hit.block.y) + ", " +
+                    std::to_string(hit.block.z) + ") f" +
+                    std::to_string(m_frameCount));
+        explodeAt(Vec3 {static_cast<float>(hit.block.x) + 0.5f,
+                        static_cast<float>(hit.block.y) + 0.5f,
+                        static_cast<float>(hit.block.z) + 0.5f},
+                  brokenBlock.properties.explodeRadius, "");
+    }
+
     const Block& block = m_blocks.at(id);
     // The break sound stays at the exact block center (the BLOCK is the
     // sound's source, not the scattered items).

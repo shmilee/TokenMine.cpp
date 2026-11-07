@@ -13,13 +13,14 @@ Projectile::Projectile(const World& world, const BlockRegistry& blocks,
                        bool hurtPlayer, float power, std::string ammoItem,
                        int effectId, double effectDuration, int effectTier,
                        float explodeRadius, std::string explodeSource,
-                       bool teleports)
+                       bool teleports, bool leavesCloud)
     : Entity(world, blocks, pos, kSize, kSize), m_damage(damage),
       m_hurtPlayer(hurtPlayer), m_power(power),
       m_ammoItem(std::move(ammoItem)), m_effectId(effectId),
       m_effectDuration(effectDuration), m_effectTier(effectTier),
       m_explodeRadius(explodeRadius),
-      m_explodeSource(std::move(explodeSource)), m_teleports(teleports) {
+      m_explodeSource(std::move(explodeSource)), m_teleports(teleports),
+      m_leavesCloud(leavesCloud) {
     m_velocity = normalized(direction) * speed;
 }
 

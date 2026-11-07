@@ -735,6 +735,158 @@ Result<void> MobRegistry::parseProperties(const Json& def,
         }
         out.carriesBlocks = cb->asBool();
     }
+    // V3-10d (the ender dragon): the boss flag (the strict-bool
+    // family, default false — the display + exemption gate).
+    if (const Json* bo = def.find("boss")) {
+        if (!bo->isBool()) {
+            return MC_FAIL("mob properties: 'boss' must be a boolean");
+        }
+        out.boss = bo->asBool();
+    }
+    // V3-10d: the dragon_flight capability (the strict-bool twin; the
+    // PAIRING check runs after flying/spawns_in_air are resolved —
+    // below, the group-check block).
+    if (const Json* df = def.find("dragon_flight")) {
+        if (!df->isBool()) {
+            return MC_FAIL("mob properties: 'dragon_flight' must be a "
+                           "boolean");
+        }
+        out.dragonFlight = df->asBool();
+    }
+    // V3-10d: the contact damage (a number in (0, 100]; 0 / absent =
+    // off — the numeric-gate shape over the boolean).
+    if (const Json* cd = def.find("contact_damage")) {
+        if (!cd->isNumber()) {
+            return MC_FAIL("mob properties: 'contact_damage' must be a "
+                           "number");
+        }
+        out.contactDamage = static_cast<float>(cd->asDouble());
+        if (out.contactDamage <= 0.0f || out.contactDamage > 100.0f) {
+            return MC_FAIL("mob properties: 'contact_damage' must be in "
+                           "(0, 100], got " +
+                           std::to_string(out.contactDamage));
+        }
+    }
+    // V3-10d: the three exemption flags (the strict-bool family,
+    // default false — the strider walks_on_lava's shape).
+    for (const auto& [key, flag] : {
+             std::pair<const char*, bool*> {"fire_exempt", &out.fireExempt},
+             std::pair<const char*, bool*> {"effect_exempt",
+                                            &out.effectExempt},
+             std::pair<const char*, bool*> {"knockback_exempt",
+                                            &out.knockbackExempt},
+         }) {
+        if (const Json* v = def.find(key)) {
+            if (!v->isBool()) {
+                return MC_FAIL(std::string("mob properties: '") + key +
+                               "' must be a boolean");
+            }
+            *flag = v->asBool();
+        }
+    }
+    // V3-10d: the breath / fireball / crystal parameter family (the
+    // numbers, each with its domain; the GROUP pairing check runs in
+    // the block below — a half-shipped group is a dead field).
+    auto readDragonNumber = [&](const char* key, double& outD,
+                                double lo, double hi, bool exclusiveLo)
+        -> Result<void> {
+        const Json* v = def.find(key);
+        if (v == nullptr) {
+            return {};
+        }
+        if (!v->isNumber()) {
+            return MC_FAIL(std::string("mob properties: '") + key +
+                           "' must be a number");
+        }
+        outD = v->asDouble();
+        const bool inRange =
+            exclusiveLo ? (outD > lo && outD <= hi) : (outD >= lo && outD <= hi);
+        if (!inRange) {
+            return MC_FAIL(std::string("mob properties: '") + key + "' " +
+                           "must be " + (exclusiveLo ? "(" : "[") +
+                           std::to_string(lo) + ", " + std::to_string(hi) +
+                           "], got " + std::to_string(outD));
+        }
+        return {};
+    };
+    {
+        // The value is RESET before every read (readDragonNumber leaves
+        // the out untouched on an ABSENT key — a shared accumulator would
+        // leak the previous field's value into the missing one, the
+        // gate-216 negative-parse's catch: the absent fireball pair
+        // inherited the breath_radius's 2 and passed its > 0 gate).
+        double v = 0.0;
+        auto r = readDragonNumber("breath_cooldown", v, 0.0, 600.0, true);
+        MC_TRY(r);
+        out.breathCooldown = v;
+        v = 0.0;
+        r = readDragonNumber("breath_duration", v, 0.0, 60.0, true);
+        MC_TRY(r);
+        out.breathDuration = v;
+        v = 0.0;
+        r = readDragonNumber("breath_radius", v, 0.0, 32.0, true);
+        MC_TRY(r);
+        out.breathRadius = static_cast<float>(v);
+        v = 0.0;
+        r = readDragonNumber("fireball_cooldown", v, 0.0, 600.0, true);
+        MC_TRY(r);
+        out.fireballCooldown = v;
+        v = 0.0;
+        r = readDragonNumber("fireball_speed", v, 0.0, 100.0, true);
+        MC_TRY(r);
+        out.fireballSpeed = static_cast<float>(v);
+        v = 0.0;
+        r = readDragonNumber("crystal_break_damage", v, 0.0, 100.0, false);
+        MC_TRY(r);
+        out.crystalBreakDamage = static_cast<float>(v);
+        v = 0.0;
+        r = readDragonNumber("detect_vertical", v, 0.0, 64.0, true);
+        MC_TRY(r);
+        out.detectVertical = static_cast<float>(v);
+    }
+    // V3-10d: the GROUP pairing check (the milk discipline over the
+    // dragon's whole parameter family — a half-shipped group is a
+    // dead field, named): dragon_flight REQUIRES flying +
+    // spawns_in_air + the full breath/fireball pair; the pair's
+    // PRESENCE REQUIRES dragon_flight (no consumer without the
+    // capability).
+    {
+        const bool pairPresent =
+            out.breathCooldown > 0.0 || out.breathDuration > 0.0 ||
+            out.breathRadius > 0.0f || out.fireballCooldown > 0.0 ||
+            out.fireballSpeed > 0.0f;
+        if (out.dragonFlight) {
+            if (!out.flying) {
+                return MC_FAIL("mob properties: 'dragon_flight' requires "
+                               "'flying' (the orbit AI runs in the "
+                               "flying dispatch)");
+            }
+            if (!out.spawnsInAir) {
+                return MC_FAIL("mob properties: 'dragon_flight' requires "
+                               "'spawns_in_air' (the boss spawns in the "
+                               "air, the flying pair's discipline)");
+            }
+            if (out.breathCooldown <= 0.0 || out.breathDuration <= 0.0 ||
+                out.breathRadius <= 0.0f) {
+                return MC_FAIL("mob properties: 'dragon_flight' requires "
+                               "the breath pair ('breath_cooldown' / "
+                               "'breath_duration' / 'breath_radius', "
+                               "each > 0)");
+            }
+            if (out.fireballCooldown <= 0.0 || out.fireballSpeed <= 0.0f) {
+                return MC_FAIL("mob properties: 'dragon_flight' requires "
+                               "the fireball pair ('fireball_cooldown' / "
+                               "'fireball_speed', each > 0)");
+            }
+        } else if (pairPresent) {
+            return MC_FAIL("mob properties: the breath / fireball "
+                           "parameters require 'dragon_flight' (no "
+                           "consumer without the capability)");
+        }
+        // contact_damage is gated on ITSELF (the numeric gate — no
+        // pairing: the pass reads the number, any mob could carry it;
+        // the core never switches on the species).
+    }
     // SURV-5: the optional 'arrow_effect' — the status effect this mob's
     // ARROW applies to the target ({wither, 10} on the skeleton: the
     // Minecraft wither-skeleton twin). The SAME strict {name, duration}

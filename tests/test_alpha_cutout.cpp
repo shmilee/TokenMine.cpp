@@ -246,14 +246,16 @@ TEST(AlphaCutoutContentTest, ShippedCutoutSetIsExact) {
     }
     std::sort(cutouts.begin(), cutouts.end());
     // V3-10b: 20 -> 21 (the chorus_plant's cross joins the cutout set).
-    EXPECT_EQ(cutouts.size(), 21u);
+    // V3-10d: 21 -> 23 (the dragon arena's two non-solid cutout blocks —
+    // the end_crystal's gem + the dragon_egg's speckle).
+    EXPECT_EQ(cutouts.size(), 23u);
     const std::vector<std::string> want = {
         "allium",            "birch_leaves", "birch_sapling", "campfire",
-        "campfire_extinguished", "chorus_plant", "cornflower",   "fire",
-        "leaves",            "oak_sapling", "spruce_leaves", "spruce_sapling",
-        "torch",             "tulip",       "wheat_1",         "wheat_2",
-        "wheat_3",           "wheat_4",     "wheat_5",         "wheat_6",
-        "wheat_7",
+        "campfire_extinguished", "chorus_plant", "cornflower", "dragon_egg",
+        "end_crystal",         "fire",       "leaves",         "oak_sapling",
+        "spruce_leaves",       "spruce_sapling", "torch",       "tulip",
+        "wheat_1",             "wheat_2",    "wheat_3",        "wheat_4",
+        "wheat_5",             "wheat_6",    "wheat_7",
     };
     EXPECT_EQ(cutouts, want);
 }

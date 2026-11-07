@@ -134,6 +134,13 @@ struct GameArgs {
     // same Game::explodeAt the ghast will call). nullopt = no blast
     // (the no-input run's structural-immunity root).
     std::optional<ExplosionSpec> explode;
+    // V3-10d: --dragon-damage <n> — a single deterministic damage to the
+    // End dragon (the gate/test seam's --explode twin: the boss's kill
+    // loop's combat trigger is the coupled moving-target demo, the seam
+    // exercises the same damage() the combat would, deterministically).
+    // Applied the first frame the dragon exists (the spawn's frame);
+    // nullopt = no damage (the no-seam run's structural-immunity root).
+    std::optional<double> dragonDamage;
     LogLevel logLevel = LogLevel::Info;
     std::filesystem::path screenshotPath; // if set: save after the last frame
     // Save slot (Phase 13): --save <slot>. At startup loads
@@ -1453,6 +1460,55 @@ private:
     // OVERWORLD — the 60f kPortalEntryFrames count, the GUI-mutex auto-
     // close, the ride dismount; the arm plays the portal_trigger).
     void updateEndPortalEntry();
+    // V3-10d (the ender dragon): the boss's per-frame GAMEPLAY pass
+    // (the updateEndPortalEntry's dimension-twin, called every frame
+    // after it — the single choke point over the dragon's whole
+    // arena logic, all gated on playerInEnd() so a no-End session is
+    // one bool check, the structural-immunity root). Runs, in order:
+    //   1. the first-visit SPAWN schedule (the 60-frame delay over the
+    //   no-dragon + no-egg + mobs-enabled gate — the dragon's singleton
+    //   appears high over the exit and settles into the orbit);
+    //   2. the CRYSTAL census (the 6 fixed slots' live count -> the
+    //   dragon's setCrystalsAlive feed + the crystalDelta flag) + the
+    //   crystal FIRE (each live crystal's cell+1y = a permanent end
+    //   fire block, the D9 closed set's zero-churn read) + the HEAL
+    //   cadence (the dragon +1 HP / 30 frames from its nearest live
+    //   crystal in 32, the data-order tie-break);
+    //   3. the CONTACT damage pass (the contact_damage > 0 mob's
+    //   strict-AABB player overlap, the 1-s session cooldown — the
+    //   wing sweep);
+    //   4. the BREATH CLOUD damage pass (the player's overlap of a
+    //   live cloud -> the dragon_breath effect's 30-frame re-grant);
+    //   5. the ASCENSION ritual driver (the dead boss's corpse flight
+    //   to the perch, the 200-XP burst scheduler, the dragon_death
+    //   cue at the ritual's end — the m_dead frame's egg/XP bookkeeping
+    //   ran at the death, the R14's 0-frame-gap ruling).
+    void updateDragonGameplay();
+    // V3-10d: the dragon's singleton SPAWN (the attemptMobSpawn's
+    // twin over the fixed point — the seed's kSaltDragon xor, the
+    // setCrystalsAlive / setDragonAnchors feeds, the shoot callback's
+    // dragon fireball wiring, the growl/breath seams).
+    void spawnDragon();
+    // V3-10d: the CRYSTAL shatter (the breakBlock's explode hook's
+    // caller-over — the arrow sweep's direct path): set the cell air
+    // (the journal's choke), relight, detonate the block's data
+    // explode_radius over its center (the no-chain structural
+    // property — the blast's setBlock never re-enters this function),
+    // and the crystal_break_damage's heal-source self-harm (the
+    // dragon's 10 when a HEALING crystal shatters, the R4's frame
+    // ruling). Returns true when a live crystal was shattered.
+    bool shatterCrystalAt(int x, int y, int z);
+    // V3-10d: the dragon's two RENDER seams (the crystal->dragon HEAL
+    // beam's blend quad + the breath CLOUDS' blend discs — both the
+    // drawBeaconBeams / drawParticles blend-pass twins, called from
+    // the render's blend section; a no-dragon session is one null /
+    // empty check each, the structural-immunity root).
+    void drawDragonBeam(const Mat4& view, const Mat4& projection);
+    void drawBreathClouds(const Mat4& view, const Mat4& projection);
+    // The dragon FX's lazy unit column mesh (the heal beam's geometry,
+    // the breath cloud's scaled-flat disc — the m_mobShadowMesh's lazy
+    // twin, built on the first FX frame).
+    const Mesh& dragonFxMesh();
     // The End's real travel (the travelPortal's twin, NO 8:1 mapping —
     // the 1:1 independent origin): the OW->End leg writes the entry
     // platform (the 5x5 obsidian at (40,52,0), the per-entry rewrite —
@@ -1978,6 +2034,34 @@ private:
         // portal — the m_nether.portals twin; the choke point / the
         // rescan / the ambience read it).
         std::map<BlockPos, BlockID> portals;
+        // V3-10d: the DRAGON's session state (all never saved — the
+        // mob is ephemeral like every other, the egg's world-state is
+        // the persistence marker; a no-dragon session keeps every field
+        // at its default = the structural-immunity root).
+        // `m_dragonSpawnDelay`: the first-visit spawn's frame countdown
+        // (-1 = not scheduled; 0 = spawn this frame; the 60-frame
+        // MC-1s read). `m_dragon`: the boss singleton (null = none
+        // live — the m_ridingMount pointer pattern, the raw pointer is
+        // valid until the ascension's removal frame).
+        // `m_dragonHealFrame`: the 30-frame heal cadence's counter.
+        // `m_dragonXpRemaining` / `m_dragonXpFrame`: the death ritual's
+        // 200-XP burst scheduler (the 23-orb's every-5-frames release).
+        int m_dragonSpawnDelay = -1;
+        MobEntity* m_dragon = nullptr;
+        Vec3 m_dragonDeathPos = Vec3::zero();
+        int m_dragonHealFrame = 0;
+        // The heal beam's SOURCE slot (the dragon's nearest live crystal
+        // this cadence window — the render's beam start; -1 = no beam
+        // (full health / no crystal / no dragon)).
+        int m_dragonHealSlot = -1;
+        // The crystal census's previous frame (the crystalDelta feed's
+        // change detection — -1 = never censused).
+        int m_lastDragonCrystalCount = -1;
+        // The dragon's last observed MobState (the transition E2E line's
+        // change detection — -1 = never observed).
+        int m_dragonLastState = -1;
+        int m_dragonXpRemaining = 0;
+        int m_dragonXpFrame = 0;
     };
     EndDim m_end;
     // V3-1 Phase B (D6): the post-travel portal cooldown in FRAMES
@@ -2163,6 +2247,12 @@ private:
     // V2-6: the blob-shadow unit quad (built lazily on the first frame
     // that has a shadow to draw — a no-input run never builds it).
     Mesh m_mobShadowMesh;
+    // V3-10d: the dragon FX's unit box (the crystal->dragon heal beam's
+    // column + the breath cloud's flat disc share it — built lazily on
+    // the first frame that has a dragon FX to draw, a no-dragon session
+    // never builds it = the structural immunity, the m_mobShadowMesh's
+    // lazy twin).
+    Mesh m_dragonFxMesh;
     // V2-11: the solid orb-cube mesh (built lazily on the first frame
     // that has an orb to draw — a no-input run has zero orbs, so it
     // never builds the mesh = the structural immunity).
@@ -2417,6 +2507,13 @@ private:
         // The eyed frame's resolved id (the embed interaction's write
         // target — the frame cell becomes THIS on an eye placement).
         BlockID endFrameEyedId = BlockID::invalid();
+        // V3-10d: the dragon arena's resolved ids (the endPortalId's
+        // twins — init name lookup; invalid = the dragon system is
+        // structurally inert, the ensureEnd MC_FAILs at the first need):
+        // the crystal (the tower/exit worldgen + the break-explosion's
+        // data read) + the egg (the death ritual's world-state marker).
+        BlockID endCrystalId = BlockID::invalid();
+        BlockID dragonEggId = BlockID::invalid();
         // V3-1 Phase A: the portal tracking set — the cells holding the
         // portal block (the beacons' twin: maintained through the setBlock
         // choke point, rebuilt by rescanPortals() after load). Consumed by

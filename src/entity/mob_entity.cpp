@@ -75,6 +75,25 @@ rollTeleportCandidates(std::uint64_t& state, Vec3 pos, Vec3 playerPos,
     return out;
 }
 
+DragonLapDecision rollDragonLapDecision(std::uint64_t& state,
+                                        int liveCrystals) {
+    // The fixed 2-draw contract (the declaration's rule): u1 ALWAYS,
+    // then u2 ALWAYS — the decision's outcome never changes the
+    // consumption (the stream alignment's witness over the 10c's
+    // swallowed-attempt twin).
+    const double u1 = uniform01(state); // the strafe roll
+    if (u1 < kDragonStrafeLapRollP) {
+        uniform01(state); // u2 consumed even on the strafe's win
+        return DragonLapDecision::Strafe;
+    }
+    const double u2 = uniform01(state); // the perch roll
+    const int crystals = std::max(0, liveCrystals);
+    if (u2 < 1.0 / (3.0 + static_cast<double>(crystals))) {
+        return DragonLapDecision::Perch;
+    }
+    return DragonLapDecision::Orbit;
+}
+
 MobEntity::MobEntity(const World& world, const BlockRegistry& blocks,
                      const Mob& def, Vec3 pos, std::uint64_t rngSeed)
     : Entity(world, blocks, pos, def.model.width, def.model.height),
@@ -399,14 +418,19 @@ void MobEntity::update(double dt) {
         // burns on fire too — the inFire term is untouched). A non-
         // walker's term is exactly the pre-V3-3 one (the data flag
         // false = the bit root; the strider is the only carrier).
+        // V3-10d: the FIRE exemption (the dragon — the data flag gates
+        // BOTH ignition terms: it flies through the crystal flames and
+        // any lava, the MC fire-immunity read). A non-exempt mob's
+        // terms are exactly the pre-V3-10d ones (the bit root).
+        const bool fireImmune = m_def->properties.fireExempt;
         const bool inLava =
-            overlapsFluid(FluidKind::Lava) &&
+            !fireImmune && overlapsFluid(FluidKind::Lava) &&
             !m_def->properties.walksOnLava;
         // Fire v3 (Phase 73): the block twin of the lava ignition — the
         // strict AABB overlap of a fire-block cell (the cross-model fire,
         // never a fluid; the invalid id = never, resolved at
         // construction).
-        const bool inFire = overlapsBlock(m_fireBlockId);
+        const bool inFire = !fireImmune && overlapsBlock(m_fireBlockId);
         const bool inWater = overlapsFluid(FluidKind::Water);
         if (inLava || inFire) {
             m_fireRemaining = m_fireDuration;
@@ -448,7 +472,21 @@ void MobEntity::integrate(float h) {
         // construction and the hover is the flight's whole vertical
         // story). The knockback damping below still runs (the arrow's
         // impulse slides the bat, the cruise resumes after the window).
-        m_velocity.y = bobVelocity();
+        // V3-10d: the dragon's ALTITUDE approach (the data-gated pure
+        // new branch — the bat/ghast keep the bob verbatim): the AI's
+        // m_targetY setpoint, approached proportionally (a pure
+        // function of the frame position — the frame grid's
+        // determinism, hard rule 8) + the bob sine on top (the hover
+        // feel under the orbit's altitude profile).
+        if (m_def->properties.dragonFlight) {
+            const float approach =
+                (m_targetY - position().y) * kDragonAltitudeGain;
+            m_velocity.y =
+                std::clamp(approach, -kDragonMaxClimb, kDragonMaxClimb) +
+                bobVelocity();
+        } else {
+            m_velocity.y = bobVelocity();
+        }
     } else if (m_inFluid || m_atSurface) {
         // ENT-4 / FLUID-3: the fluid force model (the player's FLUID-2
         // integrate, the input branches removed — a mob has no Space /
@@ -553,12 +591,16 @@ void MobEntity::runAi(double dt) {
     // structural guarantee). A non-flying mob takes the pre-V2-14 path
     // bit-identically (the pure-new-branch red line).
     if (p.flying) {
-        // V3-14b: the flying ranged attacker (the ghast) takes the
-        // flyShoot branch (the hover-hold + the cooldown fire fused
-        // with the bat's cruise); a flying mob WITHOUT a shoot range
-        // (the bat — shootRange 0 in the data) runs flyCruise
-        // bit-identically (the pure-new-branch red line).
-        if (p.shootRange > 0.0f) {
+        // V3-10d: the dragon boss takes the dragonFlight branch at the
+        // TOP of the flying dispatch (the data gate — the parse rejects
+        // a dragon_flight mob without flying/spawns_in_air, and the
+        // flag is exclusive to the boss by the shipped data). The
+        // ghast (shootRange > 0, dragonFlight false) and the bat
+        // (shootRange 0) run their branches bit-identically — the
+        // pure-new-branch red line, the flyShoot's twin.
+        if (p.dragonFlight) {
+            dragonFlight(p, dt);
+        } else if (p.shootRange > 0.0f) {
             flyShoot(p, dt);
         } else {
             flyCruise(p, dt);
@@ -868,6 +910,244 @@ void MobEntity::flyShoot(const MobProperties& p, double dt) {
     }
 }
 
+void MobEntity::dragonFlight(const MobProperties& p, double dt) {
+    // V3-10d: the ender dragon's boss AI — the three-state cycle over
+    // the existing MobState vocabulary (zero new state, the 10c R12
+    // discipline). The STREAM CONTRACT (the R1's pinned shape, the
+    // 10c 25-draw precedent's frame-locked read): EXACTLY 1 ambient
+    // draw every frame (the data interval's probability, the bat's
+    // roll twin) + EXACTLY 2 decision draws on the LAP-CROSSING frame
+    // (u1 the strafe roll, u2 the perched roll — consumed whether or
+    // not the state changes, the swallowed-roll discipline). The
+    // timers (strafe duration / growl / breath) are frame-locked
+    // countdowns (zero stream). A non-dragon mob never enters (the
+    // dragonFlight dispatch gate — the bit root).
+    const Vec3 pos = position();
+    const float dx = m_playerPos.x - pos.x;
+    const float dz = m_playerPos.z - pos.z;
+    const float distH = std::hypot(dx, dz);
+    const float dy = m_playerPos.y - pos.y;
+    // The vertical band (the data override's WIDENING read — the ghast's
+    // kDetectVertical twin, the recon's §1.8: the 58-perch vs the 53-
+    // player needs the 8-block band; the max() keeps the 2.0 floor).
+    const float vBand = std::max(kDetectVertical, p.detectVertical);
+    const bool seesPlayer =
+        m_playerAlive && distH <= p.detectRadius && std::abs(dy) <= vBand;
+
+    // The ambient roll (1 draw, every frame — the stream's fixed base;
+    // the dragon's ambient_sound data drives it, the flyCruise's twin).
+    if (!p.ambientSoundName.empty() && m_ambientSound) {
+        const double pAmbient =
+            1.0 / (p.ambientInterval * kMobFramesPerSecond);
+        if (uniform01(m_rng) < pAmbient) {
+            m_ambientSound(position());
+        }
+    }
+
+    // The crystalDelta is consumed by the state machine below (the
+    // guaranteed-strafe trigger) and reset at the frame's end.
+    const bool crystalChanged = m_crystalDelta;
+
+    switch (m_state) {
+        case MobState::RangedAttack: {
+            // The STRAFE (the crystal-break's guaranteed entry + the
+            // lap-roll's entry): face the player, drift laterally, fire
+            // the dragon fireball on the data cooldown.
+            m_strafeTimer -= dt;
+            if (m_strafeTimer <= 0.0) {
+                // The strafe's end: re-anchor the orbit's angle to the
+                // current position (the takeoff's pure geometry, zero
+                // stream) and resume the orbit.
+                m_state = MobState::Wander;
+                m_orbitAngle = orbitAngleFromPosition();
+                m_orbitLaps = static_cast<int>(
+                    m_orbitAngle / (2.0 * std::numbers::pi));
+                break;
+            }
+            if (seesPlayer && distH > 1e-4f) {
+                m_yaw = std::atan2(-dx, -dz); // face the player
+            }
+            // The lateral drift (the perpendicular of the to-player
+            // heading — the MC strafe's side-step read).
+            const float perpX = dz / (distH > 1e-4f ? distH : 1.0f);
+            const float perpZ = -dx / (distH > 1e-4f ? distH : 1.0f);
+            m_velocity.x = perpX * p.speed * kDragonOrbitSpeedScale * 0.5f;
+            m_velocity.z = perpZ * p.speed * kDragonOrbitSpeedScale * 0.5f;
+            m_targetY = pos.y; // hold the strafe's altitude
+            // The fireball on the cooldown (the frame-locked timer, zero
+            // stream — the shoot callback's game seam owns the spawn +
+            // the dragon_shoot cue, the skeleton's pattern).
+            if (m_attackCooldown <= 0.0) {
+                m_attackCooldown = p.fireballCooldown;
+                if (m_shootPlayer) {
+                    m_shootPlayer();
+                }
+            }
+            break;
+        }
+        case MobState::Attack: {
+            // The PERCH (the end-exit anchor): approach, growl ->
+            // breath, the three takeoff conditions.
+            if (!m_perchArrived) {
+                // The straight-in at the perch anchor (the 2x-speed
+                // approach — the boss's deliberate settle).
+                const float tdx = m_dragonPerch.x - pos.x;
+                const float tdz = m_dragonPerch.z - pos.z;
+                const float td = std::hypot(tdx, tdz);
+                if (td < 0.5f) {
+                    m_perchArrived = true;
+                    m_breathState = 0;
+                    m_breathTimer = kDragonGrowlSeconds; // first growl lead
+                    m_breathCount = 0;
+                    m_perchDamage = 0.0f;
+                    m_velocity.x = 0.0f;
+                    m_velocity.z = 0.0f;
+                } else {
+                    const float spd =
+                        p.speed * kDragonOrbitSpeedScale * 2.0f;
+                    m_velocity.x = tdx / td * spd;
+                    m_velocity.z = tdz / td * spd;
+                    m_yaw = std::atan2(-tdx, -tdz);
+                }
+                m_targetY = m_dragonPerch.y;
+                break;
+            }
+            // Perched: the hover hold + the breath state machine.
+            m_velocity.x = 0.0f;
+            m_velocity.z = 0.0f;
+            m_targetY = m_dragonPerch.y;
+            // The three takeoff conditions (the MC Take-off/Escape read):
+            // 4 consecutive breaths / no player in range / the perched
+            // cumulative damage > 50. Any of them re-anchors the orbit.
+            const float distToPlayer = std::hypot(dx, dy, dz);
+            if (m_breathCount >= kDragonBreathTakeoffCount ||
+                !m_playerAlive || distToPlayer > kDragonPerchPlayerRange ||
+                m_perchDamage > kDragonPerchDamageTakeoff) {
+                m_state = MobState::Wander;
+                m_orbitAngle = orbitAngleFromPosition();
+                m_orbitLaps = static_cast<int>(
+                    m_orbitAngle / (2.0 * std::numbers::pi));
+                break;
+            }
+            switch (m_breathState) {
+                case 0: // waiting for the growl lead (the player-range
+                        // gate's entry window)
+                    m_breathTimer -= dt;
+                    if (m_breathTimer <= 0.0) {
+                        if (seesPlayer && distH <= kDragonBreathRange) {
+                            m_breathState = 1;
+                            m_breathTimer = kDragonGrowlSeconds;
+                            if (m_growlSound) {
+                                m_growlSound(position());
+                            }
+                        } else {
+                            // No player in range: re-arm the wait (the
+                            // data cooldown's retry cadence).
+                            m_breathTimer = p.breathCooldown;
+                        }
+                    }
+                    break;
+                case 1: // the growl telegraph (the 1.25 s audio lead)
+                    m_breathTimer -= dt;
+                    if (m_breathTimer <= 0.0) {
+                        if (seesPlayer && distH <= kDragonBreathRange) {
+                            m_breathState = 2;
+                            m_breathTimer = p.breathDuration;
+                            if (m_breath) {
+                                m_breath(); // the cloud at the player's
+                                             // feet (the game's seam)
+                            }
+                        } else {
+                            m_breathState = 0; // the player slipped the
+                            m_breathTimer = p.breathCooldown;
+                        }
+                    }
+                    break;
+                case 2: // the breath active (the cloud's duration)
+                    m_breathTimer -= dt;
+                    if (m_breathTimer <= 0.0) {
+                        m_breathState = 0;
+                        m_breathTimer = p.breathCooldown;
+                        ++m_breathCount; // the consecutive-breath count
+                    }
+                    break;
+            }
+            break;
+        }
+        default: {
+            // The ORBIT (Wander — the default state): the circle of
+            // kDragonOrbitRadius around the pulled end-origin, the
+            // data speed's arc. The lap-crossing frame consumes the
+            // fixed 2-draw decision (the stream contract's apex).
+            const float arcSpeed = p.speed * kDragonOrbitSpeedScale;
+            const float omega = arcSpeed / kDragonOrbitRadius;
+            m_orbitAngle += omega * dt;
+            // The fixed center (the MC read: the dragon cruises the
+            // exit's arena at a constant radius — the ENGAGEMENT is the
+            // strafe/perch state's job, not the cruise's. A player-pull
+            // on the cruise would route the circle through the player's
+            // standing position, a constant contact threat the MC's
+            // orbit does not carry).
+            const Vec3& center = m_dragonOrbitCenter;
+            const float px = center.x +
+                std::cos(m_orbitAngle) * kDragonOrbitRadius;
+            const float pz = center.z +
+                std::sin(m_orbitAngle) * kDragonOrbitRadius;
+            // Steer toward the circle's point (the data arc speed).
+            const float tdx = px - pos.x;
+            const float tdz = pz - pos.z;
+            const float td = std::hypot(tdx, tdz);
+            if (td > 1e-4f) {
+                m_velocity.x = tdx / td * arcSpeed;
+                m_velocity.z = tdz / td * arcSpeed;
+                m_yaw = std::atan2(-tdx, -tdz);
+            }
+            m_targetY = center.y;
+            // The LAP-CROSSING frame (the fixed 2-draw decision — the
+            // stream contract's apex, consumed whether or not the state
+            // changes). The crystal break's guaranteed strafe enters
+            // BEFORE the rolls (the MC rule, the crystalDelta flag).
+            const int laps = static_cast<int>(
+                m_orbitAngle / (2.0 * std::numbers::pi));
+            if (crystalChanged && seesPlayer) {
+                m_state = MobState::RangedAttack;
+                m_strafeTimer = kDragonStrafeSeconds;
+            } else if (laps != m_orbitLaps) {
+                m_orbitLaps = laps;
+                // The lap-crossing decision (the rollDragonLapDecision's
+                // pure function — the fixed 2-draw stream contract,
+                // consumed whether or not the state changes).
+                const DragonLapDecision decision =
+                    rollDragonLapDecision(m_rng, m_crystalsAlive);
+                if (decision == DragonLapDecision::Strafe) {
+                    m_state = MobState::RangedAttack;
+                    m_strafeTimer = kDragonStrafeSeconds;
+                } else if (decision == DragonLapDecision::Perch) {
+                    m_state = MobState::Attack;
+                    m_perchArrived = false;
+                }
+            }
+            break;
+        }
+    }
+    m_crystalDelta = false; // consume the feed at the frame's end
+}
+
+float MobEntity::orbitAngleFromPosition() const {
+    // V3-10d: the orbit's angle re-anchor from the current position (the
+    // strafe/perch takeoff's pure geometry — the angle whose circle
+    // point is the mob's current horizontal offset from the orbit
+    // center, zero stream).
+    const Vec3 pos = position();
+    const float ox = pos.x - m_dragonOrbitCenter.x;
+    const float oz = pos.z - m_dragonOrbitCenter.z;
+    float a = std::atan2(oz, ox);
+    if (a < 0.0) {
+        a += 2.0 * std::numbers::pi;
+    }
+    return a;
+}
+
 float MobEntity::bobVelocity() const {
     // The frame-locked hover sine (a pure function of the local frame
     // count + the spawn-stream phase — std::sin on the physics layer,
@@ -1079,6 +1359,14 @@ bool MobEntity::damage(float amount) {
         return m_dead;
     }
     m_health -= amount;
+    // V3-10d: the dragon's ESCAPE accumulator (the MC perched cumulative-
+    // damage takeoff read): every hit adds to m_perchDamage; the perch's
+    // takeoff condition (kDragonPerchDamageTakeoff) reads it. A
+    // non-dragon mob's field never moves (the data gate — the bit root;
+    // the accumulator is inert without the dragonFlight branch).
+    if (m_def->properties.dragonFlight) {
+        m_perchDamage += amount;
+    }
     if (m_health <= 0.0f) {
         m_health = 0.0f;
         m_dead = true;
@@ -1111,7 +1399,35 @@ bool MobEntity::damage(float amount) {
     return m_dead;
 }
 
+bool MobEntity::heal(float amount) {
+    // V3-10d: the healing (the end crystal's cadence — the damage()
+    // twin with the sign flipped). A dead mob cannot be revived (the
+    // m_dead guard's twin), a non-positive amount is a no-op (the
+    // damage's amount guard), and the data health cap clamps the sum
+    // (the crystal cannot over-heal the boss, the MC 200-cap read).
+    // Returns true when health actually rose (the heal beam's render
+    // gate). ZERO stream draws (the heal is the game's frame cadence,
+    // not the mob's stream — the damage's stream-free twin).
+    if (m_dead || amount <= 0.0f) {
+        return false;
+    }
+    const float cap = m_def->properties.health;
+    if (m_health >= cap) {
+        return false;
+    }
+    m_health = std::min(cap, m_health + amount);
+    return true;
+}
+
 void MobEntity::addKnockback(Vec3 impulse) {
+    // V3-10d: the KNOCKBACK exemption (the dragon — the MC no-knockback
+    // read, the single choke point: the melee attack's and the arrow
+    // impact's impulses both flow through here). The data flag early-
+    // returns before the impulse lands — a non-exempt mob takes the
+    // pre-V3-10d path bit-identically (the bit root).
+    if (m_def->properties.knockbackExempt) {
+        return;
+    }
     m_velocity += impulse;
     m_knockbackTime = kKnockbackTime;
 }
@@ -1133,6 +1449,16 @@ void MobEntity::armFire(double tickInterval, float tickAmount,
 void MobEntity::applyEffect(int effect, double duration,
                             const EffectRegistry& effects, int tier) {
     if (m_dead || effect < 0 || duration <= 0.0) {
+        return;
+    }
+    // V3-10d: the STATUS-EFFECT exemption (the dragon — the MC
+    // all-effects-immunity read): the data flag early-returns before any
+    // effect lands (a poison arrow grinds a non-exempt boss down — the
+    // gameplay hole the flag closes). DAMAGE itself flows (the
+    // instant-harm's sanctioned exception, D11's read — damage() never
+    // consults this gate). A non-exempt mob takes the pre-V3-10d path
+    // bit-identically (the bit root).
+    if (m_def->properties.effectExempt) {
         return;
     }
     const Effect& def = effects.at(effect);

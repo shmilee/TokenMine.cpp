@@ -1973,7 +1973,7 @@ TEST(MobContent, V215WoolAssetsPinned) {
     // [2..3, 11] — the 174-tile zero-shift red line, the test_atlas
     // census).
     EXPECT_EQ(fnv1a64(readAll("assets/data/textures/block_atlas.json")),
-              "9bb55b0e10445d4e");
+              "2d34549180e8ab18");
 }
 
 // -- V2-15: the wool instance state (MobEntity — the frame discipline) ----

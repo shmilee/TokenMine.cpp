@@ -25,7 +25,7 @@ void printUsage() {
         "  --weather <w>     Initial weather (V2-4): clear (the default) or\n"
         "                    rain (the opening segment runs the fixed kRainMin\n"
         "                    frames, then the world-seed stream takes over)\n"
-        "  --explode <x y z> [r]\n"
+        "  --explode <x y z> [r]\n"        "  --dragon-damage <n>  V3-10d: deterministic damage to the End dragon (gate seam)\n"
         "                    V3-14a: one deterministic blast at the run's\n"
         "                    start (the explosion's gate seam — the ghast's\n"
         "                    V3-14b fireball is its first in-game trigger;\n"
@@ -168,6 +168,21 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
                 spec.radius = r;
             }
             args.explode = spec;
+        } else if (arg == "--dragon-damage") {
+            // V3-10d: the boss's gate seam (--dragon-damage <n>) — the
+            // strict finite-read discipline (a non-finite / short /
+            // non-positive argument is named, not silently zeroed).
+            const char* vn = nextValue(i, "--dragon-damage");
+            if (!vn) {
+                return false;
+            }
+            char* en = nullptr;
+            const double n = std::strtod(vn, &en);
+            if (*en != '\0' || !std::isfinite(n) || n <= 0.0) {
+                err = "--dragon-damage takes a finite number > 0";
+                return false;
+            }
+            args.dragonDamage = n;
         } else if (arg == "--frames") {
             const char* v = nextValue(i, "--frames");
             if (!v) return false;
@@ -276,10 +291,11 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
                                  args.time >= 0.0 || args.seed >= 0 ||
                                  args.weather.has_value() ||
                                  args.explode.has_value() ||
+                                 args.dragonDamage.has_value() ||
                                  args.saveFullDiff)) {
         err = "save management runs without a game: drop the game-run "
               "flags (--save / --new / --frames / --screenshot / --time / "
-              "--seed / --weather / --explode / --save-full-diff)";
+              "--seed / --weather / --explode / --dragon-damage / --save-full-diff)";
         return false;
     }
     // V3-9: the demo's three flags are MUTUALLY EXCLUSIVE (one per

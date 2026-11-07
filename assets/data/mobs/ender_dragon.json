@@ -1,0 +1,85 @@
+{
+  "id": "ender_dragon",
+  "properties": {
+    "health": 200,
+    "speed": 0.7,
+    "detect_radius": 16,
+    "attack_range": 0,
+    "attack_damage": 0,
+    "attack_cooldown": 4.0,
+    "wander_interval": 2.0,
+    "spawn_max_light": 15,
+    "hostile": true,
+    "flying": true,
+    "spawns_in_air": true,
+    "dragon_flight": true,
+    "boss": true,
+    "contact_damage": 5,
+    "fire_exempt": true,
+    "effect_exempt": true,
+    "knockback_exempt": true,
+    "breath_cooldown": 8,
+    "breath_duration": 3,
+    "breath_radius": 2,
+    "fireball_cooldown": 2.5,
+    "fireball_speed": 12,
+    "crystal_break_damage": 10,
+    "detect_vertical": 8,
+    "ambient_sound": "dragon_ambient",
+    "ambient_interval": 8.0,
+    "xp": 0
+  },
+  "model": {
+    "width": 8,
+    "height": 4,
+    "boxes": [
+      {
+        "pos": [0.0, 3.3, -1.5],
+        "size": [1.2, 1.2, 1.2],
+        "texture": "dragon_body",
+        "faces": { "front": "dragon_face" }
+      },
+      {
+        "pos": [0.0, 3.0, -0.75],
+        "size": [0.8, 0.8, 0.8],
+        "texture": "dragon_body"
+      },
+      {
+        "pos": [0.0, 2.5, 0.0],
+        "size": [2.0, 1.4, 1.2],
+        "texture": "dragon_body"
+      },
+      {
+        "pos": [0.0, 2.6, 1.2],
+        "size": [0.7, 0.7, 0.7],
+        "texture": "dragon_body"
+      },
+      {
+        "pos": [0.0, 2.5, 1.9],
+        "size": [0.6, 0.6, 0.6],
+        "texture": "dragon_body"
+      },
+      {
+        "pos": [0.0, 2.4, 2.6],
+        "size": [0.5, 0.5, 0.5],
+        "texture": "dragon_body"
+      },
+      {
+        "pos": [-2.4, 2.8, 0.0],
+        "size": [3.0, 0.3, 1.6],
+        "texture": "dragon_wing",
+        "name": "wing_l"
+      },
+      {
+        "pos": [2.4, 2.8, 0.0],
+        "size": [3.0, 0.3, 1.6],
+        "texture": "dragon_wing",
+        "name": "wing_r"
+      }
+    ],
+    "swings": [
+      { "part": "wing_l", "amplitude": 0.9, "group": 0 },
+      { "part": "wing_r", "amplitude": 0.9, "group": 1 }
+    ]
+  }
+}

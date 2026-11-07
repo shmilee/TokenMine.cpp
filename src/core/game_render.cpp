@@ -15,6 +15,7 @@
 #include "core/math/frustum.hpp"
 #include "core/png.hpp"
 #include "entity/blob_shadow.hpp"
+#include "entity/breath_cloud.hpp"
 #include "renderer/alpha_test.hpp"
 #include "renderer/fog.hpp"
 #include "ui/ui_scale.hpp"
@@ -102,6 +103,21 @@ constexpr float kBeaconBeamG = 0.95f;
 constexpr float kBeaconBeamB = 1.0f;
 
 constexpr float kBeaconBeamAlpha = 0.5f;
+
+// V3-10d dragon FX: the heal beam's pale-violet (the crystal's channeling
+// light — the MC end-crystal beam's violet read) + its translucency, and
+// the breath cloud's darker violet disc (the dragon_breath effect's
+// color, the D11's read). The beam's half-width scale (the unit column's
+// x/z, the beacon's kBeaconBeamHalfWidth's thinner boss read).
+constexpr float kDragonBeamR = 0.75f;
+constexpr float kDragonBeamG = 0.45f;
+constexpr float kDragonBeamB = 0.9f;
+constexpr float kDragonBeamAlpha = 0.45f;
+constexpr float kDragonBeamHalfWidth = 0.18f;
+constexpr float kDragonCloudR = 0.45f;
+constexpr float kDragonCloudG = 0.2f;
+constexpr float kDragonCloudB = 0.6f;
+constexpr float kDragonCloudAlpha = 0.35f;
 
 // 3D held hand (Phase 42): the view-anchored hand model constants (see
 // drawHeldHand). The offset is in the CAMERA frame (x = right, y = up,
@@ -276,6 +292,118 @@ void Game::drawBeaconBeams(const Mat4& view, const Mat4& projection) {
     }
     m_renderer.setCulling(true);
     // (blending state left to the caller — see drawBeaconBeams head)
+}
+
+// V3-10d: the dragon FX's lazy unit column (the heal beam's geometry —
+// a vertical box spanning y 0..1, kDragonBeamHalfWidth in x/z, both
+// faces (culling off at the draw). Built once on the first beam frame;
+// a no-dragon session never builds it (the m_mobShadowMesh's lazy
+// twin). The breath cloud reuses it scaled flat (the disc's box read).
+const Mesh& Game::dragonFxMesh() {
+    if (m_dragonFxMesh.valid()) {
+        return m_dragonFxMesh;
+    }
+    const float h = kDragonBeamHalfWidth;
+    const Vec3 kCorners[8] = {
+        {-h, 0.0f, -h}, {h, 0.0f, -h}, {h, 0.0f, h}, {-h, 0.0f, h},
+        {-h, 1.0f, -h}, {h, 1.0f, -h}, {h, 1.0f, h}, {-h, 1.0f, h},
+    };
+    const std::uint32_t kIndices[36] = {
+        0, 1, 5, 0, 5, 4, // -Z
+        2, 3, 7, 2, 7, 6, // +Z
+        0, 4, 3, 0, 3, 7, // -X
+        1, 2, 6, 1, 6, 5, // +X
+        0, 3, 2, 0, 2, 1, // -Y
+        4, 5, 6, 4, 6, 7, // +Y
+    };
+    std::vector<MeshVertex> verts;
+    verts.reserve(8);
+    for (const Vec3& p : kCorners) {
+        MeshVertex v;
+        v.position = p;
+        v.normal = {0.0f, 1.0f, 0.0f};
+        v.uv = {0.0f, 0.0f};
+        v.skyLight = 0.0f;
+        v.blockLight = 1.0f;
+        v.uvLocal = {0.0f, 0.0f};
+        v.tiled = 0.0f;
+        verts.push_back(v);
+    }
+    std::vector<std::uint32_t> indices(kIndices, kIndices + 36);
+    auto r = m_dragonFxMesh.upload(verts, indices, MeshMode::Triangles);
+    if (!r.ok()) {
+        MC_LOG_ERROR("Dragon FX mesh build failed: " + r.error().describe());
+    }
+    return m_dragonFxMesh;
+}
+
+void Game::drawDragonBeam(const Mat4& view, const Mat4& projection) {
+    // V3-10d: the crystal->dragon HEAL beam (the beacon beam's blend
+    // twin): a pale-violet column rising from the healing source
+    // crystal (the m_end.m_dragonHealSlot's cell, set by the gameplay
+    // pass's 30-frame cadence) to the dragon's altitude. A no-dragon /
+    // full-health / no-crystal session is one early return (the
+    // structural-immunity root — the m_dragonHealSlot is -1).
+    if (m_end.m_dragon == nullptr || m_end.m_dragonHealSlot < 0) {
+        return;
+    }
+    const Vec3 slot = kEndCrystalSlots[m_end.m_dragonHealSlot];
+    const float cx = slot.x;
+    const float cy = slot.y; // the crystal cell's center
+    const float cz = slot.z;
+    const float height =
+        std::max(0.1f, m_end.m_dragon->position().y - (cy - 0.5f));
+    const Mat4 model = Mat4::multiply(
+        Mat4::translate(cx, cy, cz),
+        Mat4::scale(1.0f, height, 1.0f));
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 0);
+    m_basicShader.setUniform3f("u_color", kDragonBeamR, kDragonBeamG,
+                               kDragonBeamB);
+    m_basicShader.setUniform1f("u_alpha", kDragonBeamAlpha);
+    m_basicShader.setUniform1f("u_dayFactor", weatherDayFactor());
+    m_renderer.setCulling(false);
+    m_renderer.draw(dragonFxMesh(), m_basicShader, view, projection, model);
+    m_renderer.setCulling(true);
+    // (blending state left to the caller — the drawBeaconBeams head's
+    // leak lesson)
+}
+
+void Game::drawBreathClouds(const Mat4& view, const Mat4& projection) {
+    // V3-10d: the dragon's BREATH CLOUDS (the blend-pass translucent
+    // discs — the spawnSteam's blend twin): each live cloud's flat box
+    // (the unit column scaled to its radius x the kThickness), centered
+    // on the cloud, tinted the breath's violet. A no-cloud session is
+    // one early return per null (the structural-immunity root).
+    const Mesh& mesh = dragonFxMesh();
+    if (!mesh.valid()) {
+        return;
+    }
+    m_basicShader.bind();
+    m_basicShader.setUniform1i("u_useTexture", 0);
+    m_basicShader.setUniform3f("u_color", kDragonCloudR, kDragonCloudG,
+                               kDragonCloudB);
+    m_basicShader.setUniform1f("u_alpha", kDragonCloudAlpha);
+    m_basicShader.setUniform1f("u_dayFactor", weatherDayFactor());
+    m_renderer.setCulling(false);
+    for (const auto& entity : m_end.entities) {
+        const BreathCloudEntity* cloud =
+            dynamic_cast<const BreathCloudEntity*>(entity.get());
+        if (cloud == nullptr) {
+            continue;
+        }
+        const Vec3 p = cloud->position();
+        const float r = cloud->radius();
+        const Mat4 model = Mat4::multiply(
+            Mat4::translate(p.x, p.y - BreathCloudEntity::kThickness * 0.5f,
+                            p.z),
+            Mat4::scale(r * 2.0f, BreathCloudEntity::kThickness,
+                        r * 2.0f));
+        m_renderer.draw(mesh, m_basicShader, view, projection, model);
+    }
+    m_renderer.setCulling(true);
+    // (blending state left to the caller — the drawBeaconBeams head's
+    // leak lesson)
 }
 
 void Game::drawClouds(const Mat4& view, const Mat4& projection) {
@@ -1028,6 +1156,14 @@ void Game::render() {
     // No-op without an active beacon (baseline byte-identical).
     if (inOverworld()) { // V3-10a: the D9 closed-set triple.
         drawBeaconBeams(view, projection);
+    }
+    // V3-10d: the dragon arena's blend FX (the crystal->dragon heal
+    // beam + the breath clouds — the drawBeaconBeams' blend-pass twins,
+    // gated on playerInEnd: a no-End session is one bool check, the
+    // structural-immunity root; the D9 closed-set triple's End member).
+    if (playerInEnd()) {
+        drawDragonBeam(view, projection);
+        drawBreathClouds(view, projection);
     }
     // UX-9a clouds: the drifting translucent layer at y = kCloudHeight,
     // blended + depth-occluded like the other world geometry. Gated on

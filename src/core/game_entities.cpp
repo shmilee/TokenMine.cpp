@@ -7,6 +7,7 @@
 #include "core/game_local.hpp"
 #include "entity/arrow_mesh.hpp"
 #include "entity/blob_shadow.hpp"
+#include "entity/breath_cloud.hpp"
 #include "entity/item_light.hpp"
 #include "entity/item_model_mesh.hpp"
 #include "entity/mob_mesh.hpp"
@@ -344,6 +345,43 @@ void Game::updateEntities(double dt) {
         if (arrow->dead()) {
             continue;  // a mob hit this step already consumed it
         }
+        // V3-10d: the crystal's SHATTER-ON-ARROW sweep (the data gate's
+        // arrow twin — the non-solid crystal's physics never collides
+        // the arrow, so the swept segment tests the 6 fixed crystal
+        // slots' AABBs: a hit shatters the crystal (the shatter's
+        // single choke point — the break + the blast + the self-harm)
+        // and CONSUMES the arrow (the MC arrow-vs-crystal-entity read;
+        // the player's own bow is the crystal's only ranged killer). A
+        // no-crystal / no-arrow frame runs zero tests (the structural
+        // root — the playerInEnd + ids' validity gate).
+        if (playerInEnd() && m_states.endCrystalId.valid() &&
+            m_blocks.at(m_states.endCrystalId).properties.shatterOnArrow) {
+            const Vec3 step0 = arrow->position() - prev;
+            for (const auto& slot : kEndCrystalSlots) {
+                const int cx = static_cast<int>(std::floor(slot.x));
+                const int cy = static_cast<int>(std::floor(slot.y));
+                const int cz = static_cast<int>(std::floor(slot.z));
+                if (currentWorld().getBlock(cx, cy, cz) !=
+                    m_states.endCrystalId) {
+                    continue;
+                }
+                const float t = raycastAabb(
+                    prev, step0,
+                    Vec3 {static_cast<float>(cx), static_cast<float>(cy),
+                          static_cast<float>(cz)},
+                    Vec3 {static_cast<float>(cx) + 1.0f,
+                          static_cast<float>(cy) + 1.0f,
+                          static_cast<float>(cz) + 1.0f});
+                if (t >= 0.0f && t <= 1.0f) {
+                    shatterCrystalAt(cx, cy, cz);
+                    arrow->kill(); // the shatter's consume
+                    break;
+                }
+            }
+            if (arrow->dead()) {
+                continue;
+            }
+        }
         if (arrow->stuck()) {
             // V3-14b: the fireball's impact blast — a stuck fireball
             // explodes where it hit (the arrow's stick-and-age twin
@@ -362,6 +400,20 @@ void Game::updateEntities(double dt) {
             // hit, the documented deviation) and despawns.
             if (arrow->teleports() && !arrow->dead()) {
                 pearlLanding(arrow);
+            }
+            // V3-10d: the dragon fireball's IMPACT cloud (the
+            // pearlLanding's consume-at-impact twin, the zero-damage
+            // shape: the impact itself is the cloud's spawn + the
+            // projectile's despawn — the cloud is the damage, the
+            // D11's read; the arrow / ghast fireball / pearl keep
+            // their stuck paths bit-identically, the data gate).
+            if (arrow->leavesCloud() && !arrow->dead()) {
+                currentEntities().push_back(
+                    std::make_unique<BreathCloudEntity>(
+                        currentWorld(), m_blocks, arrow->position(),
+                        kDragonFireballCloudDuration,
+                        kDragonFireballCloudRadius));
+                arrow->kill();
             }
             continue;  // stuck in a block (Phase 24): no motion, no hits
         }
@@ -683,7 +735,12 @@ void Game::updateEntities(double dt) {
             continue;
         }
         MobEntity* mob = dynamic_cast<MobEntity*>(ents[i].get());
-        if (mob != nullptr && !mob->dead()) {
+        // V3-10d: the BOSS outlives the despawn ring (the dragon's
+        // 40-block distance despawn would eat it mid-orbit — the R2's
+        // distance exemption; a non-boss mob despawns exactly as
+        // before, the bit root).
+        if (mob != nullptr && !mob->dead() &&
+            !mob->def().properties.boss) {
             const Vec3 d = mob->position() - playerPos;
             if (lengthSq(d) > despawnSq) {
                 gone[i] = true;
@@ -693,8 +750,31 @@ void Game::updateEntities(double dt) {
         if (!ents[i]->shouldDespawn()) {
             continue;
         }
+        // V3-10d: the ASCENSION delay (the dead boss's corpse stays for
+        // the ritual's kDragonAscentTotalFrames — the game pass drives
+        // the flight + the bookkeeping; a non-boss dead mob is removed
+        // this frame exactly as before, the bit root). The hold covers
+        // ascension -1 TOO: a corpse the game pass has not booked yet
+        // (the death frame's pass saw the player out of the End, or the
+        // spawn-seam's same-frame kill) must survive until the
+        // bookkeeping runs — removing it un-booked would lose the
+        // defeat marker (no egg) and respawn the boss, the gate-216
+        // first-run death loop the re-capture + this hold close).
+        if (mob != nullptr && mob->dead() &&
+            mob->def().properties.boss &&
+            mob->ascensionFrames() < kDragonAscentTotalFrames) {
+            continue;
+        }
         gone[i] = true;
-        if (mob != nullptr && mob->dead()) {
+        // V3-10d: the boss's death bookkeeping is the GAME PASS's
+        // (ritual anchor — the stat / the tutorial / the death line /
+        // the egg / the XP burst, the R14's 0-frame-gap ruling): the
+        // despawn pass NEVER books a boss's death (a boss corpse reaching
+        // this point is already booked — the hold above releases it only
+        // at ascension kDragonAscentTotalFrames). A non-boss death books
+        // here, bit-identically.
+        if (mob != nullptr && mob->dead() &&
+            !mob->def().properties.boss) {
             // SURV-7: the per-mob kill counter — every DEAD mob, drop-
             // less included (the death is the event, not the drop; a
             // distance despawn does NOT count — the mob was never dead).
@@ -789,6 +869,13 @@ void Game::updateEntities(double dt) {
             // mob never gets a key (structural: the maps stay untouched).
             mobs.woolVariants.erase(mob);
             mobs.woolVariantMeshes.erase(mob);
+            // V3-10d: the boss singleton's removal (the ascension's
+            // final frame — the m_end.m_dragon raw pointer dies with
+            // the entity, the updateDragonGameplay's liveness scan's
+            // twin; a non-dragon removal never matches, the bit root).
+            if (m_end.m_dragon == mob) {
+                m_end.m_dragon = nullptr;
+            }
         }
     }
     ents = std::move(kept);
@@ -1070,10 +1157,18 @@ void Game::attemptMobSpawn() {
     World& world = currentWorld();
     std::vector<std::unique_ptr<Entity>>& ents = currentEntities();
     // The live-mob census (count + bottom-centers for the clearance rule).
+    // V3-10d: the BOSS is exempt (the dragon is a singleton, never counted
+    // against the pool cap — the enderman pool's cap-4 must stay free while
+    // the boss is alive, the R2's census exemption; a non-boss mob is
+    // counted exactly as before, the bit root).
     int mobCount = 0;
     std::vector<Vec3> mobPositions;
     for (const auto& entity : ents) {
-        if (dynamic_cast<const MobEntity*>(entity.get()) != nullptr) {
+        if (const MobEntity* mob =
+                dynamic_cast<const MobEntity*>(entity.get())) {
+            if (mob->def().properties.boss) {
+                continue;
+            }
             ++mobCount;
             mobPositions.push_back(entity->position());
         }

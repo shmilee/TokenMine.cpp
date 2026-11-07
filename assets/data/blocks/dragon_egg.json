@@ -1,0 +1,16 @@
+{
+  "id": "dragon_egg",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "cutout": true,
+    "light_emission": 1,
+    "drops": "dragon_egg"
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "dragon_egg", "side": "dragon_egg", "bottom": "dragon_egg" }
+  }
+}

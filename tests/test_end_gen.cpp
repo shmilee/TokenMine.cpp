@@ -69,6 +69,21 @@ std::vector<std::string> minimalEndDefs() {
         "\"solid\":false,\"opaque\":false,\"transparent\":true,"
         "\"cutout\":true,\"drops\":\"chorus_fruit\"},"
         "\"model\":{\"shape\":\"cross\",\"textures\":{\"cross\":\"chorus\"}}}",
+        // V3-10d: the dragon arena's two blocks (the crystal's
+        // non-solid cutout + the explode radius, the egg's non-solid
+        // cutout drop — the shipped data's shape).
+        "{\"id\":\"end_crystal\",\"properties\":{\"hardness\":0.0,"
+        "\"solid\":false,\"opaque\":false,\"transparent\":true,"
+        "\"cutout\":true,\"light_emission\":14,\"explode_radius\":3,"
+        "\"shatter_on_arrow\":true},"
+        "\"model\":{\"textures\":{\"top\":\"end_crystal\",\"side\":"
+        "\"end_crystal\",\"bottom\":\"end_crystal\"}}}",
+        "{\"id\":\"dragon_egg\",\"properties\":{\"hardness\":0.0,"
+        "\"solid\":false,\"opaque\":false,\"transparent\":true,"
+        "\"cutout\":true,\"light_emission\":1,"
+        "\"drops\":\"dragon_egg\"},"
+        "\"model\":{\"textures\":{\"top\":\"dragon_egg\",\"side\":"
+        "\"dragon_egg\",\"bottom\":\"dragon_egg\"}}}",
     };
 }
 
@@ -182,7 +197,7 @@ BlockID oracleCell(const EndGen& gen, int wx, int wy, int wz) {
             }
         }
     }
-    // pass 4: the exit portal at the origin (body level 53) — LAST.
+    // pass 4: the exit portal at the origin (body level 53).
     if (wy == kEndExitLevel && std::abs(wx) <= 2 && std::abs(wz) <= 2) {
         const bool corner = (std::abs(wx) == 2) && (std::abs(wz) == 2);
         if (!corner) {
@@ -191,6 +206,27 @@ BlockID oracleCell(const EndGen& gen, int wx, int wy, int wz) {
             }
             return gen.frameEyed;
         }
+    }
+    // pass 5 (10d): the dragon arena (the 4 obsidian towers at (±50,
+    // ±50) rising y53..58 + the 6 crystals: the 4 tower tops at y59 +
+    // the 2 exit crystals on the frame ring's mid-edge tops (±2, y54,
+    // 0)). The air-only predicate: none of these cells is claimed by an
+    // earlier pass (the plateau is y<=52, the islands are guardrailed
+    // out of |x|,|z|<=60, the exit is y53) — so the direct returns hold.
+    static const int kTowerCenters[4][2] = {{50, 50}, {-50, 50},
+                                            {50, -50}, {-50, -50}};
+    for (const auto& tc : kTowerCenters) {
+        const int tx = tc[0], tz = tc[1];
+        if (std::abs(wx - tx) <= 2 && std::abs(wz - tz) <= 2 &&
+            wy >= 53 && wy <= 58) {
+            return gen.obsidian;
+        }
+        if (wx == tx && wz == tz && wy == 59) {
+            return gen.endCrystal;
+        }
+    }
+    if (wy == 54 && wz == 0 && (wx == 2 || wx == -2)) {
+        return gen.endCrystal;
     }
     return BlockID::air();
 }
@@ -239,7 +275,7 @@ TEST(EndGenTest, SeedIsTheXorTwin) {
 // EndGen::create (the fail-fast resolve — the NetherGen::create twin).
 // ---------------------------------------------------------------------------
 
-TEST(EndGenTest, CreateResolvesTheSixNames) {
+TEST(EndGenTest, CreateResolvesTheEightNames) {
     const BlockRegistry reg = endRegistry();
     auto r = EndGen::create(endSeed(7), endBiomes(), reg);
     ASSERT_TRUE(r.ok()) << r.error().message;
@@ -249,6 +285,8 @@ TEST(EndGenTest, CreateResolvesTheSixNames) {
     EXPECT_EQ(r->frameEyed, reg.idForName("end_portal_frame_eyed"));
     EXPECT_EQ(r->bedrock, reg.idForName("bedrock"));
     EXPECT_EQ(r->chorusPlant, reg.idForName("chorus_plant"));
+    EXPECT_EQ(r->endCrystal, reg.idForName("end_crystal"));
+    EXPECT_EQ(r->dragonEgg, reg.idForName("dragon_egg"));
     EXPECT_EQ(r->seed, endSeed(7));
     ASSERT_EQ(r->biomes.size(), 1u);
     EXPECT_EQ(r->biomes[0].name, "end_plains");
@@ -683,4 +721,56 @@ TEST(ShippedEndItems, PearlAndFruitPinned) {
     EXPECT_EQ(f.restoreHunger, 2);
     ASSERT_TRUE(f.saturation.has_value());
     EXPECT_FLOAT_EQ(*f.saturation, 0.0f);
+}
+
+// ---------------------------------------------------------------------------
+// V3-10d: the dragon arena (pass 4 — the 4 obsidian towers + the 6
+// crystals, the air-only belt's frame/plateau protection).
+// ---------------------------------------------------------------------------
+
+TEST(EndGenTest, DragonArenaCellsArePinned) {
+    const EndGen gen = endGenFixture(endSeed(1));
+    World world;
+    // The arena's chunk range: the towers' (±50, ±50) 5x5 footprints
+    // span chunks -4..3 on both axes (the floorDiv's negative read —
+    // -52 is chunk -4, -48 is chunk -3), the exit pair spans -1..0.
+    for (int cz = -4; cz <= 3; ++cz) {
+        for (int cx = -4; cx <= 3; ++cx) {
+            const ChunkPos pos {cx, 3, cz};
+            fillEndChunk(gen, world.getOrCreateChunk(pos), pos);
+        }
+    }
+    // The 6 crystal slots (the kEndCrystalSlots' single source — the
+    // game's census reads these exact cells).
+    const int crystals[6][3] = {{50, 59, 50}, {-50, 59, 50},
+                                 {50, 59, -50}, {-50, 59, -50},
+                                 {2, 54, 0},    {-2, 54, 0}};
+    for (const int* c : crystals) {
+        EXPECT_EQ(world.getBlock(c[0], c[1], c[2]), gen.endCrystal)
+            << "(" << c[0] << "," << c[1] << "," << c[2] << ")";
+    }
+    // The 4 towers' 5x5 obsidian columns (y 53..58 — the crystal's
+    // y59 sits on the column's apex).
+    const int towers[4][2] = {{50, 50}, {-50, 50}, {50, -50}, {-50, -50}};
+    for (const int* t : towers) {
+        for (int tx = t[0] - 2; tx <= t[0] + 2; ++tx) {
+            for (int tz = t[1] - 2; tz <= t[1] + 2; ++tz) {
+                for (int ty = 53; ty <= 58; ++ty) {
+                    EXPECT_EQ(world.getBlock(tx, ty, tz), gen.obsidian)
+                        << "(" << tx << "," << ty << "," << tz << ")";
+                }
+            }
+        }
+    }
+    // The air-only belt's witness: the exit's FRAME (y53) is untouched
+    // by pass 4 (the exit crystal sits at y54, the frame's top face).
+    EXPECT_EQ(world.getBlock(2, 53, 0), gen.frameEyed);
+    EXPECT_EQ(world.getBlock(-2, 53, 0), gen.frameEyed);
+    // The egg is NOT worldgen (the defeat's marker — only the ritual's
+    // m_dead frame writes it, the reload's no-respawn gate's source).
+    EXPECT_EQ(world.getBlock(0, 54, 0), BlockID::air());
+    // The fire's write target is air at generation (the game's section
+    // 2's setBlock precondition — the zero-churn's read).
+    EXPECT_EQ(world.getBlock(2, 55, 0), BlockID::air());
+    EXPECT_EQ(world.getBlock(50, 60, 50), BlockID::air());
 }

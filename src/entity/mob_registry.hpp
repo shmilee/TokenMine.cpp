@@ -450,6 +450,78 @@ struct MobProperties {
     // defaults false, so BOTH ends must ship for the feature to run —
     // the two-phase asset discipline).
     bool carriesBlocks = false;
+    // V3-10d (the ender dragon): the BOSS flag (data 'boss', strict
+    // bool, default false): the top boss-bar's display gate + the
+    // structural exemptions — the distance despawn (a boss outlives
+    // the 40-block despawn ring) and the maxMobs census (a boss is a
+    // singleton, never counted against the pool cap). false = every
+    // pre-V3-10d mob bit-identical.
+    bool boss = false;
+    // V3-10d: the DRAGON-FLIGHT capability (data 'dragon_flight',
+    // strict bool, default false): the runAi's TOP-OF-THE-flying
+    // branch (before flyShoot/flyCruise — the data gate, the
+    // flyShoot's numeric-gate shape) runs the boss's three-state
+    // orbit/strafe/perch AI. MUST be paired with flying AND
+    // spawns_in_air (the parse names a lone flag — a non-flying
+    // dragon is a data contradiction). false = the pre-V3-10d bit
+    // root (ghast/bat take their branches, every ground mob its
+    // state machine).
+    bool dragonFlight = false;
+    // V3-10d: the CONTACT damage (data 'contact_damage', a number in
+    // (0, 100], default 0 = OFF): the game's overlap pass deals this
+    // to the player while the mob's AABB strictly overlaps the
+    // player's (hard rule 6) on its 1-second session cooldown (the
+    // wing-sweep's project read, D13 — no knockback, the V3-14a
+    // precedent). 0 = every pre-V3-10d mob never triggers the pass.
+    float contactDamage = 0.0f;
+    // V3-10d: the FIRE exemption (data 'fire_exempt', strict bool,
+    // default false): the armFire's ignition gates skip this mob
+    // (lava contact AND fire-block contact — the MC dragon's
+    // fire-immunity read; it flies through the crystal flames).
+    // false = the pre-V3-10d bit root (the strider's walks_on_lava
+    // lava-term stays the only lava exemption, untouched).
+    bool fireExempt = false;
+    // V3-10d: the STATUS-EFFECT exemption (data 'effect_exempt',
+    // strict bool, default false): applyEffect early-returns for
+    // this mob (the MC dragon's all-effects-immunity — without it a
+    // poison arrow grinds the boss down, the gameplay hole). The
+    // DAMAGE itself flows (instant-harm is the sanctioned exception
+    // — D11's read). false = the pre-V3-10d bit root.
+    bool effectExempt = false;
+    // V3-10d: the KNOCKBACK exemption (data 'knockback_exempt',
+    // strict bool, default false): the melee attack's and the arrow
+    // impact's addKnockback skip this mob (the MC dragon's
+    // no-knockback read; the project's knockback-less V3-15 precedent
+    // covers the player side, this covers the mob side). false = the
+    // pre-V3-10d bit root.
+    bool knockbackExempt = false;
+    // V3-10d: the BREATH / FIREBALL / CRYSTAL-PARAMETER family (all
+    // data numbers, default 0 = OFF, PRESENT-TOGETHER with
+    // dragon_flight — the milk pairing discipline over the group:
+    // a dragon_flight mob without the breath pair, or the pair
+    // without dragon_flight, is a dead field, named at parse):
+    // `breath_cooldown` (seconds between perch breaths, (0, 600]),
+    // `breath_duration` (the cloud's seconds, (0, 60]),
+    // `breath_radius` (the cloud's blocks, (0, 32]),
+    // `fireball_cooldown` (strafe fireball cadence, (0, 600]),
+    // `fireball_speed` (the projectile's b/s, (0, 100]),
+    // `crystal_break_damage` (the heal-source-break self-harm, the
+    // MC 10 read; [0, 100], 0 = the damage-off read).
+    double breathCooldown = 0.0;
+    double breathDuration = 0.0;
+    float breathRadius = 0.0f;
+    double fireballCooldown = 0.0;
+    float fireballSpeed = 0.0f;
+    float crystalBreakDamage = 0.0f;
+    // V3-10d: the VERTICAL detect band override (data
+    // 'detect_vertical', a number in (0, 64], default 0 = the code
+    // constant kDetectVertical 2.0 — the bit root for every mob):
+    // the dragon's 58-perch vs the 53-player needs the 8-block band
+    // (its seesPlayer's vertical gate reads this, the ghast's
+    // kDetectVertical twin). The data value only ever WIDENS the
+    // band (the 2.0 default stays the floor semantics via the
+    // max() read at the consumer).
+    float detectVertical = 0.0f;
     // Drops (Phase 28): the item list the mob drops on death — one entry
     // per dropped item, spawned in list order. Empty = no drops.
     std::vector<MobDrop> drops;

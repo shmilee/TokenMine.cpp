@@ -8,6 +8,7 @@
 #include <system_error>
 
 #include "core/json.hpp"
+#include "entity/breath_cloud.hpp"
 
 namespace mc {
 
@@ -540,23 +541,28 @@ Result<SaveGame> Game::collectSave() const {
         }
     }
     // V3-10a (format 32): the End's dropped items (the nether's entity
-    // loop's twin — the ITEM kind only; 10a's End carries no mob / XP
-    // source, the same loud-failure belt).
+    // loop's twin — the ITEM kind only; the mobs (10c) / the arrows /
+    // the clouds are EPHEMERAL (skipped, the overworld's mob belt) and
+    // the 10d dragon's XP orbs are SKIPPED too (the documented
+    // deviation: the End's orbs are not persisted — their 120-s fuse
+    // bounds the loss, the MC persistence read would need the
+    // format-33 end_xp_entities key, the 10d2 re-discussion).
     for (const std::unique_ptr<Entity>& e : m_end.entities) {
         if (dynamic_cast<const ExpOrbEntity*>(e.get()) != nullptr) {
-            return MC_FAIL(
-                "cannot save: the End holds an XP orb (the End carries "
-                "no XP grant source in V3-10a)");
+            continue; // the 10d orb's skip (the deviation above)
         }
         const ItemEntity* item = dynamic_cast<const ItemEntity*>(e.get());
         if (item == nullptr) {
             if (dynamic_cast<const MobEntity*>(e.get()) == nullptr &&
-                dynamic_cast<const Projectile*>(e.get()) == nullptr) {
+                dynamic_cast<const Projectile*>(e.get()) == nullptr &&
+                dynamic_cast<const BreathCloudEntity*>(e.get()) ==
+                    nullptr) {
                 return MC_FAIL(
                     "cannot save: an entity of a kind this build does not "
                     "persist exists in the End");
             }
-            continue; // mobs / arrows are ephemeral (the overworld twin)
+            continue; // mobs / arrows / clouds are ephemeral (the
+                      // overworld twin)
         }
         SavedItemEntity se;
         se.item = item->itemName();

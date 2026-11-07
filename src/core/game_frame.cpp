@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include "core/third_person.hpp"
+#include "entity/breath_cloud.hpp"
 #include "entity/item_light.hpp"
 #include "world/beacon.hpp"
 #include "world/fire_spread.hpp"
@@ -402,6 +403,11 @@ void Game::update(double dt) {
     // dimension arms the same 60-frame step, the SHARED cooldown; a
     // no-end-portal run never arms it, the structural-immunity root).
     updateEndPortalEntry();
+    // V3-10d: the dragon boss's gameplay pass (the spawn schedule / the
+    // crystal census + fire + heal / the contact + cloud damage / the
+    // ascension ritual — the updateEndPortalEntry's dimension twin,
+    // one playerInEnd() gate = the no-End session's structural root).
+    updateDragonGameplay();
     // UX-4 / V2-1 / V2-19: the per-frame camera sync (the mode's base
     // view — extracted VERBATIM into syncCamera(); the V3-9 replay's
     // still frames call it too for the live audience orbit).
@@ -1660,6 +1666,489 @@ bool Game::executeMobTeleport(
                  std::to_string(kTeleportAttempts) + " candidates) f" +
                  std::to_string(m_frameCount));
     return false; // the total failure — the swallow (the mob stays put)
+}
+
+// ---------------------------------------------------------------------------
+// V3-10d: the ender dragon boss (the updateDragonGameplay's single
+// choke point + the spawn / the shatter seams — see the declarations).
+// ---------------------------------------------------------------------------
+
+namespace {
+// The crystal slots' CELL indices (the kEndCrystalSlots centers' floor —
+// the world reads' integer form, the single derivation).
+struct CrystalCell {
+    int x, y, z;
+};
+constexpr CrystalCell kCrystalCells[6] = {
+    {50, 59, 50}, {-50, 59, 50}, {50, 59, -50}, {-50, 59, -50},
+    {2, 54, 0},    {-2, 54, 0},
+};
+// The egg's CELL (the kEndEggPos center's floor).
+constexpr CrystalCell kEggCell {0, 54, 0};
+// The XP burst's orb count + the every-5-frames release cadence (the
+// MC 155-tick/5-tick read's frame scale; 22 x 9 + 1 x 2 = 200).
+constexpr int kDragonXpOrbs = 23;
+constexpr int kDragonXpOrbValue = 9;
+constexpr int kDragonXpLastOrbValue = 2;
+constexpr int kDragonXpReleaseFrames = 5;
+} // namespace
+
+void Game::spawnDragon() {
+    // V3-10d: the dragon's singleton spawn (the attemptMobSpawn's twin
+    // over the FIXED point — the pool is the enderman's, the boss is
+    // the worldgen arena's resident). The seed's kSaltDragon xor (the
+    // singleton never walks the pool's spawnCounter — the R2's stream
+    // isolation). The entity lands in m_end.entities (the dimension's
+    // list — the player is in the End by the caller's gate).
+    if (!m_end.world) {
+        return; // belt (the caller's playerInEnd gate implies built)
+    }
+    const Mob* def = m_mobs.mobTypes.findByName("ender_dragon");
+    if (def == nullptr) {
+        return; // cannot happen (init resolved the End pool's
+                // vocabulary — the dragon is a data resident, not a
+                // pool member, but the belt names nothing: the spawn
+                // schedule's gate is the ids' validity)
+    }
+    const std::uint64_t seed =
+        static_cast<std::uint64_t>(currentSeed()) ^
+        static_cast<std::uint64_t>(kSaltDragon);
+    auto mob = std::make_unique<MobEntity>(
+        *m_end.world, m_blocks, *def, kDragonSpawnPos, seed);
+    // The dragon's two FEEDS + the ANCHORS (the entity never reads the
+    // core layer — the game pushes the end-origin's geometry).
+    mob->setDragonAnchors(kEndPerchPos, kDragonOrbitCenter);
+    mob->setCrystalsAlive(0, false);
+    // The AI's landed cues (the attemptMobSpawn's wiring family):
+    // the shoot callback = the DRAGON FIREBALL (damage 0 / no hurt /
+    // the leavesCloud flag — the cloud is the damage, not the impact;
+    // the dragon_shoot cue + the eye-to-player aim, the skeleton's
+    // seam shape).
+    {
+        const float fireballSpeed = def->properties.fireballSpeed;
+        MobEntity* raw = mob.get();
+        mob->setShootCallback(
+            [this, raw, fireballSpeed]() {
+                if (m_player->isDead() || raw->dead()) {
+                    return;
+                }
+                const Vec3 eye = raw->eyePosition();
+                const Vec3 target = m_player->eyePosition();
+                const Vec3 toPlayer = target - eye;
+                const float dist = std::sqrt(dot(toPlayer, toPlayer));
+                if (dist < 1e-4f) {
+                    return;
+                }
+                if (!hasLineOfSight(*m_end.world, m_blocks, eye, target)) {
+                    return; // the wall's no-fire gate (the skeleton's
+                            // read — the crystals' towers are the
+                            // arena's only occluders)
+                }
+                auto fireball = std::make_unique<Projectile>(
+                    *m_end.world, m_blocks,
+                    eye + toPlayer / dist * 0.5f, toPlayer / dist,
+                    fireballSpeed, /*damage=*/0.0f,
+                    /*hurtPlayer=*/false, /*power=*/1.0f,
+                    /*ammoItem=*/"", /*effectId=*/-1,
+                    /*effectDuration=*/0.0, /*effectTier=*/0,
+                    /*explodeRadius=*/0.0f, /*explodeSource=*/"",
+                    /*teleports=*/false, /*leavesCloud=*/true);
+                MC_LOG_DEBUG("dragon fired fireball f" +
+                             std::to_string(m_frameCount));
+                m_sound.play("dragon_shoot", eye);
+                m_end.entities.push_back(std::move(fireball));
+            });
+    }
+    // The ambient (the dragon_ambient's data interval) + the two
+    // dragon cues (the growl telegraph + the breath cloud's trigger —
+    // the cloud spawns at the PLAYER's feet, the data breath's
+    // duration/radius).
+    if (!def->properties.ambientSoundName.empty()) {
+        const std::string ambientName = def->properties.ambientSoundName;
+        mob->setAmbientSoundCallback(
+            [this, ambientName](Vec3 origin) {
+                m_sound.play(ambientName, origin);
+            });
+    }
+    mob->setGrowlCallback([this](Vec3 origin) {
+        MC_LOG_DEBUG("dragon growl (breath telegraph) f" +
+                     std::to_string(m_frameCount));
+        m_sound.play("dragon_growl", origin);
+    });
+    {
+        const double breathDuration = def->properties.breathDuration;
+        const float breathRadius = def->properties.breathRadius;
+        mob->setBreathCallback([this, breathDuration, breathRadius]() {
+            if (m_player->isDead()) {
+                return;
+            }
+            const Vec3 feet = m_player->position();
+            MC_LOG_DEBUG("dragon breath cloud at (" +
+                         std::to_string(feet.x) + ", " +
+                         std::to_string(feet.y) + ", " +
+                         std::to_string(feet.z) + ") f" +
+                         std::to_string(m_frameCount));
+            m_end.entities.push_back(std::make_unique<BreathCloudEntity>(
+                *m_end.world, m_blocks, feet, breathDuration,
+                breathRadius));
+        });
+    }
+    MobEntity* raw = mob.get();
+    m_end.entities.push_back(std::move(mob));
+    m_end.m_dragon = raw;
+    MC_LOG_DEBUG("ender dragon spawned at (" +
+                 std::to_string(kDragonSpawnPos.x) + ", " +
+                 std::to_string(kDragonSpawnPos.y) + ", " +
+                 std::to_string(kDragonSpawnPos.z) + ") f" +
+                 std::to_string(m_frameCount));
+}
+
+bool Game::shatterCrystalAt(int x, int y, int z) {
+    // V3-10d: the crystal's shatter (the breakBlock's explode hook's
+    // caller-over — the player's break AND the arrow's sweep both flow
+    // through here, the single choke point). Returns false when the
+    // cell holds no live crystal (the sweep's miss path).
+    World& world = currentWorld();
+    const BlockID id = world.getBlock(x, y, z);
+    if (id != m_states.endCrystalId || !id.valid()) {
+        return false;
+    }
+    // The heal-source's self-harm (the R4's frame ruling: the damage
+    // lands BEFORE the blast — the crystal's heal state is the
+    // m_dragonHealSlot's THIS-WINDOW read, the beam's source).
+    if (m_end.m_dragon != nullptr && !m_end.m_dragon->dead() &&
+        m_end.m_dragonHealSlot >= 0) {
+        const CrystalCell& healed = kCrystalCells[m_end.m_dragonHealSlot];
+        if (healed.x == x && healed.y == y && healed.z == z) {
+            const float dmg =
+                m_end.m_dragon->def().properties.crystalBreakDamage;
+            if (dmg > 0.0f) {
+                m_end.m_dragon->damage(dmg);
+            }
+            m_end.m_dragonHealSlot = -1;
+        }
+    }
+    // The break (the setBlock's journal choke) + the relight + the
+    // BLAST (the data explode_radius over the cell center — the
+    // no-chain structural property: the blast's setBlock never
+    // re-enters this function, the other crystals in range just
+    // shatter to air without their own blasts, the MC JE read).
+    setBlock(x, y, z, BlockID::air());
+    Lighting::updateLocal(world, m_blocks, {x, y, z});
+    const Block& crystal = m_blocks.at(id);
+    if (crystal.properties.explodeRadius > 0.0f) {
+        explodeAt(Vec3 {static_cast<float>(x) + 0.5f,
+                        static_cast<float>(y) + 0.5f,
+                        static_cast<float>(z) + 0.5f},
+                  crystal.properties.explodeRadius, "");
+    }
+    MC_LOG_DEBUG("end crystal shattered at (" + std::to_string(x) + ", " +
+                 std::to_string(y) + ", " + std::to_string(z) + ") f" +
+                 std::to_string(m_frameCount));
+    return true;
+}
+
+void Game::updateDragonGameplay() {
+    // V3-10d: the boss's per-frame gameplay pass (the declaration's
+    // five sections — the single playerInEnd() gate: a no-End session
+    // is one bool check, the structural-immunity root).
+    if (!playerInEnd()) {
+        return;
+    }
+    // The system's validity belt (the ids' init resolution — an asset
+    // set without the dragon's blocks is structurally inert, the P70
+    // pattern).
+    if (!m_states.endCrystalId.valid() || !m_states.dragonEggId.valid()) {
+        return;
+    }
+    World& world = *m_end.world;
+
+    // -- 1. the spawn schedule (the first-visit's 60-frame delay) ------
+    MobEntity* dragon = m_end.m_dragon;
+    // The pointer's liveness belt (the despawn pass's rebuild moves the
+    // unique_ptrs — a removed dragon leaves a stale pointer; the scan
+    // is the few-entity list, negligible): null on the removal frame.
+    if (dragon != nullptr) {
+        bool alive = false;
+        for (const auto& e : m_end.entities) {
+            if (e.get() == dragon) {
+                alive = true;
+                break;
+            }
+        }
+        if (!alive) {
+            m_end.m_dragon = nullptr;
+            dragon = nullptr;
+        }
+    }
+    if (dragon == nullptr && m_end.m_dragonSpawnDelay < 0 &&
+        m_mobs.mobsEnabled &&
+        world.getBlock(kEggCell.x, kEggCell.y, kEggCell.z) !=
+            m_states.dragonEggId) {
+        m_end.m_dragonSpawnDelay = kDragonAscentFlyFrames; // the 1-s read
+    }
+    if (m_end.m_dragonSpawnDelay >= 0) {
+        --m_end.m_dragonSpawnDelay;
+        if (m_end.m_dragonSpawnDelay == 0) {
+            m_end.m_dragonSpawnDelay = -1;
+            spawnDragon();
+        }
+    }
+    // The --dragon-damage seam (the gate's deterministic kill trigger —
+    // the --explode twin): applied the first frame the dragon exists
+    // (the spawn's frame, this pass just spawned it), then consumed.
+    // nullopt = the no-seam run's structural-immunity root.
+    if (m_args.dragonDamage.has_value() && m_end.m_dragon != nullptr &&
+        !m_end.m_dragon->dead()) {
+        MC_LOG_INFO("--dragon-damage: " +
+                    std::to_string(*m_args.dragonDamage) + " to the End " +
+                    "dragon");
+        m_end.m_dragon->damage(static_cast<float>(*m_args.dragonDamage));
+        m_args.dragonDamage.reset();
+    }
+    // Re-capture AFTER the spawn/seam: the same-frame spawn+kill (the
+    // gate's seam) must still book its death this frame (the R14's
+    // 0-frame-gap ruling — the egg lands on the m_dead frame). A
+    // non-spawn frame re-reads the identical pointer.
+    dragon = m_end.m_dragon;
+
+    // -- 2. the crystal census + fire + heal cadence -------------------
+    // UNLOADED-CHUNK INDEPENDENCE (the gate-216 streaming probe): a
+    // crystal can only break through the loaded-chunk paths (the
+    // player's break / the arrow sweep both read the chunk's cell), so
+    // a slot in an unloaded chunk is WORLDGEN-FRESH = intact. Counting
+    // it live keeps the census at the arena's true state from frame 0
+    // (a raw getBlock read would drift 0->6 as the chunks stream in,
+    // faking crystal breaks into the strafe trigger and the perch
+    // probability).
+    int liveCrystals = 0;
+    for (const CrystalCell& c : kCrystalCells) {
+        const ChunkPos cp = worldToChunk(BlockPos {c.x, c.y, c.z});
+        if (!world.hasChunk(cp) ||
+            world.getBlock(c.x, c.y, c.z) == m_states.endCrystalId) {
+            ++liveCrystals;
+        }
+    }
+    // The first census is never a "change" (the -1 sentinel would
+    // otherwise read as a crystal break on the spawn's frame — the
+    // spurious strafe the gate-216 probe caught).
+    const bool crystalsChanged =
+        m_end.m_lastDragonCrystalCount >= 0 &&
+        m_end.m_lastDragonCrystalCount != liveCrystals;
+    m_end.m_lastDragonCrystalCount = liveCrystals;
+
+    if (dragon != nullptr && !dragon->dead()) {
+        dragon->setCrystalsAlive(liveCrystals, crystalsChanged);
+        // The state transition's E2E evidence line (the 10c provoked
+        // line's twin — the boss combat's three-state cycle is the
+        // gate's assertion target; the game pass owns the log, the
+        // entity stays log-free as every other does).
+        const MobState st = dragon->state();
+        const int s = static_cast<int>(st);
+        if (m_end.m_dragonLastState != s) {
+            const char* name =
+                st == MobState::Wander
+                    ? "orbit"
+                    : (st == MobState::RangedAttack
+                           ? "strafe"
+                           : (st == MobState::Attack ? "perch" : "state"));
+            MC_LOG_DEBUG("dragon entered " + std::string(name) + " f" +
+                         std::to_string(m_frameCount));
+            m_end.m_dragonLastState = s;
+        }
+    }
+    // The crystal fire (each live crystal's cell+1y = a permanent end
+    // fire block — the D9 closed set's zero-churn read: written once,
+    // never re-touched; the break clears it with the crystal).
+    for (const CrystalCell& c : kCrystalCells) {
+        if (world.getBlock(c.x, c.y, c.z) == m_states.endCrystalId &&
+            world.getBlock(c.x, c.y + 1, c.z) == BlockID::air()) {
+            setBlock(c.x, c.y + 1, c.z, m_states.fireId);
+        }
+    }
+    // The heal cadence (the 1 HP / 30 frames from the NEAREST live
+    // crystal in 32 — the data-order tie-break over equal distances).
+    m_end.m_dragonHealFrame = (m_end.m_dragonHealFrame + 1) % 30;
+    m_end.m_dragonHealSlot = -1;
+    if (dragon != nullptr && !dragon->dead() && m_end.m_dragonHealFrame == 0
+        && liveCrystals > 0) {
+        const Vec3 dpos = dragon->position();
+        int best = -1;
+        float bestDist = 32.0f;
+        for (int i = 0; i < 6; ++i) {
+            const CrystalCell& c = kCrystalCells[i];
+            // The same unloaded-chunk predicate as the census above
+            // (an intact crystal in an unloaded chunk is a valid
+            // heal source — the beam's render is load-independent).
+            const ChunkPos cp = worldToChunk(BlockPos {c.x, c.y, c.z});
+            if (world.hasChunk(cp) &&
+                world.getBlock(c.x, c.y, c.z) != m_states.endCrystalId) {
+                continue;
+            }
+            const Vec3 center {static_cast<float>(c.x) + 0.5f,
+                               static_cast<float>(c.y) + 0.5f,
+                               static_cast<float>(c.z) + 0.5f};
+            const float d = std::sqrt(dot(center - dpos, center - dpos));
+            if (d < bestDist) { // the strict < = the data-order
+                                 // tie-break (earlier slot wins)
+                bestDist = d;
+                best = i;
+            }
+        }
+        if (best >= 0 && dragon->heal(1.0f)) {
+            m_end.m_dragonHealSlot = best;
+        }
+    }
+
+    // -- 3. the contact damage pass (the wing sweep) -------------------
+    for (auto& entity : m_end.entities) {
+        auto* mob = dynamic_cast<MobEntity*>(entity.get());
+        if (mob == nullptr || mob->dead()) {
+            continue;
+        }
+        const float contact = mob->def().properties.contactDamage;
+        if (contact <= 0.0f) {
+            continue; // the data gate (the dragon is the shipped carrier)
+        }
+        mob->tickContactCooldown(1.0 / 60.0);
+        if (!mob->contactDamageReady() || m_player->isDead()) {
+            continue;
+        }
+        // The strict AABB overlap (hard rule 6 — the no-epsilon read).
+        const Vec3 mmin = mob->aabbMin(), mmax = mob->aabbMax();
+        const Vec3 pmin = m_player->aabbMin(), pmax = m_player->aabbMax();
+        const bool overlap = pmin.x < mmax.x && pmax.x > mmin.x &&
+                             pmin.y < mmax.y && pmax.y > mmin.y &&
+                             pmin.z < mmax.z && pmax.z > mmin.z;
+        if (!overlap) {
+            continue;
+        }
+        const float damageScale = mob->def().properties.hostile
+                                      ? hostileDamageScale(m_mobs.difficulty)
+                                      : 1.0f;
+        m_player->damage(contact * damageScale, false,
+                         {Player::DamageSource::Mob, mob->def().name});
+        mob->latchContactDamage();
+    }
+
+    // -- 4. the breath cloud's damage pass (the player's overlap) ------
+    if (!m_player->isDead()) {
+        const Vec3 pmin = m_player->aabbMin(), pmax = m_player->aabbMax();
+        for (auto& entity : m_end.entities) {
+            auto* cloud = dynamic_cast<BreathCloudEntity*>(entity.get());
+            if (cloud == nullptr) {
+                continue;
+            }
+            const Vec3 c = cloud->position();
+            const float r = cloud->radius();
+            // The horizontal disc (the player's feet cell vs the cloud's
+            // center — the standing read) + the y band (the cloud's
+            // hover height's 1-block tolerance).
+            const float hdx = c.x - pmin.x;
+            const float hdz = c.z - pmin.z;
+            const bool inDisc = std::sqrt(hdx * hdx + hdz * hdz) <= r;
+            const bool inBand = c.y < pmax.y + 1.0f && c.y > pmin.y - 1.0f;
+            if (!inDisc || !inBand) {
+                continue;
+            }
+            // The 30-frame re-grant (the effect's 0.6 duration outlives
+            // the gap — a continuous cloud = a continuous effect).
+            if (m_frameCount % 30 == 0) {
+                applyPlayerEffect("dragon_breath", 0.6, 0);
+                syncAbsorption();
+            }
+        }
+    }
+
+    // -- 5. the ascension ritual driver (the dead boss's corpse) -------
+    if (dragon != nullptr && dragon->dead()) {
+        const int f = dragon->ascensionFrames();
+        if (f < 0) {
+            // The m_dead frame (the R14's 0-frame-gap bookkeeping — the
+            // egg's world-state marker + the kill stat + the death line
+            // all run HERE, the ritual's anchor, not the removal frame).
+            dragon->setAscensionFrames(0);
+            m_end.m_dragonDeathPos = dragon->position();
+            // The egg (the end segment's journal's +1 cell — the
+            // defeat's WORLD-STATE marker, the format-32 no-bump's
+            // persistence ruling).
+            setBlock(kEggCell.x, kEggCell.y, kEggCell.z,
+                     m_states.dragonEggId);
+            Lighting::updateLocal(world, m_blocks,
+                                  {kEggCell.x, kEggCell.y, kEggCell.z});
+            ++m_stats["kill." + dragon->def().name];
+            emitTutorialEvent("kill." + dragon->def().name, 1);
+            MC_LOG_DEBUG("mob '" + dragon->def().name + "' died at (" +
+                         std::to_string(dragon->position().x) + ", " +
+                         std::to_string(dragon->position().y) + ", " +
+                         std::to_string(dragon->position().z) + ") f" +
+                         std::to_string(m_frameCount));
+            MC_LOG_INFO("dragon death: egg placed, 200 XP burst "
+                        "scheduled");
+            m_end.m_dragonXpRemaining = kDragonXpOrbs;
+            m_end.m_dragonXpFrame = 0;
+        } else if (f < kDragonAscentTotalFrames) {
+            const int nf = f + 1;
+            dragon->setAscensionFrames(nf);
+            if (nf <= kDragonAscentFlyFrames) {
+                // The flight to the perch (the 60-frame lerp — the
+                // corpse's pure-geometry path, the R14's read).
+                const float t =
+                    static_cast<float>(nf) / kDragonAscentFlyFrames;
+                const Vec3 from = m_end.m_dragonDeathPos;
+                const Vec3 to = kEndPerchPos;
+                dragon->teleportTo(Vec3 {from.x + (to.x - from.x) * t,
+                                         from.y + (to.y - from.y) * t,
+                                         from.z + (to.z - from.z) * t});
+            } else {
+                // The perch hover (the 180-frame still — the rise is
+                // the particle stream's job below).
+                dragon->teleportTo(kEndPerchPos);
+            }
+            // The ascension's particle stream (the crystal-texture's
+            // rising embers — the spawnFire's deterministic seed: the
+            // world seed x the frame, one per 4 frames).
+            if (nf % 4 == 0) {
+                const Vec3 p = dragon->position();
+                m_particles.spawnFire(
+                    static_cast<int>(std::floor(p.x)),
+                    static_cast<int>(std::floor(p.y)),
+                    static_cast<int>(std::floor(p.z)),
+                    m_states.endCrystalId, 0.0f, 15.0f,
+                    static_cast<std::uint64_t>(currentSeed()) ^
+                        (std::uint64_t{0x9E3779B97F4A7C15} *
+                         static_cast<std::uint64_t>(m_frameCount)));
+            }
+            // The XP burst (the 200's 23-orb release — the every-5-
+            // frames cadence over the perch, the MC 155/5 read).
+            if (nf > kDragonAscentFlyFrames &&
+                m_end.m_dragonXpRemaining > 0) {
+                m_end.m_dragonXpFrame =
+                    (m_end.m_dragonXpFrame + 1) % kDragonXpReleaseFrames;
+                if (m_end.m_dragonXpFrame == 0) {
+                    const int value =
+                        m_end.m_dragonXpRemaining == 1
+                            ? kDragonXpLastOrbValue : kDragonXpOrbValue;
+                    MC_LOG_DEBUG("dragon XP orb " +
+                                 std::to_string(kDragonXpOrbs -
+                                                 m_end.m_dragonXpRemaining +
+                                                 1) + "/" +
+                                 std::to_string(kDragonXpOrbs) +
+                                 " (value " + std::to_string(value) +
+                                 ") f" + std::to_string(m_frameCount));
+                    spawnExpOrb(value, kEndPerchPos);
+                    --m_end.m_dragonXpRemaining;
+                }
+            }
+        } else {
+            // The ritual's end (the 240-frame removal — the despawn
+            // pass drops the corpse this frame; the death cue's final-
+            // frame play).
+            MC_LOG_DEBUG("dragon ascension complete (wail + removal) f" +
+                         std::to_string(m_frameCount));
+            m_sound.play("dragon_death", kEndPerchPos);
+        }
+    }
 }
 
 void Game::updatePortalAmbience() {

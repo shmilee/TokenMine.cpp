@@ -804,6 +804,27 @@ Result<void> Game::buildScene() {
         }
     }
 
+    // V3-10d (the ender dragon): the boss's CUE + EFFECT cross-check
+    // (the teleport-wav's mob-twin over the dragon family — ANY
+    // dragon_flight mob requires the three cue wavs + the dragon_breath
+    // effect, the S6's missing-wav / missing-effect faces). The core's
+    // names are the generic boss action's (not a species switch).
+    for (const MobID mid : m_mobs.mobTypes.allIds()) {
+        const Mob& mob = m_mobs.mobTypes.at(mid);
+        if (!mob.properties.dragonFlight) {
+            continue; // no dragon (the pre-V3-10d bit root)
+        }
+        for (const char* cue : {"dragon_growl", "dragon_death",
+                                "dragon_shoot"}) {
+            const std::string rel = std::string("sounds/") + cue + ".wav";
+            if (!m_assets.exists(rel)) {
+                return MC_FAIL("mob '" + mob.name +
+                               "' carries dragon_flight — the cue is "
+                               "missing '" + rel + "'");
+            }
+        }
+    }
+
     // -- player body (UX-3): the world-space body model ----------------------
     // data/player_body.json is a MODEL-ONLY file (exactly one top-level
     // 'model' key — no id / properties / AI fields, the mob file's
@@ -937,6 +958,21 @@ Result<void> Game::buildScene() {
                            std::to_string(eff.icon) + " is outside the "
                            "effects.png tile range [0, " +
                            std::to_string(effectTiles - 1) + "]");
+        }
+    }
+    // V3-10d (the ender dragon): the breath EFFECT's existence check (the
+    // dragon_flight mob requires dragon_breath — the S6's missing-effect
+    // face). Runs AFTER the effect load (the cue-wav check above runs
+    // pre-load over m_assets.exists, the file-side).
+    for (const MobID mid : m_mobs.mobTypes.allIds()) {
+        const Mob& mob = m_mobs.mobTypes.at(mid);
+        if (!mob.properties.dragonFlight) {
+            continue; // no dragon (the pre-V3-10d bit root)
+        }
+        if (m_effects.findByName("dragon_breath") == nullptr) {
+            return MC_FAIL("mob '" + mob.name +
+                           "' carries dragon_flight — the breath "
+                           "effect 'dragon_breath' is missing");
         }
     }
     // Phase 57: at most ONE effect may ignite the player from the lava
@@ -1651,6 +1687,16 @@ Result<void> Game::buildScene() {
     // sets, the rescan / entry countdown fast-exit).
     m_states.endPortalId = m_blocks.idForName("end_portal");
     m_states.endFrameEyedId = m_blocks.idForName("end_portal_frame_eyed");
+    // V3-10d: the dragon arena's resolved ids (the endPortalId's twins —
+    // EndGen::create above just fail-fasted their existence, so a
+    // failure here is the belt's unreachable branch: the belt names it
+    // rather than degrading, the P70 family pattern).
+    m_states.endCrystalId = m_blocks.idForName("end_crystal");
+    m_states.dragonEggId = m_blocks.idForName("dragon_egg");
+    if (!m_states.endCrystalId.valid() || !m_states.dragonEggId.valid()) {
+        return MC_FAIL("dragon arena: EndGen resolved but the game's id "
+                       "lookup failed (the belt's unreachable branch)");
+    }
     // The ender_eye item (the embed interaction's held-item predicate —
     // the resolved id, the m_states.portalId pattern; invalid = the
     // interaction is structurally inert).

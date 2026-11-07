@@ -541,7 +541,8 @@ TEST(V34NetheriteMaterialChain, RecipeCensusPinned) {
     // conscious census update.
     RealChain c;
     // V3-10b: 112 -> 113 (the end_stone_bricks' 2x2 shaped recipe).
-    EXPECT_EQ(c.recipes.count(), 113u);
+    // V3-10d: 113 -> 114 (the end_crystal's recipe).
+    EXPECT_EQ(c.recipes.count(), 114u);
 }
 
 // ===========================================================================

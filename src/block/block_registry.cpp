@@ -111,6 +111,19 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     r = checkField(*p, "carriable", "boolean",
                    [&](const Json& v) { out.carriable = v.asBool(); });
     MC_TRY(r);
+    // V3-10d (the end crystal): the break-explosion's radius (a pure
+    // data number — ABSENT = 0.0 = inert, the blast_resistance's
+    // backward-compat default shape).
+    r = checkField(*p, "explode_radius", "number",
+                   [&](const Json& v) {
+                       out.explodeRadius = static_cast<float>(v.asDouble());
+                   });
+    MC_TRY(r);
+    // V3-10d: the shatter-on-arrow gate (the strict-bool family —
+    // the carriable's twin shape; the arrow sweep's data predicate).
+    r = checkField(*p, "shatter_on_arrow", "boolean",
+                   [&](const Json& v) { out.shatterOnArrow = v.asBool(); });
+    MC_TRY(r);
     r = checkField(*p, "destroyable", "boolean",
                    [&](const Json& v) { out.destroyable = v.asBool(); });
     MC_TRY(r);
@@ -660,6 +673,10 @@ Result<void> BlockRegistry::parseProperties(const Json& def,
     if (out.blastResistance < 0.0f) {
         return MC_FAIL("'blast_resistance' must be >= 0, got " +
                        std::to_string(out.blastResistance));
+    }
+    if (out.explodeRadius < 0.0f) {
+        return MC_FAIL("'explode_radius' must be >= 0, got " +
+                       std::to_string(out.explodeRadius));
     }
     if (out.lightEmission < 0 || out.lightEmission > 15) {
         return MC_FAIL("'light_emission' must be in [0, 15], got " +

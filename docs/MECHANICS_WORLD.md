@@ -1,9 +1,11 @@
-# 机制详解 · 世界与渲染（现状 v3.25.0）
+# 机制详解 · 世界与渲染（现状 v3.26.0）
 
 > 玩家/系统侧（内容总览/操作与交互/实体与 Mob/生存系统/状态效果/弓与箭/流体桶与点燃/demo 回放/合成与容器/存档/难度/确定性约定）= `docs/MECHANICS.md`（主文件；头部「来源约定」全文在主文件）。
 
-> 2026-11-07 增量刷新：现状 = **v3.25.0**（V3-10c 末影人——End
-> 首个 mob：注视激怒 + 瞬移 + 携格，门 215）；其前 v3.24.0 =
+> 2026-11-07 增量刷新：现状 = **v3.26.0**（V3-10d1 末影龙核心 + 首杀
+> 闭环——矩阵唯一真大项首相位 D1/2：龙 boss + 水晶 + 龙息云 + 首杀
+> 仪式 + 血条，门 216）；其前 v3.25.0 = V3-10c 末影人——End
+> 首个 mob：注视激怒 + 瞬移 + 携格，门 215；v3.24.0 =
 > V3-10b 末地内容族 + 末影珍珠，门 214；v3.23.0 = V3-10a 末地
 > 维度框架 + 真传送，门 213【format 32】；v3.22.0 = V3-14d strider 骑乘，门 212；v3.21.0 =
 > V3-14c piglin 交易，门 211；v3.20.0 = V3-14b ghast，门 210；v3.19.0 =
@@ -12,8 +14,8 @@
 > 生存/表现小批，门 206；v3.15.0 = V3-13 死亡统计屏，门 205；v3.14.0 =
 > V3-8b 手柄映射，门 204【sim 2】；v3.13.0 = demo sim 版本，门 203；
 > v3.12.0 = 实机报障阴影缩尺，门 202；3.x 矩阵收官于 v3.11.0；其前
-> 2.x 两批 20 版收官 v2.0.0 → v2.19.0）、无输入基线门 **215** 次、
-> 单元测试 **2930/2930**、`-Wall -Wextra -Wpedantic -Werror` 0
+> 2.x 两批 20 版收官 v2.0.0 → v2.19.0）、无输入基线门 **216** 次、
+> 单元测试 **2959/2959**、`-Wall -Wextra -Wpedantic -Werror` 0
 > 警告、存档 **format 32**（下界维度 format 30：player.dimension +
 > nether 段 + nether_entities；创造 format 31：player.creative；末地
 > format 32：dimension 词表 +end 按 format 分词 + end 段 +
@@ -549,16 +551,50 @@
   果 + 0-1 株；生长不做 = 主世界 only 生长 tick 后移 10c/10d）/
   **biomes_end 单群系池**（end_plains surface endstone no-op 覆写；
   MC 无群系偏离 + 10d 第二群系零核心缝）。
-- **末地块族（10a 最小面 + 10b 内容面 + 10c carriable 旗，块
-  127→133 / atlas 166→174 零移位）**：endstone 0.5（stone 音族）/ end_portal
-  （transparent/solid false/light 11/destroyable false，
-  nether_portal 逐字镜像，glass 音族）/ end_portal_frame +
-  end_portal_frame_eyed（**A-lite 双 stateless 块**——项目无
-  per-state 纹理机制，偏离 MC 单块 16 态；destroyable false =
-  **无去激活路**嵌眼单调）/ **end_stone_bricks**（10b：hardness
-  1.25 MC，stone 音族，2×2 endstone 配方 count 4 MC 精确）/
-  **chorus_plant**（10b：cross stateless + flamable + drops
-  chorus_fruit + chance_drops 果 0.5/株 0.33 ≈ MC）。
+- **末地块族（10a 最小面 + 10b 内容面 + 10c carriable 旗 + 10d 龙
+  竞技场面，块 127→135 / atlas 166→179 零移位）**：endstone 0.5
+  （stone 音族）/ end_portal（transparent/solid false/light
+  11/destroyable false，nether_portal 逐字镜像，glass 音族）/
+  end_portal_frame + end_portal_frame_eyed（**A-lite 双 stateless
+  块**——项目无 per-state 纹理机制，偏离 MC 单块 16 态；destroyable
+  false = **无去激活路**嵌眼单调）/ **end_stone_bricks**（10b：
+  hardness 1.25 MC，stone 音族，2×2 endstone 配方 count 4 MC 精
+  确）/ **chorus_plant**（10b：cross stateless + flamable + drops
+  chorus_fruit + chance_drops 果 0.5/株 0.33 ≈ MC）/
+  **end_crystal**（10d：non-solid cutout/light 14/硬度 0/**破块爆
+  半径 3**（块旗 explode_radius = 块自身引信，**无连锁 = 结构性质**
+  ——爆直收 air 不走 breakBlock）+ **shatter_on_arrow** 箭扫掠碎
+  消费箭/配方 glass10+eye+membrane）/ **dragon_egg**（10d：
+  non-solid cutout/light 1/掉自身——**solid false 否则挡返程头
+  格**；**非 worldgen**——仅首杀仪式 m_dead 帧写 (0,54,0) = 击败
+  态标记 + 复生门）。
+- **末影龙竞技场（`[V3-10d1]`，v3.26.0）**：worldgen pass 4 =
+  4 座 5×5 obsidian 塔（(±50,±50) y53..58）+ **6 固定水晶槽**
+  （4 塔顶 (±50,59,±50) + 2 出口 (±2,54,0)——**D3：MC 10 座→6
+  座**，单源词表 kEndCrystalSlots = 普查/箭扫掠/治疗源共用）；晶上
+  1 格 = 永久火（D9 闭集零 churn）。**龙 = 第 16 mob 纯数据**
+  （200 HP/8×4 八盒双翼/**dragon_flight + boss + 三免疫旗 +
+  breath/fireball/crystal 参族**，配对检 milk 纪律）：AI =
+  runAi flying 分派最顶纯新分支三态复用 MobState（**盘旋**定心半径
+  30【门内裁决 40+pull→30 移 pull】/ **侧移** 3.5s + 火球 2.5s 冷
+  却 / **驻坐**出口锚 (0.5,56.5,0.5) + 咆哮 1.25s → 玩家脚位吐息
+  云 + 三起飞 连吐 4/离 150/累计伤 >50）；流契约 = 每帧 ambient 1
+  抽 + 跨圈帧恰 2 抽（纯函数 rollDragonLapDecision，strafe 命中亦
+  消费 u2）。**治疗** 1HP/30f 最近 32 内晶（数据序 tie-break）+
+  **治疗源晶碎反伤 10**；晶普查**卸载无关**（未载 chunk =
+  worldgen 新鲜 = 完好——流送 0→6 漂 = 假碎晶的门内修）。**龙息
+  云** = 零物理新实体（r0+0.15·age；吐息 3s/r2 脚位 + 火球撞
+  5s/r2.5，Projectile 尾参 leavesCloud 缺省 false 位级红线）→
+  **dragon_breath 效果**（3HP/s 玩家-only，效果 11→12）。**首杀
+  闭环 = format 32 零 bump 最强形**：m_dead 帧蛋 + 升天 60f 飞 +
+  180f 悬停 + **23 orb = 22×9+2 = 200 整**（D5 项目刻度）+ wail +
+  240f 延迟门移除；**重载 = 蛋在无复生**；末地 orb/云存档静默跳
+  过（format 33 后移 10d2 复议）。**血条** = renderUi 段（186×8 十
+  段 + 「末影龙」字体 +3 = 433【扩展区 528/528 满】+ 2s 淡出）。
+  生成门 playerInEnd ∧ mobs ∧ 无龙 ∧ 非蛋 → 60f → (0.5,58,0.5)
+  kSaltDragon；**--dragon-damage CLI seam**（--explode 孪生——龙战
+  斗 demo 不可手编 = 耦合移动目标）。后移 10d2：召唤序列 + 复杀 +
+  蛋重生。
 - **入口门（A-lite）**：5×5 水平环（四角缺 12 frame 格）body 层 +
   中心 3×3；**嵌眼交互**（持 `ender_eye` 右键 frame：吞 1 眼 + 嵌眼
   态 + 8 候选中心环扫描）= **12 全 eyed + 中心全 air → 中心激活

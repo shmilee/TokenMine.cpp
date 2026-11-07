@@ -2721,7 +2721,7 @@ TEST(NetherContentTest, RealContentGenCensus) {
     }
 }
 
-TEST(NetherContentTest, AtlasLayoutGrewTo174) {
+TEST(NetherContentTest, AtlasLayoutGrewTo179) {
     // The atlas's census face (the 124 -> 136 tile's zero-shift red line
     // lives in test_atlas's full census; this is the count + the new
     // cells' existence): the grid grew 16x8 -> 16x16 (the new tiles sit
@@ -2752,8 +2752,10 @@ TEST(NetherContentTest, AtlasLayoutGrewTo174) {
     // family's two tiles (the row-11 free run [0..1, 11] — the
     // 172-tile zero-shift red line). V3-10c re-pin: the enderman's
     // two tiles (the row-11 free run [2..3, 11] — the 174-tile
-    // zero-shift red line).
-    EXPECT_EQ(layout->tiles.size(), 174u);
+    // zero-shift red line). V3-10d re-pin: the dragon arena's five
+    // tiles (the row-6/7 free run + the row-12 face cell — the 179-
+    // tile zero-shift red line).
+    EXPECT_EQ(layout->tiles.size(), 179u);
     const char* newTiles[22] = {
         "nether_brick",    "magma_block",     "quartz_ore",
         "nether_gold_ore", "ancient_debris",  "soul_sand",

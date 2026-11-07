@@ -472,6 +472,40 @@ def chorus_plant(x, y):
     return (0, 0, 0, 0)  # transparent
 
 
+def end_crystal(x, y):
+    """V3-10d (v3.26.0): the end_crystal tile (Minecraft's end crystal
+    read — the magenta-violet gem lattice: a bright core cross + the
+    dark faceted frame, full-alpha non-solid cube). New salts
+    1090..1091 — every existing texture stays pixel-identical."""
+    n = noise(x, y, 1090, 8)
+    # The bright core (the center 4x4 cross reads as the charged gem).
+    if abs(x - 7.5) + abs(y - 7.5) <= 3.5:
+        m = noise(x, y, 1091, 12)
+        return (clamp(224 + m), clamp(120 + m), clamp(230 + m), 255)
+    # The faceted frame (dark violet).
+    facet = (x // 4 + y // 4) % 2 == 0
+    base = (110 if facet else 82) + n
+    return (clamp(base + 20), clamp(base - 18), clamp(base + 24), 255)
+
+
+def dragon_egg(x, y):
+    """V3-10d (v3.26.0): the dragon_egg tile (Minecraft's egg read —
+    the speckled mottled stone: a pale base with the dark spot clusters
+    + the bright fleck rows, full-alpha non-solid cube). New salts
+    1092..1093 — every existing texture stays pixel-identical."""
+    n = noise(x, y, 1092, 10)
+    r, g, b = clamp(214 + n), clamp(208 + n), clamp(196 + n)
+    # The dark speckle clusters (two seeded blobs).
+    for (cx, cy, rad) in ((4.0, 5.0, 2.2), (11.0, 10.0, 2.6)):
+        d = (x - cx) ** 2 + (y - cy) ** 2
+        if d <= rad * rad and noise(x * 3 + 7, y * 3 + 11, 1093, 14) > 3:
+            (r, g, b) = (clamp(96 + n), clamp(90 + n), clamp(84 + n))
+    # The bright flecks (the row-12 sparkle band).
+    if y == 12 and (x * 7 + 3) % 5 == 0:
+        (r, g, b) = (244, 240, 228)
+    return (r, g, b, 255)
+
+
 def nether_portal(x, y):
     """V3-1 Phase A: the nether portal tile (the `nether_portal` block's
     face — the violet vortex Minecraft's portal reads as: a dark purple
@@ -1373,6 +1407,11 @@ TEXTURES = {
     # hand-comitted, unregistered — R8: the re-run never touches them).
     "end_stone_bricks": end_stone_bricks,
     "chorus_plant": chorus_plant,
+    # V3-10d (v3.26.0): the dragon's two block tiles (the crystal's gem
+    # lattice + the egg's speckled stone — the 10b/10c families stay
+    # pixel-identical).
+    "end_crystal": end_crystal,
+    "dragon_egg": dragon_egg,
     # V3-2 Part 1: the nether content family (12 tiles — the biomes'
     # surfaces / the nether ores / the decoration blocks). New tiles only,
     # every existing PNG stays byte-identical (salts 1017..1064).

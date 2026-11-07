@@ -11,6 +11,49 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.26.0（2026-11-07）— V3-10d1 末影龙核心 + 首杀闭环（门 216 全 PASS）
+
+**矩阵唯一真大项的首相位**（末影龙 boss 核心 + 首杀闭环；侦察全采纳
++ 门内微调 ×2；format 32 不变 = **零 bump 最强形：龙会话态 + 击败态
+= 蛋块世界态** / **sim 2 不 bump**（canary 4 全 OW EXACT）/ 零 config /
+块 133→135 / mob 15→16 / atlas 174→179 零移位 / 声音 71→75 / 效果
+11→12 / 配方 113→114 / **字体 430→433 = 扩展区 528/528 恰好满**）。
+
+**龙 = 第 16 mob 纯数据**（核心零物种 switch）：200 HP / hostile /
+flying + spawns_in_air + `dragon_flight` / `boss` / contact 5 / 火·
+效果·击退三免疫旗 / breath 8s-3s-r2 + fireball 2.5s-12b/s +
+crystal_break_damage 10 + detect_vertical 8 / 8×4 八盒双翼。**AI =
+runAi flying 分派最顶纯新分支**（ghast/bat 位级红线）三态复用
+MobState：盘旋（定心半径 30【门内裁决：40+pull 恒过入场点 → 定心移
+pull】）/ 侧移 3.5s（火球 2.5s 冷却）/ 驻坐出口锚（咆哮 1.25s → 玩家
+脚位吐息云；起飞 = 连吐 4 / 离 150 / 累计受击 >50）。**流契约**：每
+帧 ambient 1 抽 + 跨圈帧**恰 2 抽**（u1 侧移 0.25 / u2 驻坐
+1/(3+活晶)，strafe 命中亦消费 u2 = 门内重构纯函数
+rollDragonLapDecision）。**水晶 = 新块非实体**（6 固定槽 = 4 塔顶 + 2
+出口，D3 非 MC 10；break explode_radius 3 = 块自身引信，**无连锁 =
+结构性质**；shatter_on_arrow 箭扫掠；治疗源晶碎反伤 10；晶上永久火
+D9；普查卸载无关【门内捕获：raw getBlock 0→6 漂 = 假碎晶】）。**龙息
+云** = 零物理新实体（r0+0.15·age；吐息 3s/r2 脚位 + 火球撞 5s/r2.5，
+leavesCloud 尾参缺省 false 位级红线）→ dragon_breath 效果 3HP/s
+玩家-only。**首杀闭环**：m_dead 帧蛋 (0,54,0)【R14 0 帧差；门内捕获
+同帧 spawn+kill 漏账死循环】+ 升天 60f 飞 + 180f 悬停 + **23 orb =
+22×9+2 = 200 整**（D5）+ wail + 240f 延迟门移除；重载 = 蛋在无复生。
+**血条** = renderUi 段（186×8 十段 + 「末影龙」+3 字形 + 2s 淡出；
+margin 8→24 门内裁名修）。**--dragon-damage seam**（--explode 孪生——
+龙战斗 demo 不可手编 = 耦合系统定案）。
+
+**门 216**：S1 结构免疫第 97 次（≡ base19 逐字节 ×2 + EXACT）/ S2a
+无输入末地臂 600f ×2 RAW + EXACT / **S2b 破晶 demo 臂**（f151 shatter
+→ f152 strafe + 火球 f152/f303 冷却逐位 + f363 回轨，×2 RAW + 逐字；
+demo 存档红线 = 截图 + DEBUG 行权威）/ S2c 击杀仪式臂（--dragon-
+damage 200：f59 死 + 蛋 + 23 orb f124..f234 逐位 + ×2 RAW + EXACT +
+终档恰 6 键）/ 重载臂（蛋在无复生 ×2 RAW）/ S6 十四面点名 / canary 4
+×2 RAW + EXACT【sim 2 不 bump】/ **2959/2959**（+29：dragon 族 26 +
+塔晶 + 无连锁 + 字体面）/ 性能 A/B 同档【旧 = 23c4e7c v3.25.0 + g139：banner 实证 v3.25.0/v3.26.0 + 双场景——OW 900f 无输入：PERF-WIN 三窗 upd med 0.594/0.548/0.586 vs 0.576/0.574/0.583 同档 + render 0.637/0.544/0.651 vs 0.617/0.640/0.654 + swap 15.3 同档 + changesApplied 9/3/1 全逐位 + 终档 savenorm EXACT 零 format 最强形；末地战斗 600f（mobs-on 变体）：旧（无龙仅 enderman）upd med 0.525/0.687 vs 新（龙 + enderman）0.905/1.012 = boss 自成本 ~+0.4 ms upd + ~0.1 ms render（beam/云/血条），swap 15.2 同档 + changesApplied 0/0 逐位】。PITS 408
+（八坑：init 交叉检顺序 / 数值累加器泄漏 / demo 存档红线 / 流送依赖
+锚点 / -1 哨兵 delta / 同帧 spawn+kill / 血条 margin / CJK 边界）。
+详见 `docs/archive/phase-3.26.0.md`。
+
 ## v3.25.0（2026-11-07）— V3-10c 末影人（End 首个 mob，门 215 全 PASS）
 
 **矩阵大项 V3-10 末地相位 C/4**（End 首个 mob = neutral + 瞬移 + 携

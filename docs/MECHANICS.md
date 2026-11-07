@@ -1,15 +1,16 @@
-# 机制详解（现状 v3.13.0）
+# 机制详解（现状 v3.26.0）
 
 > 2026-11-06 报障刷新：现状 = **v3.12.0**（3.x 矩阵收官于 v3.11.0；v3.12.0 = 实机报障阴影缩尺）（3.x「世界
 > 扩展」期：v3.1.0 = V3-7 存档 gzip，门 191；v3.2.0 = V3-1 Phase A
 > 下界门框，门 192；v3.3.0 = V3-8 手柄，门 193；v3.4.0 = V3-1 Phase B
 > 下界世界 + 真传送，门 194【format 30】；v3.5.0 = V3-2/Phase C Part 1
-> 下界内容族 + D9 空腔带修订，门 195；v3.6.0 = V3-4 netherite 材料链，门 196【零核心代码】；v3.7.0 = V3-2 Part 2 下界深化，门 197【全 nether-scoped】；v3.8.0 = V3-3 下界 mob，门 198【neutral/walks_on_lava 旗 + 下界池】；v3.9.0 = V3-5 建筑内容族，门 199【水底 sediment 生成】；v3.10.0 = V3-6 世界边缘雾，门 200【填充感知 fog end，base19 重锚】；v3.11.0 = V3-9 demo 回放，门 201【注入内核 + 双 Input 路由，3.x 矩阵收官】；其前 2.x 两批 20 版收官
-> v2.0.0 → v2.19.0）、无输入基线门 **202** 次、单元测试
-> **2777/2777**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
-> **format 30**（下界维度：player.dimension + nether 段 +
-> nether_entities；gzip 编码 V3-7 起；下界内容 = 世界生成演进零
-> format）、base19 锚 **225272 B**（重锚谱系 179116 → 178148【V2-10
+> 下界内容族 + D9 空腔带修订，门 195；v3.6.0 = V3-4 netherite 材料链，门 196【零核心代码】；v3.7.0 = V3-2 Part 2 下界深化，门 197【全 nether-scoped】；v3.8.0 = V3-3 下界 mob，门 198【neutral/walks_on_lava 旗 + 下界池】；v3.9.0 = V3-5 建筑内容族，门 199【水底 sediment 生成】；v3.10.0 = V3-6 世界边缘雾，门 200【填充感知 fog end，base19 重锚】；v3.11.0 = V3-9 demo 回放，门 201【注入内核 + 双 Input 路由，3.x 矩阵收官】；v3.12.0 = 实机报障阴影缩尺，门 202；v3.13.0 = demo sim 版本，门 203；v3.14.0 = V3-8b 手柄习惯映射，门 204【sim 2】；v3.15.0 = V3-13 死亡统计屏，门 205；v3.16.0 = V3-15 生存/表现小批，门 206；v3.17.0 = V3-11a 创造基础，门 207【format 31】；v3.18.0 = V3-11b 创造物品栏，门 208；v3.19.0 = V3-14a 爆炸机制，门 209；v3.20.0 = V3-14b ghast，门 210；v3.21.0 = V3-14c piglin 交易，门 211；v3.22.0 = V3-14d strider 骑乘，门 212；v3.23.0 = V3-10a 末地维度框架 + 真传送，门 213【format 32】；v3.24.0 = V3-10b 末地内容族 + 末影珍珠，门 214；v3.25.0 = V3-10c 末影人，门 215；**v3.26.0 = V3-10d1 末影龙核心 + 首杀闭环，门 216**；其前 2.x 两批 20 版收官
+> v2.0.0 → v2.19.0）、无输入基线门 **216** 次、单元测试
+> **2959/2959**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
+> **format 32**（下界维度 format 30：player.dimension + nether 段 +
+> nether_entities；创造 format 31：player.creative；末地 format 32：
+> dimension 词表 +end + end 段 + end_entities；gzip 编码 V3-7 起；
+> 下界/末地内容 = 世界生成演进零 format）、base19 锚 **225272 B**（重锚谱系 179116 → 178148【V2-10
 > 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11 门 183】→ 224468
 > 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
 > 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
@@ -75,12 +76,14 @@
   `[V2-7]` / shears `[V2-15]` / quartz `[V3-2]` / hoglin_meat·cooked_
   hoglin_meat `[V3-3]` / netherite_scrap·ingot·工具×3·护甲×4 `[V3-4]` /
   clay_ball·brick `[V3-5]`）
-- **状态效果**：**11**（`assets/data/effects/`，见「状态效果」）；**Mob**：**15**
+- **状态效果**：**12**（`assets/data/effects/`，+ dragon_breath
+  `[V3-10d]`，见「状态效果」）；**Mob**：**16**
   （主世界 8 = zombie/skeleton/spider + cow/sheep/chicken/pig `[V2-5]`/bat
   `[V2-14]` + 下界 6 `[V3-3]`/`[V3-14b]` = zombified_piglin/piglin/
-  hoglin/magma_cube/strider/ghast + **末地 1 `[V3-10c]`** = enderman，
-  `assets/data/mobs/`，见「实体与 Mob」）；**配方**：**112**（shaped 58 /
-  shapeless 54，`assets/data/recipes/`）；**生物群系**：9（主世界 4 = desert/
+  hoglin/magma_cube/strider/ghast + **末地 2 `[V3-10c]`/`[V3-10d1]`** =
+  enderman + **ender_dragon（boss，单例非池生成）**，
+  `assets/data/mobs/`，见「实体与 Mob」）；**配方**：**114**（shaped 58 /
+  shapeless 56，+ end_crystal `[V3-10d]`，`assets/data/recipes/`）；**生物群系**：9（主世界 4 = desert/
   forest/plains/snowy_taiga `[V2-16]` + 下界 5 `[V3-2]` = nether_wastes/
   crimson_forest/soul_sand_valley/basalt_deltas/warped_forest，
   `assets/data/biomes_nether/` 独立池）
@@ -89,7 +92,7 @@
   16 件（+netherite×4 `[V3-4]`）；**耐久**：36 件（12 工具 + shears + 6 弓 +
   燧石与钢 + 16 护甲，`[SURV-3]` 首批 27 件 + `[SURV-5]` poison_bow +
   `[V2-15]` shears 238 + `[V3-4]` netherite 7 件）
-- **音效**：**71** 个确定性 WAV（`tools/generate_sounds.py` 固定种子，重跑字节
+- **音效**：**75** 个确定性 WAV（`tools/generate_sounds.py` 固定种子，重跑字节
   幂等；17 基础事件 + 18 材质音 6×3 + 3 环境音 + 1 smelt + 1 雷 `[V2-4]` + 1
   sleep `[V2-13]` + 1 squeak `[V2-14]` + 1 shear `[V2-15]` + 3 snow 族
   `[V2-16]` + **3 portal 族 `[V3-1]`**（trigger/travel/ambient）+ **11 下界族
@@ -101,21 +104,27 @@
   **2 珍珠族 `[V3-10b]`**（ender_pearl_throw whoop / ender_pearl_
   teleport shimmer——首个投掷物的声音面）+ **1 末影人瞬移
   `[V3-10c]`**（enderman_teleport 落点 void-shimmer——首个 mob 瞬移的
-  声音面）；`[V2-16]` 音效缺陷族 13
+  声音面）+ **4 龙族 `[V3-10d1]`**（dragon_ambient 翼身低鸣 /
+  dragon_growl 吐息咆哮预告 / dragon_death 升天长啸 /
+  dragon_shoot 火球发射——boss 的声音面）；`[V2-16]` 音效缺陷族 13
   件修复 = 字节变更件数不变）
-- **纹理**：block atlas **16×16**（256 tile，**现状 174 tile 占用**——3.x 增长
+- **纹理**：block atlas **16×16**（256 tile，**现状 179 tile 占用**——3.x 增长
   谱系 122→136 `[V3-2]`（16×8→16×16 幂二增长，**既有格零移位** = 像素行恒等
   锚免重锚实证）→145 `[V3-3]` →165 `[V3-5]` →166 `[V3-14b]`（ghast）→170
   `[V3-10a]`（endstone/end_portal/双 frame，[10..13,10] 零移位）→172
   `[V3-10b]`（end_stone_bricks/chorus_plant，[0..1,11] 零移位）→174
-  `[V3-10c]`（enderman_body/enderman_face，[2..3,11] 零移位），
+  `[V3-10c]`（enderman_body/enderman_face，[2..3,11] 零移位）→179
+  `[V3-10d1]`（end_crystal/dragon_egg/dragon_body/dragon_wing/
+  dragon_face，[14..15,6..7] + [0,12] 零移位），
   `assets/data/textures/block_atlas.json` 数据驱动布局——加纹理 = 加 PNG + 加一行
   JSON，不改代码；**atlas 空位**纪律 = 不重锚基线）；物品图标 = 每物品独立
-  32×32 PNG；字体 **256×2112**（ASCII 16×16 字形 + **427 个 CJK glyph**
+  32×32 PNG；字体 **256×2112**（ASCII 16×16 字形 + **433 个 CJK glyph**
   `[PRE-1]` 33 → `[CRAFT-4]` 34 → `[UX-6]` 392 → `[UX-8a]` 395 → `[UX-9b]` 401
-  → `[V2-3]` 422 → `[V2-5]` 423 → `[V2-12]` 427（锋利限魔 等 4 字），顶 512
-  行位级不变）；health/hunger 48×16 条带、oxygen 16×16、effects **176×16**
-  （11 tile）、cracks 80×16、mob 图集（+ `[UX-3]` 玩家占位皮肤 64×64 + 4 派生
+  → `[V2-3]` 422 → `[V2-5]` 423 → `[V2-12]` 427 → `[V3-13]` 428（于）→
+  `[V3-14a]` 430（爆/炸）→ `[V3-10d1]` 433（影/末/龙——boss 血条名，
+  **扩展区 528/528 恰好满**），顶 512 行位级不变）；health/hunger 48×16
+  条带、oxygen 16×16、effects **192×16**（12 tile，+ dragon_breath
+  `[V3-10d1]`）、cracks 80×16、mob 图集（+ `[UX-3]` 玩家占位皮肤 64×64 + 4 派生
   16×16 tile 尾部追加）
 - **初始库存**（`assets/data/hotbar.json`）：hotbar 9 格（stone/dirt/grass/
   sand/wood/leaves/glass/glowstone/wooden_pickaxe，每格满堆栈）+ **隐藏 starter
@@ -576,6 +585,39 @@
      10，cadence 30/60/4/环 4-6/despawn 40 = 下界文件孪生，loadEnd-
      SpawnPool init fail-fast = 10a 两相位槽消费）；**承载/激怒 =
      会话态零 format**（mob 不入档 = 骑乘先例同款）
+   - **ender_dragon**（hostile + **boss** + **dragon_flight**，
+     `[V3-10d1]` v3.26.0，**矩阵唯一真大项首相位 D1/2**）：200 HP /
+     0.7 / 探测 16（detect_vertical 8 放宽纵带）/ 8×4 **八盒双翼
+     swing**（atlas [14..15,6..7] + [0,12] 零移位）/ **单例非池生
+     成**——门 = playerInEnd ∧ mobs ∧ 无龙 ∧ (0,54,0) 非蛋 → 60f →
+     (0.5,58,0.5)，seed = worldSeed ^ kSaltDragon（不走池 spawn-
+     Counter）；**三免疫旗**（fire_exempt 穿晶火 / effect_exempt
+     状态不落地 / knockback_exempt 无击退）+ **contact_damage 5**
+     （1s 会话冷却无击退 D13）；**AI = runAi flying 分派最顶纯新分
+     支**（ghast/bat 位级红线）三态复用 MobState：**盘旋**（定心半
+     径 30——门内裁决 40+player-pull 恒过入场点 → 定心移 pull）/
+     **侧移** 3.5s（朝玩家 + 垂直漂移 + 火球 2.5s 冷却）/ **驻坐**
+     出口锚 (0.5,56.5,0.5)（咆哮 1.25s 预告 → 玩家脚位吐息云；起飞
+     = 连吐 4 / 玩家离 150 / 驻坐累计受击 >50）；**流契约** = 每帧
+     ambient 1 抽 + **跨圈帧恰 2 抽**（u1 侧移 0.25 / u2 驻坐
+     1/(3+活晶)——strafe 命中亦消费 u2，纯函数
+     rollDragonLapDecision）；**治疗** 1HP/30f 最近 32 内晶（数据序
+     tie-break）+ **治疗源晶碎反伤 10**；**龙息云** = 零物理新实体
+     （r0+0.15·age；吐息 3s/r2 + 火球撞 5s/r2.5【leavesCloud 尾参
+     缺省 false 箭/ghast/珍珠位级红线】）→ **dragon_breath 效果**
+     （3HP/s 玩家-only，affects_mobs false）；**首杀闭环 = format 32
+     零 bump 最强形**——m_dead 帧**蛋 setBlock (0,54,0)**（R14 0 帧
+     差）+ 升天 60f 直线飞 + 180f 悬停 + **23 orb = 22×9+2 = 200
+     整**（D5 项目 XP 刻度）+ wail + 240f 延迟门移除（despawn 对
+     任何 dead-boss 保持，记账单收口 game pass）；**重载 = 蛋在无
+     复生**（生成门蛋检）；**末地 orb/云存档静默跳过**（format 33
+     后移 10d2 复议，偏离记档）；**血条** = renderUi 段（186×8 十段
+     + 「末影龙」字体 +3 = 433【扩展区 528/528 恰好满】+ 2s 升天淡
+     出）；声音 4 件 71→75（ambient/growl/death/shoot，init 对一切
+     dragon_flight mob 交叉检 wav + 效果）；**--dragon-damage CLI
+     seam**（--explode 孪生——龙战斗 demo 不可手编 = 耦合移动目标
+     定案，管理旗互斥）；后移 10d2：召唤序列 + 复杀 8XP + 蛋 60s
+     重生
 - **生成**（`data/mob_spawning.json` + 帧节奏驱动，纯函数 = 同一运行必生成
   同一只）：每 `check_every_frames` **30** 帧尝试一次（难度节奏缩放：easy 60 /
   normal 30 / hard 20，见「难度」）、`first_spawn_frame` **60** 之前不生成、
@@ -945,7 +987,7 @@
   - 档位（`[SURV-6]`）：`tier_max`（int [1,3] 缺省 1）+ `tier_steps`（**仅 5
     加性修饰字段可档位**：speed/absorption/strength/weakness/resistance——
     配对/死字段/no-op 三门纪律；**tick/instant 形单档** = 记档偏离）
-- **shipped 11 效果**（字段精确值 = JSON）：
+- **shipped 12 效果**（字段精确值 = JSON）：
   - `poison`：damage 1/**2.5 s**，min_health 1，**min_health_mob 0**，negative，
     **affects_mobs + undead_exempt**，icon 0，**tint [0.63, 0.24, 0.86, 0.35]**
     = MC 中毒紫（RGB 160/60/220）
@@ -965,6 +1007,13 @@
     地板双目标可杀** = MC wither I，icon 10
   - `healing`（`[SURV-4]`）：instant_hp **+4**，正面，icon 8
   - `harming`（`[SURV-4]`）：instant_hp **−6**，negative，icon 9
+  - `dragon_breath`（`[V3-10d1]`）：damage 1.5/**0.5 s**（=3HP/s
+    MC 精确），min_health 0 可致死，negative，**affects_mobs
+    false**（云只打玩家——龙云不伤 mob，MC 同读），icon 11（effects.
+    png 176→192 新紫漩涡 tile），**tint [0.45, 0.15, 0.55, 0.30]** =
+    龙息紫；来源 = 龙息云 overlap 每 30 帧 re-grant 0.6s（potion 同
+    款 applyPlayerEffect 路径）；死因 fallback「死于药水」（D14 措
+    辞记档，零新字形）
 - **来源**：① **mob `on_hit_effect`**（`{"name", "duration"}` 成对必填，
   init 对 EffectRegistry 交叉校验——该 mob **近战命中落定**时施加，远程箭
   不施加 on_hit；shipped：spider = poison 15 s）② **`arrow_effect` 双源

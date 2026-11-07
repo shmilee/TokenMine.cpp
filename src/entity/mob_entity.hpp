@@ -189,6 +189,49 @@ inline constexpr float kBatBobAmplitude = 0.2f;
 // pure function of N, the per-mob local frame count and the phase).
 inline constexpr int kBatBobPeriodFrames = 60;
 
+// V3-10d (the ender dragon): the dragonFlight AI's named values (the bat
+// constants' shape — the data pins the breath/fireball/crystal parameters
+// + the speed, the code owns the boss geometry + the frame-locked math's
+// figures; the capability gate is the data dragonFlight flag, every
+// pre-V3-10d mob runs none of this — the pure-new-branch red line).
+// The orbit's radius (the project scale over the MC's ~40-block end
+// arena: the 120 plateau fits the circle, the fog's 48 end keeps the
+// dragon readable at every point — D9's 8x4 box read).
+inline constexpr float kDragonOrbitRadius = 30.0f;
+// The orbit's angular speed scale: the DATA speed (0.7) x this = the
+// arc speed in b/s (7 b/s -> a ~36 s lap — the MC orbit's ~10 b/s
+// project read, the named constant the speed data multiplies).
+inline constexpr float kDragonOrbitSpeedScale = 10.0f;
+// The lap-roll's STRAFE probability (the orbit lap's decision draw u1 —
+// the MC's crystal-break-guaranteed strafe is the crystalDelta flag's
+// job; the idle lap's strafe is the project's cadence read).
+inline constexpr double kDragonStrafeLapRollP = 0.25;
+// The strafe's DURATION in seconds (the fixed 3.5 s — the MC's 3-4 s
+// read's mid, the code constant the kSheepRegrowFrames fixed-duration
+// precedent; the data family stays the recon's 8-group surface).
+inline constexpr double kDragonStrafeSeconds = 3.5;
+// The perched GROWL lead-in (the MC 1.25 s audio telegraph, D12's
+// roar-as-telegraph read — the fixed frame-locked duration).
+inline constexpr double kDragonGrowlSeconds = 1.25;
+// The altitude approach's proportional gain + climb cap (the integrate's
+// dragon branch: vy = clamp((target - y) * gain) + the bob sine — a
+// pure function of the frame position, the frame grid's determinism).
+inline constexpr float kDragonAltitudeGain = 2.5f;
+inline constexpr float kDragonMaxClimb = 8.0f;
+// The perched cumulative-damage TAKEOFF threshold (the MC's 50 read —
+// the perched hit-accumulator's escape trigger, D12's escape rule).
+inline constexpr float kDragonPerchDamageTakeoff = 50.0f;
+// The breath's player-range gate (the MC's 20-block read).
+inline constexpr float kDragonBreathRange = 20.0f;
+// The perch's no-player takeoff range (the MC's 150-block read).
+inline constexpr float kDragonPerchPlayerRange = 150.0f;
+// The consecutive-breath TAKEOFF count (the MC's 4-read).
+inline constexpr int kDragonBreathTakeoffCount = 4;
+// The contact damage's session cooldown (seconds — the wing sweep's
+// D13 read: the MC's 0.5-s hit-window simplified to a flat 1 s, the
+// no-knockback project precedent's twin).
+inline constexpr double kContactDamageCooldownSeconds = 1.0;
+
 // V3-10c (the enderman): the TELEPORT math's named values (the bat
 // constants' shape — the data pins the interval pair, the code owns the
 // box geometry + the stream contract's figures; the capability gate is
@@ -242,6 +285,22 @@ struct TeleportCandidate {
 
 std::array<TeleportCandidate, kTeleportAttempts> rollTeleportCandidates(
     std::uint64_t& state, Vec3 pos, Vec3 playerPos, bool enraged);
+
+// V3-10d: the dragon's LAP-CROSSING decision (the rollTeleportCandidates'
+// pure-function twin — the stream contract's apex): on the frame the
+// orbit's angle crosses a full lap, EXACTLY 2 draws are consumed,
+// whether or not the decision changes the state (the swallowed-roll
+// discipline, the 10c's twin): u1 the strafe roll (kDragonStrafeLapRollP)
+// and u2 the perch roll (1 / (3 + live crystals — the MC's
+// 1/(3+crystals) read, the crystal census's -1 never fed reads 0)). A
+// strafe decision STILL consumes u2 (the fixed 2-draw contract — the
+// inline else-if's 1-draw-on-strafe shape is the bug this refactor
+// closes). The decision is a pure function of (the stream state, the
+// crystal census) — the unit tests pin both the contract and the
+// outcomes over known states.
+enum class DragonLapDecision { Orbit, Strafe, Perch };
+DragonLapDecision rollDragonLapDecision(std::uint64_t& state,
+                                        int liveCrystals);
 
 class MobEntity : public Entity {
 public:
@@ -322,6 +381,11 @@ public:
     MobState state() const { return m_state; }
     // ENT-6: the active chase path (test / debug observability).
     bool pathActive() const { return !m_path.empty(); }
+    // V3-10d: the orbit's angle re-anchor from the current position
+    // (the strafe/perch takeoff's pure geometry — the circle point's
+    // angle over the orbit center, zero stream, [0, 2pi)); the test /
+    // debug observability's state()'s twin.
+    float orbitAngleFromPosition() const;
     // Facing in the camera yaw convention (0 = -Z); the render model
     // rotates by this.
     float facingYaw() const { return m_yaw; }
@@ -362,6 +426,14 @@ public:
 
     // Subtract damage; returns true when THIS hit killed the mob.
     bool damage(float amount);
+    // V3-10d: ADD healing (the end crystal's 1 HP / 30-frames cadence —
+    // the damage() twin with the sign flipped): the amount is clamped
+    // at the data health cap (the crystal cannot over-heal the boss,
+    // the MC 200-cap read). A dead mob's heal is a no-op (the damage's
+    // m_dead guard's twin — the corpse cannot be revived). Returns
+    // true when any health was actually added (the heal beam's render
+    // gate — a full-health dragon's crystals glow but don't beam).
+    bool heal(float amount);
     // Knockback impulse; suppresses AI steering for kKnockbackTime.
     void addKnockback(Vec3 impulse);
 
@@ -442,6 +514,42 @@ public:
     // mount by design — the carry snap owns the relative pose).
     void setRidden(bool ridden) { m_ridden = ridden; }
     bool ridden() const { return m_ridden; }
+    // V3-10d (the ender dragon): the CRYSTAL FEED (the setPlayer pattern
+    // — the game pushes it each frame BEFORE the mobs' update): the
+    // live crystal count (the 10 fixed crystal slots' census — the
+    // dragon's perched probability / the heal-source read) + the
+    // changed-this-frame flag (a crystal shattered this frame — the MC
+    // guaranteed-strafe trigger, the orbit lap's crystalDelta gate). A
+    // non-dragon mob's feed is inert (the dragonFlight branch never
+    // runs — the data gate, the bit root).
+    void setCrystalsAlive(int count, bool changed) {
+        m_crystalsAlive = count;
+        m_crystalDelta = changed;
+    }
+    int crystalsAlive() const { return m_crystalsAlive; }
+    // V3-10d: the ANCHOR FEED (the setPlayer pattern over geometry —
+    // the game pushes the end-origin's perch + orbit-center constants
+    // when it spawns the dragon, the entity layer never reads the core
+    // layer's end_portal.hpp, the architecture's dependency direction).
+    // Zero defaults: an unfed dragon's orbit degenerates to the origin
+    // (structurally unreachable — the game feeds at spawn, the belt).
+    void setDragonAnchors(Vec3 perch, Vec3 orbitCenter) {
+        m_dragonPerch = perch;
+        m_dragonOrbitCenter = orbitCenter;
+    }
+    // V3-10d: the CONTACT cooldown's frame step + hit latch (the game's
+    // overlap pass calls tickContactCooldown each frame for a
+    // contact_damage > 0 mob, and latchContactDamage on the hit frame —
+    // a contact_damage-0 mob's field never moves, the bit root).
+    void tickContactCooldown(double dt) {
+        if (m_contactCooldown > 0.0) {
+            m_contactCooldown -= dt;
+        }
+    }
+    bool contactDamageReady() const { return m_contactCooldown <= 0.0; }
+    void latchContactDamage() {
+        m_contactCooldown = kContactDamageCooldownSeconds;
+    }
     // The rider's steer (the setPlayer pattern — the game pushes it
     // each frame BEFORE update(): `dir` = the rider's desired heading
     // (a unit vector, or zero when the rider pushes no direction key)
@@ -475,6 +583,26 @@ public:
     void setAmbientSoundCallback(std::function<void(Vec3)> cb) {
         m_ambientSound = std::move(cb);
     }
+    // V3-10d (the ender dragon): the GROWL callback (the breath's 1.25 s
+    // audio telegraph — the setAmbientSoundCallback's seam shape; the
+    // game plays the data `dragon_growl` spatialized at the mob). Wired
+    // for a dragon_flight mob only (the data gate — the bit root).
+    void setGrowlCallback(std::function<void(Vec3)> cb) {
+        m_growlSound = std::move(cb);
+    }
+    // V3-10d: the BREATH callback (the perched breath's cloud trigger —
+    // the game spawns the BreathCloud at the PLAYER's feet with the data
+    // breath_duration / breath_radius; the mob owns only the timing).
+    void setBreathCallback(std::function<void()> cb) {
+        m_breath = std::move(cb);
+    }
+    // V3-10d: the ASCENSION state (the death ritual's session counters —
+    // the game's dragon-death pass drives the corpse: -1 = alive,
+    // >= 0 = the frames since the m_dead frame. The egg/XP bookkeeping
+    // ran at the m_dead frame (the game side); this is the render/
+    // removal timer's witness (the despawn pass's delay gate reads it).
+    int ascensionFrames() const { return m_ascensionFrames; }
+    void setAscensionFrames(int f) { m_ascensionFrames = f; }
     // V3-10c (the enderman): the eye-contact FEED (the game pass calls it
     // once per frame, BEFORE the mob's own update — the fixed slot:
     // `looking` = the aim ray hits this mob's full AABB inside the data
@@ -584,6 +712,32 @@ private:
     // p.shootRange > 0) — the bat (shootRange 0) runs flyCruise
     // bit-identically, the pre-V3-14b red line.
     void flyShoot(const MobProperties& p, double dt);
+    // V3-10d: the DRAGON's boss AI (the ender dragon — the runAi's
+    // TOP-OF-THREE flying branch, gated on p.dragonFlight BEFORE
+    // flyShoot/flyCruise — the pure-new-branch red line, the
+    // flyShoot's twin): the three-state cycle over the existing
+    // MobState vocabulary (zero new state — 10c R12's discipline):
+    //   Wander = the ORBIT (a circle of kDragonOrbitRadius around the
+    //   pulled end-origin — the player-far offset keeps the fight
+    //   engaged; the lap-crossing frame consumes the fixed 2-draw
+    //   decision — u1 the strafe roll, u2 the perched roll 1/(3 +
+    //   live crystals), the stream contract);
+    //   RangedAttack = the STRAFE (face the player, the lateral
+    //   drift, the fireball on the data cooldown through the shoot
+    //   callback — the dragon_shoot's launcher, the game's seam);
+    //   Attack = the PERCH (straight-in at the end-exit anchor, the
+    //   growl telegraph -> the breath cloud callback at the player's
+    //   feet; the takeoff's three conditions — 4 consecutive breaths /
+    //   no player in 150 / the perched cumulative damage > 50 — the
+    //   MC Take-off/Escape reads). The AMBIENT roll (1 draw, every
+    //   frame) keeps the stream aligned under all three states.
+    //   Vertical: m_targetY is the AI's altitude setpoint; integrate's
+    //   dragon branch approaches it proportionally (the bat's bob
+    //   baseline is added on — the hover feel). Gated on the data
+    //   (p.flying && p.dragonFlight) — the ghast (shootRange > 0) runs
+    //   flyShoot bit-identically, the bat flyCruise, every ground mob
+    //   its state machine (the pre-V3-10d red line).
+    void dragonFlight(const MobProperties& p, double dt);
     // V3-14d: the ridden mob's AI takeover (the rider's steer replaces
     // the wander — the runAi's TOP branch, gated on the SESSION state
     // m_ridden, the flyCruise pure-new-branch twin): forward = face
@@ -694,6 +848,10 @@ private:
     // setShootCallback pattern; empty = no ambient, the pre-V2-14
     // structural root).
     std::function<void(Vec3)> m_ambientSound;
+    // V3-10d: the dragon's two extra cues (the setAmbientSoundCallback's
+    // twin seams — empty = the pre-V3-10d bit root for every other mob).
+    std::function<void(Vec3)> m_growlSound;
+    std::function<void()> m_breath;
     // V2-14: the flight state (all gated on def.flying — a non-flying
     // mob keeps m_flyFrame 0 forever and never reads the phase).
     // `m_flyFrame`: the per-mob local frame count (incremented once per
@@ -704,6 +862,42 @@ private:
     // untouched = the pre-V2-14 trajectories bit-identical).
     int m_flyFrame = 0;
     float m_bobPhase = 0.0f;
+    // V3-10d: the DRAGON's session state (all gated on
+    // def.dragonFlight — a non-dragon mob keeps every field at its
+    // default forever and the dragonFlight branch never reads them:
+    // the bit root). `m_crystalsAlive` / `m_crystalDelta`: the game's
+    // per-frame feed (setCrystalsAlive — -1 = never fed, the orbit's
+    // perched roll reads max(0, ...) over it). `m_targetY`: the
+    // altitude setpoint integrate's dragon branch approaches.
+    // `m_orbitAngle` / `m_orbitLaps`: the circle's phase + the last
+    // crossed lap (the lap-frame's fixed 2-draw decision trigger —
+    // pure geometry, zero stream). `m_strafeTimer`: the strafe's
+    // remaining seconds. `m_perchArrived`: the perch's arrival latch.
+    // `m_breathState` (0 = waiting / 1 = growling / 2 = breathing) +
+    // `m_breathTimer` (the state's remaining seconds) + `m_breathCount`
+    // (the consecutive-breath takeoff counter). `m_perchDamage`: the
+    // perched cumulative damage (the takeoff's 50-read — damage()
+    // accumulates it for a dragon mob, every state). `m_ascension-
+    // Frames`: the death ritual's timer (-1 = alive).
+    int m_crystalsAlive = -1;
+    bool m_crystalDelta = false;
+    Vec3 m_dragonPerch = Vec3::zero();
+    Vec3 m_dragonOrbitCenter = Vec3::zero();
+    float m_targetY = 0.0f;
+    double m_orbitAngle = 0.0;
+    int m_orbitLaps = 0;
+    double m_strafeTimer = 0.0;
+    bool m_perchArrived = false;
+    int m_breathState = 0;
+    double m_breathTimer = 0.0;
+    int m_breathCount = 0;
+    float m_perchDamage = 0.0f;
+    int m_ascensionFrames = -1;
+    // V3-10d: the CONTACT damage's 1-second session cooldown (the game's
+    // overlap pass decrements it per frame and the hit zeroes it — the
+    // wing sweep's D13 read; a contact_damage-0 mob's field never moves,
+    // the bit root).
+    double m_contactCooldown = 0.0;
 
     // ENT-6: the active chase path (empty = none — the straight chase).
     // Ephemeral like the mob (never saved — zero format). The stuck

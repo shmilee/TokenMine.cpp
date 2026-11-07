@@ -68,6 +68,38 @@
   tools/）重建 = PITS 317 纪律的自然推论。FLUID 锚（m_world 调用形）
   在 Phase B 后仍唯一（nether 调用 = *m_nether.world 异文）——改
   调用点形态前先 grep 全部 g139 锚点核一遍。
+- **init 交叉检顺序 + 数值累加器泄漏 + demo 存档红线 + 流送依赖
+  锚点 + 哨兵首帧 delta + 同帧 spawn+kill + 血条 margin + CJK
+  边界八坑（PITS 408，门 216 v3.26.0 V3-10d1 末影龙）**——①
+  **init 交叉检必须后置于所检子系统的 load**：dragon_breath 效果
+  存在性检放在 `m_effects.loadDirectory` 之前 = 假 fail 首跑实锤
+  （「breath effect missing」，效果根本未载）；wav 检走
+  `m_assets.exists`（文件面）无此问题——**检对象未载 ≠ 对象不
+  存在**。② **多字段共享累加器 = 缺值泄漏**：readDragonNumber
+  缺键不动 out，共享 `double v` 吃上字段值（fireball 缺省吃
+  breath_radius 的 2 过了 >0 配对门）——负例单测首跑抓获；纪律
+  = 每读前 reset 或每字段独立局部。③ **demo 存档红线实证面**：
+  replay 的 save 参考 demo 的 `--save` 被 init reset（PITS 407①
+  同款机制的存档侧）= 跑完 slot 文件恒为输入副本——**demo 臂
+  无终档断言**（权威 = 截图 + DEBUG 行）；canary（fresh 参考）
+  不触发 reset 有退出写。④ **流送依赖的世界锚点须卸载无关**：
+  raw `getBlock` 未载 chunk 读 air = 晶普查 0→6 随流送漂（假
+  crystalDelta → 假 strafe + 驻坐概率漂移）+ 蛋门未载读 air →
+  假复生白嫖洞；正解 = **未载 = worldgen 新鲜 = 完好**（晶不可
+  在未载 chunk 破——破路径全读 chunk 态）；applyWorldEdits 走
+  getOrCreateChunk 强制载编辑列 = 重载臂蛋门天然正确。⑤ **-1
+  哨兵首帧 delta**：census 初值 -1 的首帧「-1→6」≠ 碎晶 = 假
+  变化（strafe 触发器）——首帧禁报（`last >= 0` 门）。⑥ **同帧
+  spawn+kill 漏账**：局部指针在 spawn 段前捕获 = 同帧死的龙
+  不跑仪式账（蛋永不落 → f119 复生死循环首跑实证）；正解 =
+  spawn/seam 后重捕获 + despawn 对**任何** dead-boss 保持（含
+  ascension -1）+ 记账单收口 game pass（despawn 永不计 boss
+  死）。⑦ **血条 CJK 名行 margin**：by=8 的名行 y=8−16=−8 屏外
+  裁切（截图首跑实证）——margin 24。⑧ **CJK charset 解析边
+  界**：`CJK_CHARSET = [...]` 尾部有意重复项 + `];` 越界匹配
+  （s.find('];') 过界到别处）= raw 扫描 433 伪影（真实 430
+  唯一）——插入/校验用引号正则 + 真实列表边界（`'\n]'`），
+  勿按 raw >127 扫描计数。
 - **demo 槽不回写 + 火脚级重叠 + 拾格带含脚下 + 遮挡首格语义
   + 下探穿固体虚空 + 截图尺寸/按住 LMB 七坑（PITS 407，门 215
   v3.25.0 V3-10c 末影人）**——① **demo 引用槽永不回写（假测量

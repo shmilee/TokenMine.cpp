@@ -24,13 +24,16 @@ indexes the tile:
   10: wither (SURV-5, dark purple skull — the Minecraft wither mark;
       the skeleton's arrow applies it, 1 HP / 4 s, lethal on both
       targets)
+  11: dragon_breath (V3-10d, the dragon's lingering breath cloud —
+      the purple swirl puff; 1.5 HP / 0.5 s, player-only, the D14
+      death-word fallback's carrier)
 The background is transparent (the HUD draws over the world).
 """
 import os
 import struct
 import zlib
 
-W, H = 176, 16
+W, H = 192, 16  # V3-10d: 11 -> 12 tiles (the dragon breath)
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets",
                    "textures", "effects.png")
 
@@ -355,6 +358,27 @@ def tile_wither() -> list:
     return px
 
 
+def tile_dragon_breath() -> list:
+    # V3-10d: the dragon breath (Minecraft's lingering-breath read —
+    # the purple swirl cloud: a puffy dark-violet body + the brighter
+    # magenta swirl core + the wisp trail to the right). Salt
+    # block 1500+ — every existing tile stays pixel-identical.
+    px = [[(0, 0, 0, 0)] * 16 for _ in range(16)]
+    lumps = ((4, 9, 3.4), (8, 7, 3.8), (6, 11, 3.0))
+    for tx in range(16):
+        for ty in range(16):
+            in_body = any((tx - cx) ** 2 + (ty - cy) ** 2 <= r * r
+                          for cx, cy, r in lumps)
+            if not in_body:
+                continue
+            core = (tx - 8) ** 2 + (ty - 8) ** 2 <= 4.5
+            setpx(px, tx, ty, (150, 60, 190) if core else (74, 34, 104),
+                  salt=1500 + ty * 16 + tx)
+    setpx(px, 13, 7, (150, 60, 190), salt=1531)  # the wisp
+    setpx(px, 14, 8, (110, 46, 148), salt=1532)  # (fading)
+    return px
+
+
 def main() -> None:
     px = [[(0, 0, 0, 0)] * W for _ in range(H)]
     for kind, tile in enumerate((tile_poison(), tile_arrow(False),
@@ -362,7 +386,8 @@ def main() -> None:
                                  tile_flame(), tile_speed(),
                                  tile_strength(), tile_resistance(),
                                  tile_healing(), tile_harming(),
-                                 tile_wither())):
+                                 tile_wither(),
+                                 tile_dragon_breath())):
         for y in range(16):
             for x in range(16):
                 px[y][kind * 16 + x] = tile[y][x]

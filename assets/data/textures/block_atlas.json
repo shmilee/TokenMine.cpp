@@ -697,6 +697,26 @@
   "enderman_face": [
    3,
    11
+  ],
+  "end_crystal": [
+   14,
+   6
+  ],
+  "dragon_egg": [
+   15,
+   6
+  ],
+  "dragon_body": [
+   14,
+   7
+  ],
+  "dragon_wing": [
+   15,
+   7
+  ],
+  "dragon_face": [
+   0,
+   12
   ]
  }
 }

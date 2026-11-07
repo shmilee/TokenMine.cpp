@@ -239,8 +239,10 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     // zero-shift red line continued). V3-10c: 172 -> 174 (the
     // enderman's two tiles — the row-11 free run [2..3, 11]; the
     // 10b's zero-shift red line continued, no power-of-two growth
-    // needed, 174 < 256).
-    EXPECT_EQ(l.tiles.size(), 174u);
+    // needed, 174 < 256). V3-10d: 174 -> 179 (the dragon arena's five
+    // tiles — end_crystal / dragon_egg / dragon_body / dragon_wing /
+    // dragon_face, the row-6/7 + row-12 free cells, zero shift).
+    EXPECT_EQ(l.tiles.size(), 179u);
     const struct {
         const char* name;
         int col;
@@ -582,6 +584,28 @@ TEST(AtlasLayoutTest, ShippedV25AtlasFullCensus) {
     };
     ASSERT_EQ(sizeof(v310c) / sizeof(v310c[0]), 2u);
     for (const auto& e : v310c) {
+        const auto it = l.tiles.find(e.name);
+        ASSERT_NE(it, l.tiles.end()) << e.name;
+        EXPECT_EQ(it->second.col, e.col) << e.name;
+        EXPECT_EQ(it->second.row, e.row) << e.name;
+    }
+    // V3-10d (v3.26.0): the dragon arena's five tiles (the row-6/7 free
+    // run [14..15, 6..7] for the two blocks + the dragon's body/wing,
+    // the row-12 free cell [0, 12] for the face; zero existing shift,
+    // no power-of-two growth needed, 179 < 256).
+    const struct {
+        const char* name;
+        int col;
+        int row;
+    } v310d[] = {
+        {"end_crystal", 14, 6},
+        {"dragon_egg", 15, 6},
+        {"dragon_body", 14, 7},
+        {"dragon_wing", 15, 7},
+        {"dragon_face", 0, 12},
+    };
+    ASSERT_EQ(sizeof(v310d) / sizeof(v310d[0]), 5u);
+    for (const auto& e : v310d) {
         const auto it = l.tiles.find(e.name);
         ASSERT_NE(it, l.tiles.end()) << e.name;
         EXPECT_EQ(it->second.col, e.col) << e.name;

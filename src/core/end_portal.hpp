@@ -114,4 +114,48 @@ EndEntryPlatformPlan endEntryPlatformPlan();
 Vec3 endEntryPosition();
 float endEntryYaw();
 
+// V3-10d (the ender dragon): the boss's FIXED end-origin anchors (the
+// endEntryPosition's named-constant shape — the exit portal's arena,
+// the world origin, D1's always-live exit). The dragon PERCHES over the
+// exit (the MC perched-on-the-exit read), the death EGG lands on the
+// exit's center block, and the first spawn is the orbit's top point.
+// All frame-locked pure constants (zero world reads — the worldgen and
+// the game's dragon pass share them, the PITS-406 single-source shape).
+// The perch: the exit's 2.5-block hover (the egg's top + 1.5 — the
+// dragon perches over its own arena's core).
+inline constexpr Vec3 kEndPerchPos {0.5f, 56.5f, 0.5f};
+// The egg: ONE above the exit's center body (the portal's y53 body's
+// top cell — D17's non-solid egg; the player's head cell over the
+// exit, the walk-through door).
+inline constexpr Vec3 kEndEggPos {0.5f, 54.5f, 0.5f};
+// The orbit's center + the first spawn (the perch's 1.5-block-up point
+// — the dragon appears high and settles into the orbit).
+inline constexpr Vec3 kDragonOrbitCenter {0.5f, 58.0f, 0.5f};
+inline constexpr Vec3 kDragonSpawnPos {0.5f, 58.0f, 0.5f};
+// The six fixed CRYSTAL slots' CELL CENTERS (the 4 tower tops + the 2
+// exit crystals, D3's project scale over MC's 10 — the towers' 5x5
+// obsidian columns rise y53..y58 at the plateau's (±50, ±50) with the
+// crystal on top (y59), the exit pair on the frame ring's mid-edge
+// TOPS ((±2, y54, 0), the frame itself untouched). The game's crystal
+// pass / the worldgen pass 4 / the arrow shatter sweep / the heal
+// source all read THIS vocabulary (the single source, zero per-world
+// state; the fire sits at cell +1y above a live crystal).
+inline constexpr Vec3 kEndCrystalSlots[6] = {
+    {50.5f, 59.5f, 50.5f},
+    {-50.5f, 59.5f, 50.5f},
+    {50.5f, 59.5f, -50.5f},
+    {-50.5f, 59.5f, -50.5f},
+    {2.5f, 54.5f, 0.5f},
+    {-2.5f, 54.5f, 0.5f},
+};
+// The four TOWER footprints' centers (the 5x5 obsidian columns'
+// (±50, ±50) — the worldgen pass 4's writer vocabulary, the slot
+// array's tower quartet shared).
+inline constexpr Vec3 kEndTowerSlots[4] = {
+    {50.5f, 0.0f, 50.5f},
+    {-50.5f, 0.0f, 50.5f},
+    {50.5f, 0.0f, -50.5f},
+    {-50.5f, 0.0f, -50.5f},
+};
+
 } // namespace mc

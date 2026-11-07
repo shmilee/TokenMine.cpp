@@ -1595,6 +1595,62 @@ void Game::renderUi() {
                 barY - kGlyphSize, fScale(1.0), kXpBarFill);
     }
 
+    // -- V3-10d (the ender dragon): the top-center boss bar ---------------
+    // The !panelOpen + playerInEnd + dragon-present gate (the HUD
+    // convention, the XP bar's twin): a no-End session never draws it (the
+    // S1's structural-immunity root — the font's 末影龙 glyphs are CJK
+    // rows, drawn only here). The 2-s death fade-out reads the ascension's
+    // session timer (the render-only alpha; the bar holds its final fill
+    // through the fade). The top region is free (the clock is top-right,
+    // the F3 is left, the tutorial mid-bottom).
+    if (!panelOpen() && m_player && playerInEnd() &&
+        m_end.m_dragon != nullptr) {
+        const int f = m_end.m_dragon->ascensionFrames();
+        // The fade: alive = 1.0; the ascension's first 120 frames (2 s)
+        // linearly out, then the bar is gone (f >= 120 = no draw).
+        const float alpha = (f < 0)
+                                ? 1.0f
+                                : (f >= 120 ? 0.0f
+                                            : 1.0f - f / 120.0f);
+        if (alpha > 0.0f) {
+            constexpr int kBossBarW = 186;
+            constexpr int kBossBarH = 8;
+            // The top margin leaves room for the name glyph above the
+            // bar (the by - kGlyphSize line must stay on-screen — the
+            // gate's first-frame crop caught the 8px margin clipping it).
+            constexpr int kBossBarTopMargin = 24;
+            const int bx = (w - kBossBarW) / 2;
+            const int by = kBossBarTopMargin;
+            const float hp = m_end.m_dragon->health();
+            const float cap =
+                m_end.m_dragon->def().properties.health; // 200, the data
+            const int fillW = static_cast<int>(
+                (hp / cap) * kBossBarW); // the exact-integer ratio read
+            const Vec4 kBossBg {0.0f, 0.0f, 0.0f, 0.6f * alpha};
+            const Vec4 kBossFill {0.55f, 0.2f, 0.7f, 1.0f * alpha};
+            const Vec4 kBossText {1.0f, 1.0f, 1.0f, 1.0f * alpha};
+            auto& bg = batchFor(kBossBg, false, nullptr);
+            addQuad(bg, bx, by, kBossBarW, kBossBarH);
+            if (fillW > 0) {
+                auto& fill = batchFor(kBossFill, false, nullptr);
+                addQuad(fill, bx, by, fillW, kBossBarH);
+            }
+            // The 10 segments' dividers (the MC per-10-HP read — the
+            // project's 20-HP-segment scale, the D-segment's note).
+            auto& div = batchFor(kBossBg, false, nullptr);
+            for (int i = 1; i < 10; ++i) {
+                addQuad(div, bx + (kBossBarW * i) / 10, by, 1, kBossBarH);
+            }
+            // The name 末影龙 (the CJK glyphs — the V3-10d font addition,
+            // the death-screen's localized-string twin) centered above.
+            const std::string name = "末影龙";
+            addText(name, bx + kBossBarW / 2 -
+                              static_cast<int>(textWidth(name, fScale(1.0))) /
+                              2,
+                    by - kGlyphSize, fScale(1.0), kBossText);
+        }
+    }
+
     // -- death screen (Phase 16, while the player is dead) ------------------
     // The player physics is frozen; the pointer was released on death, so
     // R (any pointer state) respawns.

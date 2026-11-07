@@ -963,6 +963,95 @@ def enderman_teleport():
     return sound(dur, f)
 
 
+def dragon_ambient():
+    """V3-10d (v3.26.0): the dragon's AMBIENT cue (Minecraft's
+    entity.ender_dragon.idle read — the distant winged body's low
+    rumble: a 48 Hz sub groan with the slow 0.15 Hz beat + the
+    wing-flap swish pair, 2.2 s, the 0.5 ambience volume class).
+    One advancing LCG instance, dedicated fixed seed — a re-run
+    leaves every other file byte-identical (the md5 discipline)."""
+    lcg = Lcg(0xD0A1)  # dedicated fixed seed (unique to this sound)
+    dur = 2.2
+    n = int(RATE * dur)
+    bed = lowpass3(lowpass3([lcg.next() for _ in range(n)]))
+    flaps = [0.4 + lcg.next() * 0.3, 1.3 + lcg.next() * 0.3]
+
+    def f(t, u):
+        i = int(u * n)
+        groan = (math.sin(2 * math.pi * 48.0 * t)
+                 * (0.7 + 0.3 * math.sin(2 * math.pi * 0.15 * t))
+                 + math.sin(2 * math.pi * 48.0 * 2.02 * t) * 0.2)
+        out = groan * 0.2 + bed[i] * 0.1
+        for t0 in flaps:
+            u = t - t0
+            if 0.0 <= u < 0.5:
+                fr = 160.0 - 100.0 * (u / 0.5)  # the flap's swish glide
+                out += (math.sin(2 * math.pi * fr * u)
+                        * math.exp(-u * 7.0) * 0.18)
+        return out * amb_env(t, dur, 0.2, 0.4) * 0.5
+    return sound(dur, f)
+
+
+def dragon_growl():
+    """V3-10d (v3.26.0): the dragon's GROWL (Minecraft's
+    entity.ender_dragon.growl read — the breath's 1.25 s audio
+    telegraph: the low rising growl 60 -> 130 Hz with the gravelly
+    partial + the LCG crackle bed, SFX volume class)."""
+    lcg = Lcg(0xD0A2)  # dedicated fixed seed (unique to this sound)
+    dur = 1.25
+
+    def f(t, _):
+        u = t / dur
+        fr = 60.0 + 70.0 * u  # the rising growl
+        tone = (math.sin(2 * math.pi * fr * t)
+                + math.sin(2 * math.pi * fr * 1.41 * t) * 0.4
+                + math.sin(2 * math.pi * fr * 0.5 * t) * 0.3)
+        out = tone * 0.35 * (0.5 + 0.5 * u)
+        if u > 0.35:  # the gravel builds after the low lead
+            out += lcg.next() * 0.12 * (u - 0.35) / 0.65
+        return out * env(t, dur, 2.5)
+    return sound(dur, f)
+
+
+def dragon_death():
+    """V3-10d (v3.26.0): the dragon's DEATH roar (Minecraft's
+    entity.ender_dragon.death read — the long tragic descending
+    wail 240 -> 50 Hz over 2.8 s + the void crackle + the final
+    sub-thud, the boss's send-off, SFX volume class)."""
+    lcg = Lcg(0xD0A3)  # dedicated fixed seed (unique to this sound)
+    dur = 2.8
+
+    def f(t, _):
+        u = t / dur
+        fr = 240.0 - 190.0 * u  # the long wail glide
+        tone = (math.sin(2 * math.pi * fr * t)
+                + math.sin(2 * math.pi * fr * 1.91 * t) * 0.35
+                + math.sin(2 * math.pi * fr * 0.5 * t) * 0.4)
+        out = tone * 0.28 * (1.0 - 0.55 * u)
+        out += lcg.next() * 0.1 * (1.0 - u)  # the void crackle
+        if t < 0.12:  # the opening sub-thud
+            out += math.sin(2 * math.pi * 38.0 * t) * 0.35 * (1 - t / 0.12)
+        return out * env(t, dur, 1.4)
+    return sound(dur, f)
+
+
+def dragon_shoot():
+    """V3-10d (v3.26.0): the dragon's FIREBALL launch cue (the
+    projectile's whoop — the rising swish 180 -> 520 Hz + the
+    hot-noise burst, 0.4 s, SFX volume class; the ghast_roar's
+    launch-twin one read higher, the boss's bigger throat)."""
+    lcg = Lcg(0xD0A4)  # dedicated fixed seed (unique to this sound)
+    dur = 0.4
+
+    def f(t, _):
+        u = t / dur
+        fr = 180.0 + 340.0 * u  # the rising whoop
+        out = math.sin(2 * math.pi * fr * t) * 0.4
+        out += lcg.next() * 0.25 * (1.0 - u)  # the hot burst decays
+        return out * env(t, dur, 6.0)
+    return sound(dur, f)
+
+
 def ghast():
     """V3-14b: the ghast's ambient screech (Minecraft's mob.ghast.
     ambience class — the long, low, wavering wail of the nether's
@@ -1437,6 +1526,12 @@ SOUNDS = {
     # V3-10c (v3.25.0): the enderman's teleport cue (the landing's
     # spatialized void-shimmer — the first mob teleport's sound face).
     "enderman_teleport": enderman_teleport,
+    # V3-10d (v3.26.0): the ender dragon's four cues (the boss's
+    # ambient / growl telegraph / death wail / fireball whoop).
+    "dragon_ambient": dragon_ambient,
+    "dragon_growl": dragon_growl,
+    "dragon_death": dragon_death,
+    "dragon_shoot": dragon_shoot,
     # V2-15: the shears' cut (the sheep shearing — the right-click
     # action's cue, spatialized at the mob, the milk precedent).
     "shear": shear,

@@ -178,23 +178,24 @@ bool endChorusAt(int latticeX, int latticeZ, std::uint64_t salt) {
 Result<EndGen> EndGen::create(std::int64_t derivedSeed,
                               const BiomeRegistry& biomes,
                               const BlockRegistry& blocks) {
-    // The six 10b names resolved once (the NetherGen::create pattern —
+    // The eight 10d names resolved once (the NetherGen::create pattern —
     // the fail-fast: a missing name names the block, the startup
     // rejects). Every one must be STATELESS (the worldgen's ENT-2
     // twin — a per-instance state is a journal the fill cannot write).
     EndGen gen;
     gen.seed = derivedSeed;
-    const char* names[6] = {"endstone", "obsidian", "end_portal",
+    const char* names[8] = {"endstone", "obsidian", "end_portal",
                             "end_portal_frame_eyed", "bedrock",
-                            "chorus_plant"};
-    BlockID* slots[6] = {&gen.endstone, &gen.obsidian, &gen.endPortal,
-                         &gen.frameEyed, &gen.bedrock, &gen.chorusPlant};
-    for (int i = 0; i < 6; ++i) {
+                            "chorus_plant", "end_crystal", "dragon_egg"};
+    BlockID* slots[8] = {&gen.endstone, &gen.obsidian, &gen.endPortal,
+                         &gen.frameEyed, &gen.bedrock, &gen.chorusPlant,
+                         &gen.endCrystal, &gen.dragonEgg};
+    for (int i = 0; i < 8; ++i) {
         const BlockID id = blocks.idForName(names[i]);
         if (!id.valid()) {
             return MC_FAIL("end worldgen: missing block '" +
                            std::string(names[i]) +
-                           "' (the 10b content fill's vocabulary)");
+                           "' (the 10d content fill's vocabulary)");
         }
         if (blocks.at(id).hasState()) {
             return MC_FAIL("end worldgen: '" + std::string(names[i]) +
@@ -349,6 +350,51 @@ void fillEndChunk(const EndGen& gen, Chunk& chunk, const ChunkPos& pos) {
                 }
             }
         }
+    }
+
+    // -- pass 4 (10d): the dragon arena — the 4 obsidian TOWERS (the
+    //    5x5 columns rising y53..y58 at the plateau's (±50, ±50)) + the
+    //    6 CRYSTALS (the 4 tower tops at y59 + the 2 exit crystals on
+    //    the frame ring's mid-edge tops at (±2, y54, 0)). Pure fixed
+    //    coordinates (zero noise, zero stream — the plateau/exit's
+    //    deterministic twin, the PITS-406 single-source: the game's
+    //    crystal pass reads kEndCrystalSlots, this pass writes the same
+    //    cells). The air-only predicate keeps the plateau intact (a
+    //    tower cell over the solid plateau top y52 is air by
+    //    construction; the belt rejects a worldgen edit that would
+    //    overwrite the exit's frame, the R2 guardrail's read).
+    if (gen.endCrystal.valid() && gen.obsidian.valid()) {
+        auto writeCell = [&](int wx, int wy, int wz, BlockID id) {
+            const int lx = wx - ox;
+            const int lz = wz - oz;
+            const int ly = wy - baseY;
+            if (lx < 0 || lx >= kChunkSize || lz < 0 ||
+                lz >= kChunkSize || ly < 0 || ly >= kChunkSize) {
+                return; // this chunk does not contain the cell
+            }
+            if (chunk.get(lx, ly, lz) != BlockID::air()) {
+                return; // the air-only belt (the exit's frame / the
+                        // plateau's top are never overwritten)
+            }
+            chunk.set(lx, ly, lz, id);
+        };
+        const int kTowerCenters[4][2] = {{50, 50}, {-50, 50},
+                                         {50, -50}, {-50, -50}};
+        for (const auto& tc : kTowerCenters) {
+            for (int tx = tc[0] - 2; tx <= tc[0] + 2; ++tx) {
+                for (int tz = tc[1] - 2; tz <= tc[1] + 2; ++tz) {
+                    for (int wy = 53; wy <= 58; ++wy) {
+                        writeCell(tx, wy, tz, gen.obsidian);
+                    }
+                }
+            }
+            // The tower-top crystal (y59, the column's apex — the
+            // center cell only).
+            writeCell(tc[0], 59, tc[1], gen.endCrystal);
+        }
+        // The two exit crystals (the frame ring's mid-edge tops).
+        writeCell(2, 54, 0, gen.endCrystal);
+        writeCell(-2, 54, 0, gen.endCrystal);
     }
 }
 

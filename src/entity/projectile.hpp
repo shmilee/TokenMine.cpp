@@ -91,7 +91,8 @@ public:
                float power = 1.0f, std::string ammoItem = {},
                int effectId = -1, double effectDuration = 0.0,
                int effectTier = 0, float explodeRadius = 0.0f,
-               std::string explodeSource = {}, bool teleports = false);
+               std::string explodeSource = {}, bool teleports = false,
+               bool leavesCloud = false);
 
     void update(double dt) override;
     bool shouldDespawn() const override {
@@ -160,6 +161,13 @@ public:
     // deviation). false = the pre-V3-10b projectile (every legacy call
     // site bit-identical — the trailing-parameter default).
     bool teleports() const { return m_teleports; }
+    // V3-10d: the dragon fireball's CLOUD-leaver (the trailing default
+    // false = the arrow / ghast fireball / pearl bit-identical red
+    // line): on a block impact the game's stuck pass spawns a
+    // BreathCloud at the contact point and despawns the projectile
+    // WITHOUT damage or blast (the MC dragon fireball's impact-is-
+    // cloud-only read — the cloud is the damage, not the impact).
+    bool leavesCloud() const { return m_leavesCloud; }
     // True when the game's swept test may hit the player with this arrow
     // (Phase 27: mob-shot arrows).
     bool hurtPlayer() const { return m_hurtPlayer; }
@@ -207,6 +215,10 @@ private:
     // V3-10b: the teleporting-thrower flag (false = the pre-V3-10b
     // projectile — the trailing constructor parameter's default).
     bool m_teleports = false;
+    // V3-10d: the dragon fireball's cloud-leaver (false = the
+    // pre-V3-10d projectile — the trailing constructor parameter's
+    // default, the arrow / ghast fireball / pearl red line).
+    bool m_leavesCloud = false;
 
     // Same fall cap as the player: keeps the sub-stepper's tunneling bound
     // (an uncapped arrow could reach 600 blocks/s after 30 s).

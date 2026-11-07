@@ -388,6 +388,34 @@ def enderman_face_tile() -> list:
     return pixels
 
 
+# V3-10d (v3.26.0): the ender dragon's palette (the MC read — the
+# near-black void scales + the deep-violet wing membrane + the
+# glowing magenta eye slits). New salts 0x10D1..0x10D3 — every
+# existing tile stays pixel-identical.
+DRAGON_BODY = (20, 18, 26)
+DRAGON_WING = (48, 30, 64)
+DRAGON_EYE = (226, 90, 230)
+
+
+def dragon_face_tile() -> list:
+    """The dragon's head face: the void scales + the two glowing
+    magenta eye slits (rows 4-5, the wide slit = the boss's menace
+    read, the skin_tile eye-row convention's extension)."""
+    (br, bg, bb) = DRAGON_BODY
+    (er, eg, eb) = DRAGON_EYE
+    pixels = []
+    for y in range(SIZE):
+        row = []
+        for x in range(SIZE):
+            n = noise(x, y, 0x10D2, 10)
+            r, g, b = clamp(br + n), clamp(bg + n), clamp(bb + n)
+            if 4 <= y <= 5 and (1 <= x <= 5 or 10 <= x <= 14):
+                (r, g, b) = (er, eg, eb)
+            row.append((r, g, b, 255))
+        pixels.append(row)
+    return pixels
+
+
 def zpiglin_face_tile() -> list:
     """The zombified piglin's head face (the pig shape, the zombie
     tint — the MC zombified piglin = the pigman face greened)."""
@@ -544,6 +572,15 @@ def main() -> None:
               skin_tile(0x10C1, ENDERMAN_BODY))
     write_png(os.path.join(OUT_DIR, "enderman_face.png"),
               enderman_face_tile())
+
+    # V3-10d: the ender dragon (the boss — the void scales + the violet
+    # wing membrane + the magenta eye face; salts 0x10D1/0x10D2/0x10D3).
+    write_png(os.path.join(OUT_DIR, "dragon_body.png"),
+              skin_tile(0x10D1, DRAGON_BODY))
+    write_png(os.path.join(OUT_DIR, "dragon_wing.png"),
+              skin_tile(0x10D3, DRAGON_WING))
+    write_png(os.path.join(OUT_DIR, "dragon_face.png"),
+              dragon_face_tile())
 
 
 if __name__ == "__main__":

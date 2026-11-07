@@ -193,3 +193,66 @@ TEST(ExplosionTest, ScanNoOpOnEmptyBlast) {
     EXPECT_TRUE(scan.broken.empty());
     EXPECT_TRUE(scan.ignited.empty());
 }
+
+// ---------------------------------------------------------------------------
+// V3-10d: the end crystal's shatter (the break-explosion's no-chain's
+// structural property — the exit pair's 5-block gap is outside the
+// radius-3 blast, and the blast's setBlock never re-enters the shatter
+// path, the MC JE read's project twin).
+// ---------------------------------------------------------------------------
+
+TEST(ExplosionTest, CrystalBlastDoesNotChainTheExitPair) {
+    struct CrystalFixture {
+        BlockRegistry reg;
+        BlockID crystal;
+        BlockID stone;
+
+        CrystalFixture() {
+            const std::string crystalDef =
+                R"({"id":"end_crystal","properties":{"hardness":0,"solid":false,"explode_radius":3,"shatter_on_arrow":true},"model":{"textures":{"top":"c","side":"c","bottom":"c"}}})";
+            const std::string stoneDef =
+                R"({"id":"stone","properties":{"hardness":1.5},"model":{"textures":{"top":"s","side":"s","bottom":"s"}}})";
+            for (const std::string& def : {crystalDef, stoneDef}) {
+                auto r = reg.registerBlock(parseDef(def));
+                if (!r.ok()) {
+                    throw std::runtime_error(r.error().message);
+                }
+            }
+            crystal = reg.idForName("end_crystal");
+            stone = reg.idForName("stone");
+        }
+    } cfx;
+    World world;
+    // The exit pair (the arena's shape): the SOURCE already air (the
+    // breakBlock / the shatterCrystalAt's setBlock-before-blast order),
+    // the OTHER crystal 5 blocks away, the stone floor under the blast.
+    world.setBlock(2, 54, 0, cfx.crystal);
+    world.setBlock(-2, 54, 0, cfx.crystal);
+    world.setBlock(2, 54, 0, BlockID::air()); // the source's break
+    for (int x = -4; x <= 4; ++x) {
+        for (int z = -4; z <= 4; ++z) {
+            world.setBlock(x, 52, z, cfx.stone);
+        }
+    }
+    const ExplosionScan scan =
+        scanExplosion(world, cfx.reg, Vec3 {2.5f, 54.5f, 0.5f}, 3.0);
+    // The no-chain's witness: the other crystal's cell is NOT broken
+    // (its 5-block gap is outside the radius's bounding box AND the
+    // blast's falloff is 0 there — the double read).
+    bool otherCrystalBroken = false;
+    bool sourceFloorBroken = false;
+    for (const BlockPos& b : scan.broken) {
+        if (b.x == -2 && b.y == 54 && b.z == 0) {
+            otherCrystalBroken = true;
+        }
+        if (b.x == 2 && b.y == 52 && b.z == 0) {
+            sourceFloorBroken = true; // the control: the blast DOES
+                                       // break the stone floor beneath
+        }
+    }
+    EXPECT_FALSE(otherCrystalBroken)
+        << "the exit pair's 5-block gap must survive the radius-3 blast";
+    EXPECT_TRUE(sourceFloorBroken) << "the stone floor under the blast "
+                                      "center breaks (the control's "
+                                      "witness — the scan is not vacuous)";
+}

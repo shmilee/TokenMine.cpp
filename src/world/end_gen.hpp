@@ -44,6 +44,10 @@ inline constexpr std::int64_t kSaltEnd = 0x10D0E11D5E4D73A2LL;
 inline constexpr std::int64_t kSaltEndIsland = 0x10D0E11D5E4D73A3LL;
 inline constexpr std::int64_t kSaltEndChorus = 0x10D0E11D5E4D73A4LL;
 inline constexpr std::int64_t kSaltEndBiome = 0x10D0E11D5E4D73A5LL;
+// V3-10d: the dragon's singleton seed salt (the family's next slot —
+// the game's spawnDragon xors it into the world seed; the singleton
+// never walks the pool's spawnCounter, the R2's stream-isolation read).
+inline constexpr std::int64_t kSaltDragon = 0x10D0E11D5E4D73A6LL;
 
 // V3-10b: the island archipelago's parameters (the lattice-16 roll —
 // the nether ore lattice's twin spacing; every parameter a named
@@ -110,6 +114,12 @@ struct EndGen {
     // the NetherGen's graceful-degradation twin).
     BlockID bedrock = BlockID::invalid(); // the REUSED shipped block
     BlockID chorusPlant = BlockID::invalid();
+    // V3-10d: the dragon arena's blocks (the 4 towers' crystal + the
+    // death egg — create's fail-fast vocabulary, the chorusPlant's
+    // content twin; the pass 4's worldgen writes them at the 6 fixed
+    // crystal slots + the towers' 5x5 columns).
+    BlockID endCrystal = BlockID::invalid();
+    BlockID dragonEgg = BlockID::invalid();
     // V3-10b: the end biome pool (the biomes_end/ load — registry order
     // = the cumulative-weight selection order; 10b ships one member,
     // the 10d seam).

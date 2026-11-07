@@ -88,4 +88,17 @@ constexpr int kCarryPlaceFrames = 6000;
 // 1.0 item cube — the overhead block's project scale).
 constexpr float kCarryBlockScale = 0.9f;
 
+// V3-10d (the ender dragon): the death ritual's ascent (the D10's
+// compressed MC 10-s read): the 60-frame flight to the perch + the
+// 180-frame hover = the 240 total, the removal frame (the game pass
+// drives the corpse, the despawn pass's delay gate reads the bound —
+// the two TUs share the named constants here).
+constexpr int kDragonAscentFlyFrames = 60;
+constexpr int kDragonAscentTotalFrames = 240;
+// The fireball's impact CLOUD (the MC linger read's project scale — the
+// breath's 3-s data twin's fixed constants: the impact's 5-s duration +
+// the 2.5-block radius, the D11's damage-by-cloud read).
+constexpr double kDragonFireballCloudDuration = 5.0;
+constexpr float kDragonFireballCloudRadius = 2.5f;
+
 } // namespace mc

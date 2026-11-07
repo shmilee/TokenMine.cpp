@@ -344,8 +344,9 @@ TEST(V390BuildingContent, RecipeCensusPinned) {
         }
     }
     // V3-10b: 112 -> 113 (the end_stone_bricks' 2x2 shaped recipe).
-    EXPECT_EQ(c.recipes.count(), 113u);
-    EXPECT_EQ(recipeFiles, 113);
+    // V3-10d: 113 -> 114 (the end_crystal's glass+eye+membrane shapeless).
+    EXPECT_EQ(c.recipes.count(), 114u);
+    EXPECT_EQ(recipeFiles, 114);
 }
 
 // ===========================================================================
@@ -497,8 +498,10 @@ TEST(V390BuildingContent, ContentCensusPinned) {
     // V3-10a re-pin: 127 -> 131 (the End's four minimum blocks —
     // endstone / end_portal / the two frames; the zero-shift red
     // line). V3-10b re-pin: 131 -> 133 (the End content family's two
-    // blocks — end_stone_bricks + chorus_plant).
-    EXPECT_EQ(blockCount, 133);
+    // blocks — end_stone_bricks + chorus_plant). V3-10d re-pin:
+    // 133 -> 135 (the dragon arena's two blocks — end_crystal +
+    // dragon_egg).
+    EXPECT_EQ(blockCount, 135);
     int itemJson = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/data/items")) {
@@ -515,7 +518,7 @@ TEST(V390BuildingContent, ContentCensusPinned) {
             ++tilePng;
         }
     }
-    EXPECT_EQ(tilePng, 110 + 20 + 4 + 2); // 110 pre-V3-5 + the family's 20 + the V3-10a End's 4 + the V3-10b family's 2
+    EXPECT_EQ(tilePng, 110 + 20 + 4 + 2 + 2); // 110 pre-V3-5 + the family's 20 + the V3-10a End's 4 + the V3-10b family's 2 + the V3-10d dragon arena's 2
     int iconPng = 0;
     for (const auto& e :
          std::filesystem::directory_iterator("assets/textures/items")) {

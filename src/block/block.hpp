@@ -181,6 +181,22 @@ struct BlockProperties {
     // write — the ENT-2 worldgen twin, the S6 gate's subject). The
     // core reads the property, never a block id (hard rule 3).
     bool carriable = false;
+    // V3-10d (the end crystal): the BREAK explosion's radius (data
+    // 'explode_radius', a number >= 0, default 0 = inert): when the
+    // player breaks the cell, the game's breakBlock choke point runs
+    // Game::explodeAt over the cell center with this radius (the
+    // V3-14a blast re-used by data — the block IS its own fuse). 0 =
+    // every pre-V3-10d block bit-identical (the structural root).
+    float explodeRadius = 0.0f;
+    // V3-10d: the SHATTER-ON-ARROW gate (data 'shatter_on_arrow', a
+    // strict boolean, default false): an in-flight arrow's swept
+    // segment hitting this cell's AABB shatters the block (the
+    // breakBlock semantics — the explosion included — + the arrow is
+    // consumed). The non-solid crystal's physics never blocks the
+    // arrow, so the sweep is the block equivalent of Minecraft's
+    // arrow-vs-crystal-entity. false = every pre-V3-10d block
+    // bit-identical.
+    bool shatterOnArrow = false;
     // Simulated as a fluid (Phase 9; KINDED in Phase 51): the fluid's name
     // (vocabulary: "water", "lava" — validated at data load). Empty = not
     // a fluid. A fluid block is stored as a fluid level in the chunk's

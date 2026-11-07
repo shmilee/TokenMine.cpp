@@ -1,0 +1,17 @@
+{
+  "id": "end_crystal",
+  "properties": {
+    "hardness": 0.0,
+    "solid": false,
+    "opaque": false,
+    "transparent": true,
+    "cutout": true,
+    "light_emission": 14,
+    "explode_radius": 3,
+    "shatter_on_arrow": true
+  },
+  "model": {
+    "shape": "full_cube",
+    "textures": { "top": "end_crystal", "side": "end_crystal", "bottom": "end_crystal" }
+  }
+}

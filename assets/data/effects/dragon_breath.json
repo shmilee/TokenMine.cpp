@@ -1,0 +1,11 @@
+{
+  "id": "dragon_breath",
+  "tick_type": "damage",
+  "tick_amount": 1.5,
+  "tick_interval": 0.5,
+  "min_health": 0.0,
+  "negative": true,
+  "affects_mobs": false,
+  "icon": 11,
+  "tint": [0.45, 0.15, 0.55, 0.30]
+}
