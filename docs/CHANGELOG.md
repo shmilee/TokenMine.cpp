@@ -11,6 +11,34 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.34.0（2026-11-09）— V3-16c 扩展指导 demo 族：③ 完整房子+床（门 224 全 PASS）
+
+**V3-16 相位 C/7**（day1 章节 ③ 一支 = day1 ④⑤⑥③ 全 4 支完成；
+内核零变更 = 16a 的 scene/panel_click/索引全复用，本相位 = 内容 +
+工具链增量）：**guide_house**（18875f 05:14：scene = 12×12 平台 +
+工作台 (1,54,-1) + 夜 0.75 + h0 planks 36/h1 wool 3；**定案结构
+= 床预制先做**【夜窗时序面：sleep f5794 ≪ 10800】→ 一段墙 9 + 二
+段墙 9【地面顶面 aim】→ 脚手架 S1/S2 + 唯一 step-up 链【S2 顶】→
+middle x2 + north x2【S2 顶 elevated 眼】→ 屋顶 walk 北行 x3-5【二
+段北顶面】→ 南行 x5/x4【二段南顶面】+ middle x5【链 +X 面，aim
+陡化 = 捕获⑤】→ 4-hops 下行【W 提前释放 = 无坠漂，捕获③】→ 落点
+原位脚手架双挖【净 0 块】→ 室内 middle x3/x4【链 +X 面】→ 门缺口
+列南 x2/x3【middle +Z 仰面——南 x3 二段门缺口无顶面 = 唯一可行
+面，捕获②】→ 床 place_ahead (4,54,-5) + **Slept at the bed**【夜跳
+dawn】→ 黎明巡视【四面 walk-around + 日出】；终态钉 house 30
+planks y54 9/y55 9/y56 12 零 stray + 床 + respawn (4.5,54.5,-4.5) +
+h0 3 + 零实体 + hp 20）；**门内捕获 PITS 415 七坑**【出生点与表格
+格重叠 = 静默顶 y55 全链死（表格移至 (1,-1)）/ 地面眼 y55.62 < y56
+= 二层侧底面截断 = 屋顶可行面谱定案 / C4 坠 W-hold 漂 0.5-0.8m /
+长 walk leg 损耗 0.4-0.5m 过补偿 / 屋顶 walk z stop 0-0.5m = aim
+边距 1cm 生死 / 场景 journal 容器态三处同步 / gzip 资产 Python 读
+0x8b】；工具链增量【demo_author walk_leg y/hold 尾参（既有 demo
+零影响）+ mk_scene tables/furnaces 透传】；2998/2998（内容相位零
+新增——init 交叉检查 4 条目全量 boot 复验）；S1 第 105 次（f60 ×2
+≡ base19 + banner 3.34.0 零像素复验）+ canary 4 EXACT + guide_house
+×2 RAW/savenorm + 性能 A/B 同档（结构性零成本）；详见
+`docs/archive/phase-3.34.0.md`。
+
 ## v3.33.0（2026-11-08）— V3-16b 扩展指导 demo 族：⑤补充体力 + ⑥修复回血（门 223 全 PASS）
 
 **V3-16 相位 B/7**（day1 章节 ⑤⑥ 两支；内核零变更 = 16a 的

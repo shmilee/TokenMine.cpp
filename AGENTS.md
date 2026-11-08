@@ -88,6 +88,16 @@ SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V
   + canary 4 EXACT + ⑤⑥ ×2 RAW/savenorm + 性能 A/B 同档；门内捕获
   PITS 414 四坑【f0 捕获尾部挖掘 / scene journal 同格重复 / 1f vs
   2f tap 硬度 0 连锁 + 年轻麦 f3000 全熟 / perf A/B cwd 陷阱】）
+  + **v3.34.0 = V3-16c 扩展指导 demo 族 ③完整房子+床（门 224，
+  11-09：guide_house 18875f 05:14 = day1 ④⑤⑥③ 全 4 支完成——床预
+  制先做【夜窗时序】+ 二段墙 18 地面顶面 + 脚手架唯一 step-up 链 +
+  屋顶 12 = 北行屋顶 walk/南行二段南顶面+middle x5 链面/middle 行
+  室内链+南 x2/x3 门缺口列仰面【地面眼 y55.62<y56 侧底面截断 =
+  PITS 415② 可行面谱】+ 4-hops 下行无坠漂 + 落点原位脚手架双挖净
+  0 块 + Slept at the bed (4,54,-5) + 黎明巡视；walk_leg 尾参
+  y/hold + mk_scene 容器态透传；门内捕获 PITS 415 七坑【出生点表格
+  重叠静默顶 y55 全链死 / 侧底面截断 / 坠腿 W 漂 / 长 leg 损耗 / 屋
+  顶 walk z stop 1cm 生死 / 容器态三处同步 / gzip 0x8b】）**
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
@@ -102,8 +112,9 @@ REJOIN + format 33 players[] = 矩阵收官项·V3-12 全 4 相位完成】+
 **11-07 用户实机诉求 2 项 ⬜【V3-16 扩展指导 demo 族
 【10 主题 3-10 分钟级：下界门/末影龙/房子+床/挖矿工具/体力/回血/皇
 宫/材料/河流/完整黑夜历险——**16a ✅ v3.32.0 = 内核 + 工具链 +
-pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）**，
-16c~g 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
+pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
+16c ✅ v3.34.0 = ③房子+床（门 224，day1 全 4 支完成）**，
+16d~g 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
 MOTD 并入】】**【大项已相位拆分 V3-10a~d /
 V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~g，BACKLOG 待执行项明细】**）
 
@@ -164,7 +175,7 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~g，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -329,7 +340,39 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
-  门计数 223（**V3-16b 扩展指导 demo 族 ⑤⑥ v3.33.0** 门 223 全
+  门计数 224（**V3-16c 扩展指导 demo 族 ③完整房子+床 v3.34.0** 门
+  224 全 PASS【V3-16 相位 C/7 = day1 章节 ③ 一支，**day1 ④⑤⑥③ 全 4
+  支完成**；**内核零变更**——16a 的 scene/panel_click/索引全复用，纯
+  内容 + 工具链增量】：**guide_house 18875f 05:14**【scene = 12×12
+  平台（x0..11,z-11..1,顶 y54）+ 工作台 (1,54,-1)【**门内捕获⑥：原
+  (0,54,-3) 与出生点 xz 重叠 = 静默顶 y55 全链死——移格 + 场景
+  journal blocks/tables/air 三处同步**】+ 夜 0.75 + h0 planks 36/h1
+  wool 3；**定案结构 = 床预制先做**【夜窗时序面：sleep f5794 ≪
+  10800 余量 5000f】→ 一段墙 9 + 二段墙 9【地面顶面 aim，全版稳
+  定】→ 脚手架 S1/S2 + 唯一 step-up 链 → S2 顶 middle x2 + north
+  x2【elevated 眼 y57.62】→ 屋顶 walk 北行 x3-5【二段北顶面
+  t=|v|】→ 南行 x5/x4【二段南顶面——y57 floor-crossing 须过
+  middle 空格】+ middle x5【链 +X 面，**aim 陡化 = 捕获⑤**】→
+  4-hops 下行【**W 提前释放 = 无坠漂，捕获③**】→ 落点原位脚手架
+  双挖【净 0 块】→ 室内 middle x3/x4【链 +X 面，**长 leg 目标过
+  补偿 = 捕获④**】→ 门缺口列南 x2/x3【middle +Z 仰面——南 x3 二段
+  门缺口无顶面 = 唯一可行面，捕获②】→ 床 place_ahead (4,54,-5) +
+  **Slept at the bed**【夜跳 dawn】→ 黎明巡视【四面 walk-around +
+  日出】；终态钉 house 30 planks y54 9/y55 9/y56 12 零 stray + 床 +
+  respawn (4.5,54.5,-4.5) + h0 3 + 零实体 + hp 20】+ **工具链增
+  量**【demo_author walk_leg 尾参 y/hold【step-up 抬离 + 短跳 W 释
+  放，既有 demo 零影响】+ mk_scene tables/furnaces 容器态透传】；
+  2998/2998【内容相位零新增单测——init 交叉检查 4 条目全量 boot 复
+  验】；S1 第 105 次【f60 ×2 ≡ base19 + banner 3.34.0 零像素复
+  验】+ canary 4 EXACT【3.34.0 二进制复跑】+ guide_house ×2
+  RAW/savenorm + 性能 A/B 同档【旧 = 477082c v3.33.0 worktree +
+  g139 双树：OW 900f 无输入三窗 upd/render/swap ×2 跑全同档 +
+  changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT = 结构性零成
+  本】；PITS 415【七坑：出生点容器重叠静默顶出 / 地面眼侧底面截断
+  = 屋顶可行面谱 / 坠腿 W 漂 / 长 leg 损耗 0.4-0.5m / 屋顶 walk z
+  stop 0-0.5m = 1cm 边距生死 / 容器态三处同步 / gzip 资产 Python 读
+  0x8b】）；
+   门计数 223（**V3-16b 扩展指导 demo 族 ⑤⑥ v3.33.0** 门 223 全
   PASS【V3-16 相位 B/7 = day1 章节 ⑤体力 + ⑥回血两支；**内核零变
   更**——16a 的 scene/panel_click/索引全复用，纯内容 + 工具链增
   量】：**⑤ guide_food 18262f 05:04**【scene guide_food：6×4 麦田

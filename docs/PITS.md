@@ -3,8 +3,46 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–414，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–415，新条目继续前插于尾部块首。
 
+- **guide authoring 三批七坑（PITS 415，门 224 v3.34.0 V3-16c ③
+  房子+床）**——① **场景出生点与 prepared 容器格 xz 重叠 = 静默
+  顶出**：scene player (0.5,54,-2.5) 与 table (0,54,-3) 同 xz 带
+  → 载入把玩家**顶到容器顶 y55（无任何点名日志！）**→ track 的
+  y54 眼高全偏 + 开表 RMB 打空在石顶放 stray + `close_panel` 的 E
+  边沿**开起 inventory**（玩家物理冻结 + 指针释放）+ 其后的
+  `capture()` 无效（panel 开时 LMB = 面板点击非捕获）→ 11 panel
+  problem + 下游全死。纪律：场景 spec 的 player pos 不重叠任何
+  solid 格（含预置容器）；**顶出无日志 = 取证盲点**——probe 位姿
+  第一手（feet y 非整数带 = 顶出/坠落信号）。② **地面眼 y55.62 <
+  y56 = 二层侧/底面截断**：低于二层顶（y56）的一切屋顶顶面 aim，
+  射线 y56 crossing 落在二层墙 xz 内 = 命中侧/底面 → middle 槽
+  stray（(x,55,-5) 填充）/ 已占拒收。屋顶可行面谱 = elevated 眼
+  （y57.62）顶面 + 已放 roof 链 ±X 面 + 门缺口列 middle +Z 仰面
+  （y56 crossing 须落 south 空格）；**门缺口列（x3 两层全 air）=
+  唯一可同时站立 + 仰面放南行的站位**。③ **坠落腿的 W-hold 覆盖
+  坠程 = 漂 0.5-0.8m**：16f hold 覆盖整 2m 坠（~20f）= 坠中 5-7f
+  的 W 漂 0.35-0.5m + 屋顶 walk z stop 0.3 过冲 → 落点带 0.7m →
+  下游挖位/aim 全偏（S1/S2 未挖 = C7 门链卡死；aim 上树
+  leaves）。纪律：**hop 化**（8f W 提前释放 + 自由坠无 W 无漂）×4
+  段收紧落点带 ±0.3，挖 = 落点原位。④ **长 walk leg 损耗
+  0.4-0.5m（accel + stop margin）**：3.1m leg 实停短 0.46m → 下
+  游 +X leg 的行 z 落进一段墙 z 带（0.1-0.3m 重叠 × 0.01m x 重叠
+  即 clamp）→ 整链卡 x1.7。纪律：长 leg 目标过补偿（z-2.4→
+  z-1.8）+ 终点 leg 用头位 clamp 收口（门停 = 二段北墙头位
+  z-4.7 鲁棒）。⑤ **屋顶 walk 的 z stop margin 方向不定
+  （0-0.5m）**：链面 aim 的 y57 floor-crossing z = z_eye +
+  1.62×dz/dy —— 边距 1cm = 1cm 生死（同形 aim 两次踩 floor
+  stray (4,58,-6)）。纪律：aim 陡化（dz 加大 + aim y 抬高）=
+  crossing 偏移 0.84→1.19m，全 z 带 19-25cm 边距。⑥ **场景
+  journal 容器态三处同步**：移/增容器 = blocks 条目 + tables 条
+  目（per-block 网格）+ 该格 air 条目移除——同格重复 = init
+  "duplicate block" 拒收；tables 缺块 = "save 'tables' has an entry
+  at (x, y, z) which is not a crafting_table block" 拒收。
+  mk_scene.py 需 tables/furnaces 透传（16c 新增）。⑦ **gzip 场景
+  资产 Python 直读 = UnicodeDecodeError 0x8b**（PITS 386 先兆的
+  16c 复踩）——gate 脚本/probe 一律走 gate_compare.load_save 的魔
+  数探测。
 - **guide authoring 二批四坑（PITS 414，门 223 v3.33.0 V3-16b ⑤⑥）**
   ——① **f0 捕获点击的 hold 尾部 = 挖掘**：5f LMB（down f0/up f5）
   = f0 捕获（!locked 分支 return）+ f1-f4 **locked 挖掘**——起姿射

@@ -195,12 +195,17 @@ class Guide:
             self.yaw = yaw
         return self
 
-    def walk_leg(self, f, tx, tz):
+    def walk_leg(self, f, tx, tz, y=None, hold=None):
         """One axis-aligned walk leg to the EXACT point (tx, tz) (the
         cell-center's +0.5's the caller's face). The hold's length =
         the distance's frames + the stop margin (the reg's loss's twin:
         the actual stop is 0.03-0.11 m short, the cell's inside); the
-        track models the exact corner (the relative aim's tolerance)."""
+        track models the exact corner (the relative aim's tolerance).
+        y: the caller's KNOWLEDGE of the leg's END's feet height (the
+        step-up's +1 / the drop's -N — the track's flat assumption's
+        lift, the V3-16c's roof's face); hold: an explicit hold's
+        frames (the short-hop's drop: the w's release before the edge,
+        the air's drift's the calibration's twin)."""
         self.at(f)
         dx = tx - self.x
         dz = tz - self.z
@@ -216,12 +221,15 @@ class Guide:
                 "at_frame": f, "action": "mouse_move",
                 "dx": round(-dyaw / SENS, 3), "dy": 0.0})
             self.yaw = yaw
-        frames = int(round(d / WALK * 60)) + WALK_STOP_MARGIN
+        frames = (hold if hold is not None
+                  else int(round(d / WALK * 60)) + WALK_STOP_MARGIN)
         assert frames >= 8, "walk_leg: a too-short leg"
         self.actions.append({"at_frame": f + 1, "action": "hold",
                              "key": "w", "until_frame": f + 1 + frames})
         self.x = tx
         self.z = tz
+        if y is not None:
+            self.y = y
         f = f + 1 + frames + 8  # the settle's pause
         self.cursor = f
         return f
@@ -233,6 +241,26 @@ class Guide:
         for (px, pz) in points:
             f = self.walk_leg(f, px, pz)
         return f
+
+    def look_point(self, f, x, y, z):
+        """Aim the exact 3D point (the FACE-aim's face: a side face's
+        point 0.1 past the plane — the roof's middle row's placement's
+        gate-catch: the top face's aim needs the eye's above, the
+        side face's works from below)."""
+        dx = x - self.x
+        dy = y - (self.y + EYE)
+        dz = z - self.z
+        yaw = math.atan2(-dx, -dz)
+        d = (yaw - self.yaw + math.pi) % (2 * math.pi) - math.pi
+        pitch = max(-1.5, min(1.5, math.atan2(dy, math.hypot(dx, dz))))
+        self.at(f)
+        self.actions.append({
+            "at_frame": f, "action": "mouse_move",
+            "dx": round(-d / SENS, 3),
+            "dy": round(-(pitch - self.pitch) / SENS, 3)})
+        self.yaw = yaw
+        self.pitch = pitch
+        return self
 
     def place_ahead(self, f, dist=1.0, ground_y=54.0):
         """The RELATIVE place (the drift's robustness's face): aim the

@@ -78,6 +78,13 @@ def apply_spec(doc, spec):
     if 'blocks' in spec:
         for e in spec['blocks']:
             doc['blocks'].append([int(e[0]), int(e[1]), int(e[2]), e[3]])
+    # V3-16c: the container states' passthrough (the table's block
+    # cross-check: every crafting_table owns a tables entry — the
+    # scene's prepared table's twin).
+    if 'tables' in spec:
+        doc['tables'] = spec['tables']
+    if 'furnaces' in spec:
+        doc['furnaces'] = spec['furnaces']
     return doc
 
 
