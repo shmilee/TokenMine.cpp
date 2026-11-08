@@ -46,7 +46,33 @@ SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V
   合同 D24【活 mob 在场 = 中会话 rejoin 点名拒收】；门内捕获八坑全
   PITS 412；2987/2987（+13）；S1 第 102 次 + canary 4 EXACT + 迁移臂
   32→33 值保真 + REJOIN 臂三向哈希 f600 逐字 + 性能 A/B 同档）=
-  V3-12c 相位 2/2 全 4 相位收官·矩阵收官项**）——**3.x 矩阵
+  V3-12c 相位 2/2 全 4 相位收官·矩阵收官项**）；**v3.32.0 =
+  V3-16a 扩展指导 demo 族：数据层 + scene + panel_click + pilot ④
+  （门 222，11-08：demo 世界 spec 第三形 scene【committed 确定性存
+  档资产 assets/demos/scenes/ 只读 = 观察红线结构根，--save 可组合】
+  + **panel_click 事件**【几何无关格地址：panel/slot/button 词表严
+  格 + resolver 开面板检查 + layout rect 中心当前几何孪生 + 真实
+  Input closure 合成点击——uiScale/窗口任意值鲁棒；record tap 永不
+  产生 = author 面独占；net --script 拒收【40B 无 panel 字段边界】；
+  **sim 2 不 bump**【增量事件型 canary 4 EXACT 执法】】+ **索引数
+  据层**【index.json 四轴 schema {category,seq,mode,tags,file,
+  length_frames} + 5 章封闭词表【day1/build/dimension/survival/
+  coop = 4+1 定案】+ init 每次 boot 全量交叉检查【文件 + strict
+  load + SIM 门 + length + scene 存在，nether 池 fail-fast 传统】+
+  --list-demos 独立无头旗】+ **工具链**【mk_scene.py 场景手术幂等 +
+  demo_author.py Guide DSL【轴对齐行走 + 相对放置/开容器 + 逐格
+  贴线挖矿】+ scenes/ beat 脚本】+ **pilot ④ 挖矿打造工具 11387f
+  03:09**【砍树 5→砂 2→木板 20→工作台→木棍 8+木镐→逐格挖矿 11→
+  熔炉环 8→熔砂 2 玻璃；终态钉 h0 煤 2/h2 铁 1/h4 镐 dmg 11/h5 木
+  板 9/h8 玻璃 2 + 表(5,54,-7)+炉(4,54,-7) 空态 + 零实体】；2998/
+  2998（+11）；S1 第 103 次【f60 ×2 ≡ base19 + 旧树三方闭环——
+  base19 锚 = f60 门内定案】+ canary 4 EXACT + pilot ×2 RAW/savenorm
+  + S6 五面 + 性能 A/B 同档；门内捕获 PITS 413 十九坑【f0 捕获 /
+  关面板不重锁 / look 符号 / 硬编码帧重叠 / 斜行 4× / cursor 不同步
+  / REG 2.5f 标定 / 放置瞄地面 / 相对放置 / 行墙挡视线 / 磁吸衰减 /
+  工具态破碎时长 / 续挖穿平台 / mobs 误击耐久 / furnace 共享格三开
+  态 / base19 f60 / --frames 白等 / journal 同态移除 / scene 完整性
+  约束】）——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
 / v3.16.0（门 206）/ v3.17.0（门 207）/ v3.18.0（门 208）/ v3.19.0
@@ -59,9 +85,10 @@ V3-10a ✅ v3.23.0 + V3-10b ✅ v3.24.0 + V3-10c ✅ v3.25.0 + V3-10d1 ✅ v3.26
 REJOIN + format 33 players[] = 矩阵收官项·V3-12 全 4 相位完成】+
 **11-07 用户实机诉求 2 项 ⬜【V3-16 扩展指导 demo 族
 【10 主题 3-10 分钟级：下界门/末影龙/房子+床/挖矿工具/体力/回血/皇
-宫/材料/河流/完整黑夜历险】+ V3-17 主菜单系统【标题/设置/登陆/教学
-/多人五页 + MOTD 并入】】**【大项已相位拆分 V3-10a~d / V3-11a~b /
-V3-12a~c / V3-14a~d，BACKLOG 待执行项明细】**）
+宫/材料/河流/完整黑夜历险——**16a ✅ v3.32.0 = 内核 + 工具链 +
+pilot ④**（门 222），16b~g 待执行】+ V3-17 主菜单系统【标题/设置
+/登陆/教学/多人五页 + MOTD 并入】】**【大项已相位拆分 V3-10a~d /
+V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~g，BACKLOG 待执行项明细】**）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -120,7 +147,7 @@ V3-12a~c / V3-14a~d，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2987/2987**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -285,6 +312,61 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 222（**V3-16a 扩展指导 demo 族：数据层 + scene + panel_click
+  + pilot ④ v3.32.0** 门 222 全 PASS【V3-16 相位 A/7 = 10 主题 3-10
+  分钟级教学 demo 族的内核 + 工具链 + 首支 pilot ④ 挖矿打造工具】：
+  **scene 世界 spec 第三形**【`{type:"scene",name}` → committed 确定
+  性存档资产 assets/demos/scenes/<name>.json 只读 = 观察红线结构根；
+  tryLoadSave scene 分支 + replay setup 存在性点名 + main 桥接不碰
+  saveSlot（--save 可组合 = 退出写回放结果）】+ **panel_click 事件**
+  【几何无关格地址：Kind 尾增【record tap 永不产生 = author 独占】+
+  panel/slot/button 词表严格【0..35 三面板共享 + 100..103 E 2×2 +
+  110 out + 120..122 furnace + 200..208 table 3×3 + 300..323
+  creative】+ 编解码/展开/script 拒收【40B 无 panel 字段】+ resolver
+  = 开面板检查【panel id 0 三开态 Inventory|Table|**Furnace**——门内
+  捕获②③】+ layout rect 中心【FurnaceLayout 共享格——门内捕获③】+
+  真实 Input closure 合成点击 + 错误串 = 回放 ERROR 行】+ **索引数
+  据层**【index.json {demos:[{category,seq,mode,tags,file,
+  length_frames}]} 封闭键集 + 5 章词表 kDemoCategories【day1/build/
+  dimension/survival/coop 4+1 定案】+ seq 类内连续 + init 每次 boot
+  loadDemoIndexChecked 全量交叉检查【文件存在 + 完整 strict load +
+  SIM 门 + length 匹配 + scene 存在】+ --list-demos 独立无头旗
+  【mm:ss @1/60 + 空章 "(empty — the later face)"】】+ **工具链**
+  【tools/mk_scene.py 场景手术【fresh 基线 + spec 变异 + gzip_pin 重
+  序列化幂等双跑字节恒等】+ tools/demo_author.py Guide DSL【track
+  状态 + capture/look_at/look_ground/place_ahead/open_ahead/
+  walk_polyline 轴对齐/mine/panel/panel_collect/tap/click/select +
+  at() 零 wheel 延长】+ tools/scenes/ beat 脚本】+ **pilot ④
+  11387f 03:09**【scene pilot_mine【12×12 平台 y50-53 实心 + 树 6 +
+  叶冠 + 矿排 z-9 煤 2 铁 1 石 8【x0 空 = 穿越口】+ 砂柱 2】+
+  timeline 488 actions：砍树 5【留顶格】→挖砂 2【裸手 0.75s——门内
+  捕获⑫】→E 面板木板 ×20→工作台→**相对放置**【面朝 1m 前——绝对格
+  1 格漂移死根】→木棍 8+木镐→**逐格贴线挖矿 11**【行墙挡横向视线】
+  →熔炉环 8→**熔砂 ×2 玻璃 10s×2**【燃料余燃至 f10846 = 终态空炉
+  确定性】；终态钉 h0 煤 2/h2 铁 1/h4 镐 dmg 11【门内捕获⑭ mobs 误
+  击 +2 排除】/h5 木板 9/h8 玻璃 2 + 表(5,54,-7)+炉(4,54,-7) + 零
+  实体 + hunger 17 + time 0.4163】；**2998/2998（+11 V316aDemo：
+  词表/展开/编解码/拒收族/script 拒/resolver 面/scene/索引拒收/交叉
+  检查五面）**；S1 结构免疫第 103 次【**f60** ×2 ≡ base19 逐字节 +
+  savenorm EXACT + 旧树 v3.31.0 f60 亦 ≡ base19 三方闭环——门内捕
+  获⑯：base19 锚 = f60 非 f900【时钟 10:50 反解；900f = 15937px 假
+  DIFF 太阳/树冠/时钟】】+ canary 4 EXACT【bump 后复验 ×2 RAW +
+  savenorm——sim 2 不 bump 执法】+ **pilot ×2 RAW + savenorm EXACT**
+  + 终态内容断言 + **S6 五面 rc 1 点名**【缺 dmo / length 错 / 未知
+  category / scene 缺 / sim 错单测】+ **性能 A/B 同档**【旧 =
+  1f36bf2 v3.31.0 worktree + g139 双树 27 markers：banner 实证 + OW
+  900f 无输入 PERF-WIN 三窗 upd med 0.564/0.576/0.599 vs 0.576/
+  0.581/0.590 同档 + render 0.579/0.628/0.658 vs 0.628/0.693/0.739
+  在旧树 2× spread 带内【0.698/0.721/0.736 环境漂移实证】+ swap
+  15.3/15.2/15.2 vs 15.2/15.2/15.1 同档 + changesApplied 9/3/1 vs
+  9/2/1【win2 = real-dt 抖动带 门 207 先例】+ 终档 savenorm EXACT =
+  结构性零成本】；**PITS 413【十九坑全 pilot authoring：f0 捕获 /
+  关面板不重锁 / look 符号 / 硬编码帧×动态行走重叠 / 斜行子轴 4× /
+  walk_polyline cursor 不同步 / REG 2.5f 标定 + stop margin / 放置
+  瞄地面 / 相对放置 / 行墙挡视线 / 磁吸 (1-d/2.5)² 衰减 / 工具态破
+  碎时长 / 续挖穿平台 / mobs 误击耐久 / furnace 共享格三开态 /
+  base19 f60 / --frames = demo+500 / journal 同态移除 / scene 完整
+  性约束】**）；
   门计数 221（**V3-12c2 断线恢复 REJOIN + format 33 players[] v3.31.0**
   门 221 全 PASS【V3-12 全 4 相位收官 = 矩阵收官项】：**format 33
   players[]**【root player + inventory/inv_grid 迁入 per-player entry，
@@ -1223,7 +1305,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（411 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（413 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

@@ -164,6 +164,7 @@ struct GameArgs {
     // enforces both). The operation runs on data/saves before the game
     // boots, prints the result, and exits.
     bool listSaves = false;
+    bool listDemos = false; // V3-16a: the --list-demos (standalone)
     std::optional<std::pair<std::string, std::string>> copySave; // src, dst
     std::optional<std::pair<std::string, std::string>> renameSave;
     std::optional<std::string> deleteSave;
@@ -1153,6 +1154,13 @@ std::optional<MobHit> targetMob() const;
     // craft rows (the E panel only), then the output slot, a grid cell or
     // an inventory slot (the active panel's InventoryUI).
     void handlePanelClicks(Player& p, PlayerSession& s, const Input& in);
+    // V3-16a: the demo's panel-click resolver (the PanelClick event's
+    // game face — the requested panel's open check + the layout's
+    // rect's center in the CURRENT geometry + the synthetic click
+    // through the genuine Input closures; the problem's name when the
+    // panel is not open / the slot is not in the panel).
+    Result<void> demoPanelClick(std::uint32_t panel, std::int32_t slot,
+                                std::int16_t button);
     // Opens the given panel (releasing the pointer) / closes the open one.
     void openPanel(OpenPanel panel);
     void openPanelFor(Player& p, PlayerSession& s, OpenPanel panel);
@@ -2972,6 +2980,9 @@ std::optional<MobHit> targetMob() const;
     // — the documented deviation).
     std::optional<DemoPlayer> m_demoPlayer;
     std::string m_demoPath; // the .dmo's path (the log + the panel)
+    std::string m_demoSceneName; // V3-16a: the scene asset's name (the
+                                  // replay's save's load path's twin;
+                                  // empty = no scene)
     int m_demoFrame = 0;    // the demo frame index (0-based)
     double m_demoSpeed = kDemoSpeedDefault;
     bool m_demoPaused = false; // the ESC pause menu (NOT the exit)

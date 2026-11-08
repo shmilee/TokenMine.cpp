@@ -1,0 +1,12 @@
+{
+  "demos": [
+    {
+      "category": "day1",
+      "seq": 1,
+      "mode": "solo",
+      "tags": ["mining", "crafting", "furnace"],
+      "file": "guide_mining.dmo",
+      "length_frames": 11387
+    }
+  ]
+}

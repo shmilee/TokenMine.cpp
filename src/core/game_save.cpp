@@ -1563,6 +1563,30 @@ Result<void> Game::applyGhostPlayer(const SavePlayer& sp) {
 }
 
 Result<void> Game::tryLoadSave() {
+    // V3-16a: the demo's SCENE spec (the committed guide asset's load —
+    // the slot's twin face, the read-only by construction: an asset,
+    // never the exit write's path).
+    if (!m_demoSceneName.empty()) {
+        const std::filesystem::path path = demoScenePath(m_demoSceneName);
+        const auto started = std::chrono::steady_clock::now();
+        auto save = readSaveFile(path);
+        MC_TRY(save);
+        MC_TRY(applySave(*save));
+        const double loadMs =
+            std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - started)
+                .count();
+        char msBuf[32];
+        std::snprintf(msBuf, sizeof(msBuf), "%.1f", loadMs);
+        MC_LOG_INFO("Loaded demo scene '" + path.string() + "' (" +
+                    std::to_string(save->blockEdits.size()) +
+                    " block edits, " +
+                    std::to_string(save->fluidEdits.size()) +
+                    " fluid edits, " +
+                    std::to_string(save->entities.size()) +
+                    " entities) in " + msBuf + " ms");
+        return {};
+    }
     if (!m_args.saveSlot.has_value() || m_args.newWorld) {
         return {};
     }

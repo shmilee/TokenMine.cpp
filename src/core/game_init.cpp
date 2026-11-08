@@ -2799,6 +2799,20 @@ Result<void> Game::init(const GameArgs& args) {
                            "it is not embedded — restore it or re-"
                            "record)");
         }
+        // V3-16a: the SCENE spec (the committed guide asset — the
+        // existence's named reject's twin; the load's path is
+        // tryLoadSave's scene face, the never-write-back is
+        // structural: the scene is not a slot, the exit's --save
+        // composes like the fresh spec).
+        if (spec.type == DemoWorldSpec::Type::Scene) {
+            if (!std::filesystem::exists(demoScenePath(spec.slot))) {
+                return MC_FAIL("demo's scene '" + spec.slot +
+                               "' not found (the committed "
+                               "assets/demos/scenes directory — the "
+                               "guide asset is missing)");
+            }
+            m_demoSceneName = spec.slot;
+        }
     } else if (m_args.demoRecord) {
         m_demoMode = DemoMode::Record;
         DemoWorldSpec spec;
@@ -2828,6 +2842,17 @@ Result<void> Game::init(const GameArgs& args) {
     // --- assets -----------------------------------------------------------
     auto assetRoot = m_assets.setRoot("assets");
     MC_TRY(assetRoot);
+
+    // V3-16a: the guide demo's INDEX cross-check (the shipped content's
+    // integrity — the fail-fast's named reject, every boot: the
+    // nether pool's tradition. The file's full strict load + the SIM's
+    // gate + the length's match + the scene's existence — a broken
+    // guide asset fails the boot LOUDLY, never a mid-tutorial dead
+    // end).
+    {
+        auto index = loadDemoIndexChecked();
+        MC_TRY(index);
+    }
 
     // --- window + GL context ----------------------------------------------
     auto window = m_window.init(m_config);
@@ -3338,7 +3363,21 @@ void Game::runDemoReplay() {
             }
         }
         m_input.frameBegin();
-        m_demoPlayer->injectForFrame(m_demoFrame, m_input);
+        // V3-16a: the panel-click's resolver (the demo's break's loud
+        // line — the named problem, the gate's grep face).
+        const std::string injErr =
+            m_demoPlayer->injectForFrame(
+                m_demoFrame, m_input,
+                [this](std::uint32_t panel, std::int32_t slot,
+                       std::int16_t button) {
+                    auto r = demoPanelClick(panel, slot, button);
+                    return r.ok() ? std::string("")
+                                  : r.error().message;
+                });
+        if (!injErr.empty()) {
+            MC_LOG_ERROR("demo: the panel's click's problem at frame " +
+                         std::to_string(m_demoFrame) + " — " + injErr);
+        }
         const double dt = m_demoPlayer->dtForFrame(m_demoFrame);
         update(dt);
         if (dt > 0.0) {

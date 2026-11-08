@@ -1,3 +1,4 @@
+#include "core/demo.hpp" // V3-16a: the panel-click's vocabularies
 #include "core/game.hpp"
 
 #include <algorithm>
@@ -1005,6 +1006,168 @@ void Game::handlePanelClicks(Player& p, PlayerSession& s, const Input& in) {
     }
 }
 
+
+Result<void> Game::demoPanelClick(std::uint32_t panel, std::int32_t slot,
+                                  std::int16_t button) {
+    // V3-16a: the demo's panel-click's resolver (the PanelClick event's
+    // game face). The three steps — (1) the requested panel's open
+    // check (the problem's name = the demo's break's loud line, the
+    // gate's grep face), (2) the layout's slot rect (the click path's
+    // TWIN compute — the same pure geometry as the render), (3) the
+    // synthetic click through the genuine Input closures (the panel's
+    // logic's zero new path: the position + the shift (the button's
+    // face) + the press's edge, the down + the up's same frame).
+    const Player& p = *m_player;
+    const PanelState& ps = localPanel();
+    switch (panel) {
+        case kDemoPanelInventory:
+            // The player's 36 slots are the shared face of the three
+            // slot-showing panels (the E's inventory / the table's /
+            // the furnace's all show the same slots — the layout's
+            // kind's twin): the id's inventory's face accepts all
+            // three (the g0..g3 / the out's cells are the crafting's
+            // exclusive, the slot's range check's below).
+            if (ps.openPanel != OpenPanel::Inventory &&
+                ps.openPanel != OpenPanel::Table &&
+                ps.openPanel != OpenPanel::Furnace) {
+                return MC_FAIL("the inventory panel is not open (open it "
+                               "with 'e' first)");
+            }
+            break;
+        case kDemoPanelTable:
+            if (ps.openPanel != OpenPanel::Table) {
+                return MC_FAIL("the crafting table's panel is not open "
+                               "(right-click the table first)");
+            }
+            break;
+        case kDemoPanelFurnace:
+            if (ps.openPanel != OpenPanel::Furnace) {
+                return MC_FAIL("the furnace's panel is not open (right-"
+                               "click the furnace first)");
+            }
+            break;
+        case kDemoPanelCreative:
+            if (ps.openPanel != OpenPanel::Inventory || !p.isCreative() ||
+                ps.creativeTab != 0) {
+                return MC_FAIL("the creative's items tab is not open "
+                               "(creative mode + 'e' + the items tab "
+                               "first)");
+            }
+            break;
+        default:
+            return MC_FAIL("the demo's panel id " + std::to_string(panel) +
+                           " is not a panel (inventory/table/furnace/"
+                           "creative)");
+    }
+    const UiSize space = uiSize();
+    const int w = space.width;
+    const int h = space.height;
+    UIRect rect;
+    bool have = false;
+    if (panel == kDemoPanelFurnace) {
+        const FurnaceLayout layout = FurnaceLayout::compute(w, h);
+        if (slot >= 0 && slot <= 35) {
+            // The furnace's panel's shared 36 slots (the player's
+            // inventory's face, the layout's slots' twin)
+            rect = layout.slots[slot];
+            have = true;
+        } else if (slot == 120) {
+            rect = layout.input;
+            have = true;
+        } else if (slot == 121) {
+            rect = layout.fuel;
+            have = true;
+        } else if (slot == 122) {
+            rect = layout.output;
+            have = true;
+        }
+    } else if (panel == kDemoPanelCreative) {
+        const auto hints = shapelessRecipes();
+        const CreativeLayout layout =
+            CreativeLayout::compute(w, h, static_cast<int>(hints.size()));
+        if (slot >= 300 && slot <= 323) {
+            rect = layout.cells[slot - 300];
+            have = true;
+        }
+    } else {
+        // The crafting's shared face: the layout follows the OPEN
+        // panel (the render's twin — the E's 2x2's hint list vs the
+        // table's 3x3's vs the furnace's smelting section's: the 36
+        // slots' RECTS differ between the layouts, the open's twin
+        // must hold), the slot id's panel tag selects the id's space
+        // (the inventory's 0..35's shared + the grid's / the output's
+        // per-panel's exclusive).
+        if (ps.openPanel == OpenPanel::Furnace) {
+            // The furnace's open: the shared 36 slots' rects are the
+            // FURNACE layout's (the smelting section's geometry).
+            const FurnaceLayout flayout = FurnaceLayout::compute(w, h);
+            if (slot >= 0 && slot <= 35) {
+                rect = flayout.slots[slot];
+                have = true;
+            }
+        } else {
+            const bool tableOpen = ps.openPanel == OpenPanel::Table;
+            const PanelKind kind = tableOpen ? PanelKind::CraftingTable
+                                             : PanelKind::Inventory;
+            const auto hints =
+                tableOpen ? shapedRecipes() : shapelessRecipes();
+            const InventoryLayout layout = InventoryLayout::compute(
+                w, h, static_cast<int>(hints.size()), kind);
+            if (slot >= 0 && slot <= 35) {
+                rect = layout.slots[slot];
+                have = true;
+            } else if (panel == kDemoPanelTable && slot >= 200 &&
+                       slot <= 208) {
+                if (!tableOpen) {
+                    have = false;
+                } else {
+                    rect = layout.gridCells[slot - 200];
+                    have = true;
+                }
+            } else if (panel == kDemoPanelInventory && slot >= 100 &&
+                       slot <= 103) {
+                rect = layout.gridCells[slot - 100];
+                have = true;
+            } else if (slot == 110) {
+                // The output (the E's 2x2's craft + the table's 3x3's —
+                // both kinds' layout's output rect, the open's twin).
+                rect = layout.output;
+                have = true;
+            } else {
+                have = false;
+            }
+        }
+    }
+    if (!have) {
+        return MC_FAIL("the slot '" +
+                       demoPanelSlotName(panel, slot) +
+                       "' is not in the " + demoPanelName(panel) +
+                       " panel (the demo's break's named line)");
+    }
+    // The rect's center (UI px) -> the window's px (the uiScale's
+    // inverse — the hit test's lround twin, the slot's width's
+    // 11+-UI-px's margin absorbs the +-1-UI-px's rounding).
+    const double scale = static_cast<double>(m_uiScale);
+    const int x = static_cast<int>(std::lround(
+        (rect.x + rect.w * 0.5) * scale));
+    const int y = static_cast<int>(std::lround(
+        (rect.y + rect.h * 0.5) * scale));
+    m_input.handleMouseMotion(0.0f, 0.0f, static_cast<float>(x),
+                              static_cast<float>(y));
+    const bool shift = (button == kDemoPanelButtonShift);
+    const int sdlButton =
+        (button == kDemoPanelButtonRight) ? SDL_BUTTON_RIGHT
+                                          : SDL_BUTTON_LEFT;
+    if (shift) {
+        m_input.handleKey(SDLK_LSHIFT, true);
+    }
+    m_input.handleMouseButton(sdlButton, true);
+    m_input.handleMouseButton(sdlButton, false);
+    if (shift) {
+        m_input.handleKey(SDLK_LSHIFT, false);
+    }
+    return {};
+}
 void Game::updateSoundTimers(double dt) {
     // V3-12b: the ×N step-timer pass (the per-player footstep RHYTHM —
     // solo: one player, the pre-V3-12b sequence bit-identical). D8: the

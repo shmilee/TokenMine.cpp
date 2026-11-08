@@ -73,6 +73,12 @@ struct InputEvent {
         Wheel,
         GamepadButton,
         GamepadAxis,
+        PanelClick, // V3-16a: the author's geometry-free panel click
+                    // (u32 = the panel id, code = the slot id, value =
+                    // the button id — the resolver maps to the rect's
+                    // center in the CURRENT geometry at inject time;
+                    // the record's tap never produces it, the author's
+                    // face only, the closed vocabulary's tail)
     } kind = Kind::KeyDown;
     std::uint32_t u32 = 0;
     std::int32_t code = 0;

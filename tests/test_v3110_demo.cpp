@@ -1076,3 +1076,564 @@ TEST(V3110Demo, WorldDescription) {
     save.slot = "g199";
     EXPECT_EQ(demoWorldDescription(save), "save slot 'g199'");
 }
+
+// ---------------------------------------------------------------------------
+// V3-16a: the panel-click (the geometry-free slot addressing) + the
+// guide index's data layer + the scene world's spec
+// ---------------------------------------------------------------------------
+
+TEST(V316aDemo, PanelClickVocabTables) {
+    // The panel's names' round trip.
+    EXPECT_EQ(*authorPanel("inventory"), kDemoPanelInventory);
+    EXPECT_EQ(*authorPanel("table"), kDemoPanelTable);
+    EXPECT_EQ(*authorPanel("furnace"), kDemoPanelFurnace);
+    EXPECT_EQ(*authorPanel("creative"), kDemoPanelCreative);
+    EXPECT_FALSE(authorPanel("enchant").ok());
+    EXPECT_EQ(demoPanelName(1), "table");
+
+    // The shared player inventory's names (every panel).
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelInventory, "h0"), 0);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelTable, "h8"), 8);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelFurnace, "b0"), 9);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelFurnace, "b26"), 35);
+    // The per-panel's names.
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelInventory, "g0"), 100);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelInventory, "g3"), 103);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelInventory, "out"), 110);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelTable, "g0"), 200);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelTable, "g8"), 208);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelFurnace, "in"), 120);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelFurnace, "fuel"), 121);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelFurnace, "out"), 122);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelCreative, "c0"), 300);
+    EXPECT_EQ(*authorPanelSlot(kDemoPanelCreative, "c23"), 323);
+    // The cross-panel's rejects (a furnace has no g0, the inventory's
+    // grid is 2x2, the table's is 3x3, the creative's cells cap 23).
+    EXPECT_FALSE(authorPanelSlot(kDemoPanelFurnace, "g0").ok());
+    EXPECT_FALSE(authorPanelSlot(kDemoPanelInventory, "g4").ok());
+    EXPECT_FALSE(authorPanelSlot(kDemoPanelTable, "g9").ok());
+    EXPECT_FALSE(authorPanelSlot(kDemoPanelCreative, "c24").ok());
+    EXPECT_FALSE(authorPanelSlot(kDemoPanelInventory, "h9").ok());
+    EXPECT_FALSE(authorPanelSlot(kDemoPanelInventory, "b27").ok());
+    // The display's inverse (the error line's twin).
+    EXPECT_EQ(demoPanelSlotName(kDemoPanelTable, 5), "h5");
+    EXPECT_EQ(demoPanelSlotName(kDemoPanelTable, 35), "b26");
+    EXPECT_EQ(demoPanelSlotName(kDemoPanelTable, 208), "g8");
+    EXPECT_EQ(demoPanelSlotName(kDemoPanelFurnace, 121), "fuel");
+    EXPECT_EQ(demoPanelSlotName(kDemoPanelCreative, 303), "c3");
+    // The button's names.
+    EXPECT_EQ(*authorPanelButton("left"), kDemoPanelButtonLeft);
+    EXPECT_EQ(*authorPanelButton("right"), kDemoPanelButtonRight);
+    EXPECT_EQ(*authorPanelButton("shift"), kDemoPanelButtonShift);
+    EXPECT_FALSE(authorPanelButton("middle").ok());
+}
+
+TEST(V316aDemo, PanelClickAuthorExpansion) {
+    // The timeline's panel_click's expansion (the event's face + the
+    // frame's bound + the (frame, action)'s order).
+    Json actions = Json::array();
+    Json a0 = Json::object();
+    a0["at_frame"] = 10;
+    a0["action"] = "panel_click";
+    a0["panel"] = "table";
+    a0["slot"] = "out";
+    a0["button"] = "left";
+    actions.push_back(a0);
+    Json a1 = Json::object();
+    a1["at_frame"] = 12;
+    a1["action"] = "panel_click";
+    a1["panel"] = "furnace";
+    a1["slot"] = "in";
+    a1["button"] = "shift";
+    actions.push_back(a1);
+    auto list = parseTimelineActions(actions);
+    ASSERT_TRUE(list.ok()) << list.error().describe();
+    DemoWorldSpec spec;
+    spec.type = DemoWorldSpec::Type::Scene;
+    spec.slot = "pilot_mine";
+    DemoFile f = authorDemoFile(spec, *list);
+    EXPECT_EQ(f.world.type, DemoWorldSpec::Type::Scene);
+    EXPECT_EQ(f.world.slot, "pilot_mine");
+    ASSERT_EQ(f.events.size(), 2u);
+    EXPECT_EQ(f.events[0].frame, 10);
+    EXPECT_EQ(f.events[0].event.kind, InputEvent::Kind::PanelClick);
+    EXPECT_EQ(f.events[0].event.u32, kDemoPanelTable);
+    EXPECT_EQ(f.events[0].event.code, 110);
+    EXPECT_EQ(f.events[0].event.value, kDemoPanelButtonLeft);
+    EXPECT_EQ(f.events[1].frame, 12);
+    EXPECT_EQ(f.events[1].event.u32, kDemoPanelFurnace);
+    EXPECT_EQ(f.events[1].event.code, 120);
+    EXPECT_EQ(f.events[1].event.value, kDemoPanelButtonShift);
+    EXPECT_EQ(f.dts.size(), 13u);
+}
+
+TEST(V316aDemo, PanelClickCodecRoundTrip) {
+    DemoFile f = fixtureFile();
+    f.events.push_back({3, InputEvent {InputEvent::Kind::PanelClick,
+                                       kDemoPanelInventory, 110,
+                                       kDemoPanelButtonLeft, 0.0f, 0.0f,
+                                       0.0f, 0.0f, false}});
+    const std::string body = serializeDemoJson(f);
+    auto js = Json::parse(body);
+    ASSERT_TRUE(js.ok());
+    auto back = parseDemoJson(*js);
+    ASSERT_TRUE(back.ok()) << back.error().describe();
+    ASSERT_EQ(back->events.size(), f.events.size());
+    const InputEvent& e = back->events.back().event;
+    EXPECT_EQ(e.kind, InputEvent::Kind::PanelClick);
+    EXPECT_EQ(e.u32, kDemoPanelInventory);
+    EXPECT_EQ(e.code, 110);
+    EXPECT_EQ(e.value, kDemoPanelButtonLeft);
+    // The scene's world's file face.
+    f.world.type = DemoWorldSpec::Type::Scene;
+    f.world.slot = "abc";
+    const std::string body2 = serializeDemoJson(f);
+    auto js2 = Json::parse(body2);
+    ASSERT_TRUE(js2.ok());
+    const Json* w2 = js2->find("world");
+    ASSERT_NE(w2, nullptr);
+    EXPECT_EQ(w2->find("type")->asString(), "scene");
+    EXPECT_EQ(w2->find("name")->asString(), "abc");
+    auto back2 = parseDemoJson(*js2);
+    ASSERT_TRUE(back2.ok()) << back2.error().describe();
+    EXPECT_EQ(back2->world.type, DemoWorldSpec::Type::Scene);
+    EXPECT_EQ(back2->world.slot, "abc");
+    EXPECT_EQ(demoWorldDescription(back2->world),
+              "scene 'abc' (the committed guide asset)");
+}
+
+TEST(V316aDemo, PanelClickCodecRejects) {
+    DemoFile f = fixtureFile();
+    f.events.push_back({3, InputEvent {InputEvent::Kind::PanelClick,
+                                       kDemoPanelInventory, 110,
+                                       kDemoPanelButtonLeft, 0.0f, 0.0f,
+                                       0.0f, 0.0f, false}});
+    auto base = Json::parse(serializeDemoJson(f));
+    ASSERT_TRUE(base.ok());
+    const Json* pe = base->find("events");
+    ASSERT_NE(pe, nullptr);
+    // The panel's range (0..3).
+    {
+        Json r = *base;
+        r["events"].at(6)["panel"] = Json(5);
+        auto out = parseDemoJson(r);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("0..3"), std::string::npos);
+    }
+    // The button's range (0..2).
+    {
+        Json r = *base;
+        r["events"].at(6)["button"] = Json(3);
+        auto out = parseDemoJson(r);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("0..2"), std::string::npos);
+    }
+    // The slot's type (an integer id, not a name).
+    {
+        Json r = *base;
+        r["events"].at(6)["slot"] = Json("out");
+        auto out = parseDemoJson(r);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("slot"), std::string::npos);
+    }
+    // The unexpected key (the closed payload).
+    {
+        Json r = *base;
+        r["events"].at(6)["extra"] = Json(1);
+        auto out = parseDemoJson(r);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("unexpected key"),
+                  std::string::npos);
+    }
+}
+
+TEST(V316aDemo, AuthorRejectsPanelClickFaces) {
+    auto oneEntry = [](const char* panel, const char* slot,
+                       const char* button) -> Json {
+        Json actions = Json::array();
+        Json a0 = Json::object();
+        a0["at_frame"] = 1;
+        a0["action"] = "panel_click";
+        if (panel) {
+            a0["panel"] = Json(std::string(panel));
+        }
+        if (slot) {
+            a0["slot"] = Json(std::string(slot));
+        }
+        if (button) {
+            a0["button"] = Json(std::string(button));
+        }
+        actions.push_back(a0);
+        return actions;
+    };
+    {
+        auto r = parseTimelineActions(oneEntry("enchant", "out", "left"));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("unknown panel"),
+                  std::string::npos);
+    }
+    {
+        auto r = parseTimelineActions(oneEntry("inventory", "g4", "left"));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("g0..g3"), std::string::npos);
+    }
+    {
+        auto r = parseTimelineActions(oneEntry("inventory", "out",
+                                               "middle"));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("left/right/shift"),
+                  std::string::npos);
+    }
+    {
+        auto r = parseTimelineActions(oneEntry("inventory", nullptr,
+                                               "left"));
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("'slot' is required"),
+                  std::string::npos);
+    }
+    // The clean face (the control).
+    {
+        auto r = parseTimelineActions(oneEntry("inventory", "out", "left"));
+        ASSERT_TRUE(r.ok()) << r.error().describe();
+    }
+}
+
+TEST(V316aDemo, ScriptRejectsPanelClick) {
+    // The net's --script has no panel_click (the solo's guide's face —
+    // the lockstep's 40B's input carries no panel id, the bound).
+    Json root = Json::object();
+    Json actions = Json::array();
+    Json a0 = Json::object();
+    a0["at_frame"] = 1;
+    a0["action"] = "panel_click";
+    a0["panel"] = "inventory";
+    a0["slot"] = "out";
+    a0["button"] = "left";
+    actions.push_back(a0);
+    root["actions"] = actions;
+    const auto p = scratchDir() / "pc_script.json";
+    writeAll(p.string(), root.dump(-1));
+    auto r = parseScriptTimeline(p);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("panel_click"), std::string::npos);
+    // The control (the keys' face parses).
+    Json root2 = Json::object();
+    Json actions2 = Json::array();
+    Json a1 = Json::object();
+    a1["at_frame"] = 1;
+    a1["action"] = "key_down";
+    a1["key"] = "w";
+    actions2.push_back(a1);
+    root2["actions"] = actions2;
+    const auto p2 = scratchDir() / "pc_script_ok.json";
+    writeAll(p2.string(), root2.dump(-1));
+    EXPECT_TRUE(parseScriptTimeline(p2).ok());
+}
+
+TEST(V316aDemo, InjectPanelClickResolverFace) {
+    DemoFile f = fixtureFile();
+    f.events.push_back({3, InputEvent {InputEvent::Kind::PanelClick,
+                                       kDemoPanelTable, 110,
+                                       kDemoPanelButtonLeft, 0.0f, 0.0f,
+                                       0.0f, 0.0f, false}});
+    DemoPlayer p(f);
+    Input in;
+    // The resolver's absent face (the named problem).
+    const std::string err = p.injectForFrame(3, in);
+    EXPECT_NE(err.find("no resolver"), std::string::npos);
+    // The resolver's failure face (its name passes through).
+    const std::string err2 =
+        p.injectForFrame(3, in, [](std::uint32_t, std::int32_t,
+                                   std::int16_t) {
+            return "the table's panel is not open";
+        });
+    EXPECT_EQ(err2, "the table's panel is not open");
+    // The resolver's success face (the ids' pass-through).
+    std::uint32_t seenPanel = 99;
+    std::int32_t seenSlot = -1;
+    const std::string err3 =
+        p.injectForFrame(3, in, [&](std::uint32_t panel, std::int32_t slot,
+                                    std::int16_t) {
+            seenPanel = panel;
+            seenSlot = slot;
+            return "";
+        });
+    EXPECT_TRUE(err3.empty());
+    EXPECT_EQ(seenPanel, kDemoPanelTable);
+    EXPECT_EQ(seenSlot, 110);
+}
+
+TEST(V316aDemo, SceneWorldSpecRejects) {
+    // The hand-built json's reject faces (the parse's strictness).
+    auto sceneJson = []() {
+        DemoFile f = fixtureFile();
+        f.world.type = DemoWorldSpec::Type::Scene;
+        f.world.slot = "abc";
+        return Json::parse(serializeDemoJson(f));
+    };
+    {
+        auto js = sceneJson();
+        ASSERT_TRUE(js.ok());
+        Json r = *js;
+        r["world"] = Json::object();
+        r["world"]["type"] = Json(std::string("scene"));
+        auto out = parseDemoJson(r);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("'name'"), std::string::npos);
+    }
+    {
+        auto js = sceneJson();
+        ASSERT_TRUE(js.ok());
+        Json r = *js;
+        r["world"]["name"] = Json(std::string("a/b"));
+        auto out = parseDemoJson(r);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("scene name"),
+                  std::string::npos);
+    }
+    {
+        auto js = sceneJson();
+        ASSERT_TRUE(js.ok());
+        Json r = *js;
+        r["world"]["seed"] = Json(1);
+        auto out = parseDemoJson(r);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("double key"),
+                  std::string::npos);
+    }
+    {
+        auto js = sceneJson();
+        ASSERT_TRUE(js.ok());
+        Json r = *js;
+        r["world"]["type"] = Json(std::string("scenex"));
+        auto out = parseDemoJson(r);
+        ASSERT_FALSE(out.ok());
+        EXPECT_NE(out.error().message.find("fresh|save|scene"),
+                  std::string::npos);
+    }
+    // The scene's path's face.
+    EXPECT_EQ(demoScenePath("abc_1").string(),
+              "assets/demos/scenes/abc_1.json");
+}
+
+TEST(V316aDemo, IndexParseValid) {
+    const std::string text =
+        R"({
+          "demos": [
+            {"category":"day1","seq":1,"mode":"solo","tags":["mining","crafting"],"file":"guide_mining.dmo","length_frames":3600},
+            {"category":"day1","seq":2,"mode":"solo","tags":[],"file":"guide_food.dmo","length_frames":2400},
+            {"category":"coop","seq":1,"mode":"coop","tags":["net"],"file":"guide_coop.dmo","length_frames":1800}
+          ]
+        })";
+    auto js = Json::parse(text);
+    ASSERT_TRUE(js.ok());
+    auto r = parseDemoIndex(*js);
+    ASSERT_TRUE(r.ok()) << r.error().describe();
+    ASSERT_EQ(r->demos.size(), 3u);
+    EXPECT_EQ(r->demos[0].category, "day1");
+    EXPECT_EQ(r->demos[0].seq, 1);
+    EXPECT_EQ(r->demos[0].mode, "solo");
+    ASSERT_EQ(r->demos[0].tags.size(), 2u);
+    EXPECT_EQ(r->demos[0].tags[0], "mining");
+    EXPECT_EQ(r->demos[0].tags[1], "crafting");
+    EXPECT_EQ(r->demos[0].file, "guide_mining.dmo");
+    EXPECT_EQ(r->demos[0].lengthFrames, 3600);
+    EXPECT_EQ(r->demos[2].mode, "coop");
+    // The empty index's face (a chapter's not-yet-filled).
+    auto js2 = Json::parse(R"({"demos":[]})");
+    ASSERT_TRUE(js2.ok());
+    EXPECT_TRUE(parseDemoIndex(*js2).ok());
+}
+
+TEST(V316aDemo, IndexParseRejects) {
+    const std::string good = R"({"category":"day1","seq":1,"mode":"solo","tags":["a"],"file":"x.dmo","length_frames":10})";
+    auto one = [](const std::string& entry) -> Result<DemoIndex> {
+        const std::string text = std::string("{\"demos\":[") +
+                                 entry + "]}";
+        auto js = Json::parse(text);
+        EXPECT_TRUE(js.ok());
+        if (!js.ok()) {
+            return MC_FAIL("the test's json is broken");
+        }
+        return parseDemoIndex(*js);
+    };
+    auto two = [](const std::string& e1,
+                 const std::string& e2) -> Result<DemoIndex> {
+        const std::string text =
+            std::string("{\"demos\":[") + e1 + "," + e2 + "]}";
+        auto js = Json::parse(text);
+        EXPECT_TRUE(js.ok());
+        if (!js.ok()) {
+            return MC_FAIL("the test's json is broken");
+        }
+        return parseDemoIndex(*js);
+    };
+    const std::string good2 =
+        R"({"category":"build","seq":1,"mode":"solo","tags":[],"file":"y.dmo","length_frames":10})";
+    // The category's vocabulary.
+    {
+        auto r = one(R"({"category":"bogus","seq":1,"mode":"solo","tags":[],"file":"x.dmo","length_frames":10})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("unknown category"),
+                  std::string::npos);
+    }
+    // The seq's lower bound.
+    {
+        auto r = one(R"({"category":"day1","seq":0,"mode":"solo","tags":[],"file":"x.dmo","length_frames":10})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("integer >= 1"), std::string::npos);
+    }
+    // The (category, seq)'s duplicate.
+    {
+        auto r = two(good, R"({"category":"day1","seq":1,"mode":"solo","tags":[],"file":"y.dmo","length_frames":10})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("duplicate seq"),
+                  std::string::npos);
+    }
+    // The seq's gap (the contiguity's 1..n).
+    {
+        auto r = one(R"({"category":"day1","seq":2,"mode":"solo","tags":[],"file":"x.dmo","length_frames":10})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("seq gap"), std::string::npos);
+    }
+    // The mode's vocabulary.
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"duo","tags":[],"file":"x.dmo","length_frames":10})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("\"solo\" or \"coop\""),
+                  std::string::npos);
+    }
+    // The file's duplicate.
+    {
+        auto r = two(good, R"({"category":"build","seq":1,"mode":"solo","tags":[],"file":"x.dmo","length_frames":10})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("duplicate file"),
+                  std::string::npos);
+    }
+    // The file's extension's charset.
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":[],"file":"x.txt","length_frames":10})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find(".dmo"), std::string::npos);
+    }
+    // The tag's charset (upper-case is out).
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":["A"],"file":"x.dmo","length_frames":10})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("[a-z0-9_]"), std::string::npos);
+    }
+    // The tag's duplicate.
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":["a","a"],"file":"x.dmo","length_frames":10})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("duplicate tag"),
+                  std::string::npos);
+    }
+    // The length's lower bound.
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":[],"file":"x.dmo","length_frames":0})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("length_frames"),
+                  std::string::npos);
+    }
+    // The entry's extra key.
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":["a"],"file":"x.dmo","length_frames":10,"extra":1})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("unexpected key"),
+                  std::string::npos);
+    }
+    // The entry's missing key.
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":[],"file":"x.dmo"})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("length_frames"),
+                  std::string::npos);
+    }
+    // The top-level's faces.
+    {
+        auto js = Json::parse(R"({"demos":[],"extra":1})");
+        ASSERT_TRUE(js.ok());
+        EXPECT_FALSE(parseDemoIndex(*js).ok());
+    }
+    {
+        auto js = Json::parse(R"({"demoss":[]})");
+        ASSERT_TRUE(js.ok());
+        auto r = parseDemoIndex(*js);
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("unexpected top-level key"),
+                  std::string::npos);
+    }
+    (void)good2;
+}
+
+TEST(V316aDemo, IndexCheckCrossFace) {
+    const auto demos = scratchDir() / "demos";
+    const auto scenes = scratchDir() / "scenes";
+    std::error_code ec;
+    std::filesystem::create_directories(demos, ec);
+    std::filesystem::create_directories(scenes, ec);
+    DemoIndex index;
+    DemoIndexEntry e;
+    e.category = "day1";
+    e.seq = 1;
+    e.mode = "solo";
+    e.file = "guide_mining.dmo";
+    e.lengthFrames = 4; // the fixture's 4 dts
+    index.demos.push_back(e);
+    // (a) the valid face.
+    ASSERT_TRUE(writeDemoFile(demos / "guide_mining.dmo", fixtureFile()).ok());
+    {
+        auto r = checkDemoIndexDir(index, demos, scenes);
+        ASSERT_TRUE(r.ok()) << r.error().describe();
+    }
+    // (b) the file's missing face.
+    {
+        DemoIndex i2 = index;
+        i2.demos[0].file = "nope.dmo";
+        auto r = checkDemoIndexDir(i2, demos, scenes);
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("not in"), std::string::npos);
+    }
+    // (c) the length's mismatch face.
+    {
+        DemoIndex i2 = index;
+        i2.demos[0].lengthFrames = 5;
+        auto r = checkDemoIndexDir(i2, demos, scenes);
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("length_frames"),
+                  std::string::npos);
+    }
+    // (d) the SIM's mismatch face (a stale build's guide).
+    {
+        DemoFile f = fixtureFile();
+        f.sim = 99;
+        ASSERT_TRUE(writeDemoFile(demos / "sim.dmo", f).ok());
+        DemoIndex i2 = index;
+        i2.demos[0].file = "sim.dmo";
+        auto r = checkDemoIndexDir(i2, demos, scenes);
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("sim"), std::string::npos);
+    }
+    // (e) the scene's missing face + (f) the scene's present face.
+    DemoFile sf = fixtureFile();
+    sf.world.type = DemoWorldSpec::Type::Scene;
+    sf.world.slot = "scn";
+    ASSERT_TRUE(writeDemoFile(demos / "scn.dmo", sf).ok());
+    {
+        DemoIndex i2 = index;
+        i2.demos[0].file = "scn.dmo";
+        auto r = checkDemoIndexDir(i2, demos, scenes);
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("scene"), std::string::npos);
+    }
+    {
+        const auto sp = scenes / "scn.json";
+        writeAll(sp.string(), "{}");
+        DemoIndex i2 = index;
+        i2.demos[0].file = "scn.dmo";
+        auto r = checkDemoIndexDir(i2, demos, scenes);
+        ASSERT_TRUE(r.ok()) << r.error().describe();
+        std::filesystem::remove(sp, ec);
+    }
+}

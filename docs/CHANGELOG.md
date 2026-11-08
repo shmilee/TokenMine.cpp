@@ -11,6 +11,30 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.32.0（2026-11-08）— V3-16a 扩展指导 demo 族：数据层 + scene + panel_click + pilot ④（门 222 全 PASS）
+
+**V3-16 相位 A/7**（10 主题 3-10 分钟级教学 demo 族——本相位落内核 +
+工具链 + pilot ④ 挖矿打造工具，16b~16g 按章节扩）：**scene 世界
+spec 第三形**【`{type:"scene",name}` → committed 确定性存档资产
+`assets/demos/scenes/<name>.json`，只读 = 观察红线结构根；`--save`
+可组合（退出写回放结果）】+ **panel_click 事件**【几何无关格地址：
+panel id + slot id + button；resolver = 开面板检查 + layout rect 中心
+（当前窗口几何孪生）+ 真实 Input closure 合成点击；author 词表面
+严格拒收；net `--script` 拒收（40B 无 panel 字段边界）；**sim 2 不
+bump**——canary 4 EXACT 执法】+ **索引数据层**【`index.json` 四轴
+schema {category,seq,mode,tags,file,length_frames} + 5 章封闭词表
+【day1/build/dimension/survival/coop】+ init 每次 boot 全量交叉检查
+【文件存在 + strict load + SIM 门 + length + scene 存在】+
+`--list-demos` 独立无头旗】+ **pilot ④**（11387f = 03:09：砍树→
+木板→工作台→木镐→逐格挖矿 11→熔炉环→熔砂×2 玻璃；鲁棒性定案 =
+轴对齐行走 + 相对放置瞄准 + 逐格贴线挖矿 + 磁吸 1m 收集带，全
+PITS 413）；`tools/mk_scene.py`（场景手术幂等）+ `tools/demo_author.py`
+（Guide DSL）+ `tools/scenes/`（beat 脚本）；2998/2998（+11）；
+S1 结构免疫第 103 次（f60 ×2 ≡ base19 + 旧树三方闭环——**base19 锚
+= f60 非 f900 门内定案**）+ canary 4 EXACT + pilot ×2 RAW/savenorm
++ S6 五面点名 + 性能 A/B 同档（结构性零成本）；详见
+`docs/archive/phase-3.32.0.md`。
+
 ## v3.31.0（2026-11-08）— V3-12c2 断线恢复 REJOIN + format 33 players[]（门 221 全 PASS，V3-12 全 4 相位收官）
 
 **V3-12 多人收官相位 c2**（**format 32→33**【players[] 迁移 + 末地

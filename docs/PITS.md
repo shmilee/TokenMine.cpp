@@ -3,8 +3,58 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–412，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–413，新条目继续前插于尾部块首。
 
+- **authored guide demo 编写十九坑（PITS 413，门 222 v3.32.0
+  V3-16a 扩展指导 demo 族 pilot ④）**——① **demo 须初始 LMB 捕获**：
+  首事件 = 帧 0 的 LMB tap（指针锁定 = look/面板 E 的门；未捕获的
+  LMB = 纯捕获不挖掘——f0 缺捕获 = 全 demo 面板打不开）。②
+  **closePanelFor 不重锁指针**（开面板释放 = 设计）：关面板后的
+  世界动作（RMB 开容器/放置/下一 E）须先补捕获点击——Guide DSL
+  `close_panel` = E tap + 25f 后 capture 合成。③ **look 符号**：游戏
+  `yaw -= dx*sens`——+dyaw 的转向要发**负** dx（`dx = -dyaw/SENS`）；
+  sweep/look_rel 首版符号反 = 全 demo 视角反打（f500 探针 yaw +0.3
+  vs 追踪 -0.3 对称暴露）。④ **硬编码帧 × 动态行走重叠**：P2 的
+  860 硬编码帧 vs P1 折线延长 = look 在 walk hold 期间发射 → 玩家
+  沿旧 yaw 走 5m 乱闯（截图树挡路实证）——beat 一律 `f = g.cursor`
+  动态链。⑤ **斜行子轴分量被物理丢弃**：45° 走 = 4× 帧损耗（子轴
+  碰撞消解逐轴量化）——全部行走轴对齐（leg 断言 |dx|<0.05 ∨
+  |dz|<0.05）。⑥ **walk_polyline 须同步 self.cursor**：局部 f 走完
+  不回写 = 下一 beat 从旧 cursor 起步（与 walk 重叠的根）。⑦ **hold
+  注册损耗标定**：23f→20.6 / 15f→12.8 / 103f→100.4 有效帧 = 每次
+  hold 起始 ~2.5f 不动——stop margin +2f → 实际短 0.03-0.11m（格内）；
+  追踪模型 = 精确角点到达（相对瞄准吸收短差），**非**按 emit 帧满推。
+  ⑧ **放置瞄地面非块中心**：瞄块中心射线飞 0.5 过 → 落邻格（表放到
+  (4,-7) 非 (5,-7) 实证）——`place_at/look_ground` 瞄顶面点。⑨
+  **绝对格瞄准对漂移零容错 → 相对瞄准**：`place_ahead/open_ahead` =
+  面朝方向 1m 前（目标随玩家移动：±0.3m 漂移同格；r26 时代 3m
+  tracked 漂移 = 放置全败根）。⑩ **行墙挡横向视线**：从 (7.5,-9.5)
+  瞄 x4 的射线穿 (5,54,-9) 格 y54.7 = 打错块（x4/x9 漏挖实证）——
+  逐格 1m 正北贴线挖（射线只穿空气 y55 格 + 目标格）。⑪ **磁吸衰减
+  (1-d/2.5)²**：2.2m 掉落拉力 0.15 m/s² 收集不了（6 掉落留地实证）
+  ——收集线 = 1.0-1.5m（z-9.5 贴线 vs z-10.5 隔线）。⑫ **工具态决定
+  破碎时长**：砂裸手 0.75s（45f）≠ 镐 0.375s——P2.5 手持是木头
+  （h0）不是镐（P8 才造），0.7s hold 差 3f 不碎（TEMP-LMB 瞄准
+  全对纯时长不足实证）。⑬ **续挖穿平台（PITS 7 延伸）**：hold 余量
+  须 < 下方平台石破碎时间（石 0.56s/34f：余量 ≤0.4s；砂裸手余量
+  15f < 135f ✓）——stone 1.0s / ore 1.4s / wood 3.3s / sand 1.0s
+  定案带。⑭ **mobs-on config 下镐误击**：生成动物入准星 = +2 melee
+  耐久（15 vs 11 实证；targetMobFor 只匹 MobEntity 非掉落物）——
+  demo E2E 用 mobs-off config（与 scene 基线一致）。⑮ **furnace
+  面板的共享 36 格**：resolver panel id 0（inventory）的开态检查须
+  含 Furnace + 其格几何 = **FurnaceLayout.slots**（≠ InventoryLayout
+  位置——三面板同 36 格不同 rect）。⑯ **base19 锚 = f60 非 f900**：
+  时钟 10:50 反解 t=0.2517（f≈43-60 首稳帧）；900f 跑 = 15937px 假
+  DIFF（太阳/树冠/时钟位移，旧树同形 = 环境面排除）——S1 锚协议
+  帧数从阶段文档取，勿从性能臂借（900f 是 PERF 窗数）。⑰
+  **`--frames` 须 = demo 长度 + ~500**：finished-panel 跑到 cap
+  （28000 = 白等 4.5 分钟实证）。⑱ **场景 journal 同态移除**：破块
+  后与 worldgen 同态的格从 journal 消失（行石破 = 终档查不到 =
+  正常）——断言走「终档 ∪ 场景」差集非单档枚举。⑲ **scene 资产
+  完整性约束**：空槽存档形 `{"item":"","count":0}`（36 条）/
+  inv_grid 恰 9 条 / 火块↔fires 条目配对（clear_entities 只清
+  entities 不清 fires）——mk_scene 手术按存档 strict parse 回灌
+  验，幂等（双跑字节恒等）。
 - **gzip 容器可钉 / zlib 宏缺失 / 双跑 RAW 适用域（PITS 385，门 191
   V3-7 存档 gzip）**——① **zlib 自带 gzip 封装（windowBits 16+15）
   的 MTIME/XFL/OS 字节随 zlib 版本/发行版漂移**：确定性一级纪律要求

@@ -29,6 +29,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -80,6 +81,45 @@ inline constexpr double kDemoMaxDt = 0.25;
 // is wall-clock-free = fully frame-locked; 1/60 = the frame-locked
 // systems' step, the run loop's nominal pace).
 inline constexpr double kDemoAuthorDt = 1.0 / 60.0;
+
+// V3-16a: the panel-click's CLOSED vocabularies (the author's name ->
+// the id). The geometry-free addressing: the slot id names a cell in
+// the panel (the layout's rect, the render's twin), the REPLAY's
+// resolver maps it to the rect's center in the CURRENT window's
+// geometry (uiScale / the fit factor included) — an authored guide
+// plays at any ui.scale / window size, the pixel-absolute mouse_move's
+// geometry dependence lifted. The id's slot space (per-panel; 0..35 =
+// the player's inventory, every panel's shared face):
+//   100..103  the inventory's 2x2 grid (model slots 0,1,3,4)
+//   110       the inventory/table's craft output
+//   120..122  the furnace's input / fuel / output
+//   200..208  the table's 3x3 grid (row-major)
+//   300..323  the creative's 6x4 cells
+inline constexpr std::uint32_t kDemoPanelInventory = 0;
+inline constexpr std::uint32_t kDemoPanelTable = 1;
+inline constexpr std::uint32_t kDemoPanelFurnace = 2;
+inline constexpr std::uint32_t kDemoPanelCreative = 3;
+inline constexpr std::int16_t kDemoPanelButtonLeft = 0;
+inline constexpr std::int16_t kDemoPanelButtonRight = 1;
+inline constexpr std::int16_t kDemoPanelButtonShift = 2; // shift + left
+
+// The panel's display name (the error/log's line — "inventory" /
+// "table" / "furnace" / "creative").
+std::string demoPanelName(std::uint32_t panel);
+// The slot's display name (the inverse of authorPanelSlot — the
+// error/log's line).
+std::string demoPanelSlotName(std::uint32_t panel, std::int32_t slot);
+// The author's name faces (the closed set — unknown = named reject).
+Result<std::uint32_t> authorPanel(const std::string& name);
+Result<std::int32_t> authorPanelSlot(std::uint32_t panel,
+                                     const std::string& name);
+Result<std::int16_t> authorPanelButton(const std::string& name);
+
+// The replay's panel-click resolver (the game's face — the layout's
+// rect + the synthetic click; the error's name when the requested
+// panel is not open, the demo's break's loud line).
+using PanelClickResolver = std::function<
+    std::string(std::uint32_t panel, std::int32_t slot, std::int16_t button)>;
 
 // The replay's speed ladder (the audience's wheel cycles 0.5 -> 1 ->
 // 2; documented deviation 1: no 4x). 0.5x = frame HOLD (the demo frame
@@ -133,10 +173,16 @@ inline constexpr double kDemoMinPacingWaitSeconds = 0.002;
 // is the start point (a deleted slot = the named reject "save slot
 // not found"; a slot MODIFIED between record and replay = the start
 // point shifts with it — the documented boundary)).
+// V3-16a: the SCENE start point = the committed guide asset
+// assets/demos/scenes/<name>.json (a deterministic save document the
+// GUIDE demos reference: the prepared inventory / time / terrain the
+// shipped content needs, the user's data/saves cannot carry). Read-
+// only by construction (an asset, never the exit write's path) = the
+// observation-only red line's structural root.
 struct DemoWorldSpec {
-    enum class Type { Fresh, Save } type = Type::Fresh;
+    enum class Type { Fresh, Save, Scene } type = Type::Fresh;
     std::int64_t seed = 0; // Fresh only
-    std::string slot;      // Save only (the --save charset)
+    std::string slot;      // Save / Scene only (the --save charset)
 };
 
 // One recorded / authored input event: the demo frame index (0-based,
@@ -221,6 +267,86 @@ std::string demoSpeedLabel(double speed);
 // / "save slot 'x'" — a pure function).
 std::string demoWorldDescription(const DemoWorldSpec& spec);
 
+// ---------------------------------------------------------------------------
+// V3-16a: the guide demo's INDEX data layer (the 11-07 ruling's four
+// axes + the payload identifiers)
+// ---------------------------------------------------------------------------
+//
+// assets/demos/index.json = {demos: [entry...]} — the tutorial page's
+// (V3-17c) data: the two-level navigation category -> demo. The entry's
+// closed key set is exactly {category, seq, mode, tags, file,
+// length_frames}:
+//   category      the chapter's id (the kDemoCategories' closed set —
+//                 the 4+1 chapter ruling: day1/build/dimension/
+//                 survival/coop; the display title is the table's twin)
+//   seq           the within-category LEARNING order (1..n, contiguous —
+//                 a gap or a duplicate is named)
+//   mode          "solo" | "coop" — the HARD constraint (the tutorial
+//                 page's context filter + the coop badge; NOT a
+//                 navigation level, the ruling)
+//   tags          the soft labels ([a-z0-9_], unique per entry; v1
+//                 STORES only, never renders)
+//   file          assets/demos/<file> (the .dmo; [a-z0-9_]+.dmo, unique)
+//   length_frames the demo's dts count (the cross-check's pinned value)
+//
+// The INIT cross-check (fail-fast, every boot, the nether pool's
+// tradition) verifies the shipped content end to end: the index's
+// parse + every file's existence + every file's full strict load (the
+// gzip container + the payload + the SIM gate — a stale sim's guide is
+// named at init, the canary's twin) + the length's match + every
+// scene-world's scene file's existence. A broken guide asset fails the
+// boot LOUDLY instead of a mid-tutorial-page dead end.
+
+// The chapter table (the closed category's vocabulary — the data's id
+// + the tutorial page's display title, the single source).
+struct DemoCategory {
+    const char* id;
+    const char* title;
+};
+inline constexpr DemoCategory kDemoCategories[] = {
+    {"day1", "第一天基础"},
+    {"build", "建造与大地"},
+    {"dimension", "维度远征"},
+    {"survival", "生存历险"},
+    {"coop", "多人协作"},
+};
+
+struct DemoIndexEntry {
+    std::string category;           // kDemoCategories' id
+    int seq = 0;                    // the within-category order, 1..n
+    std::string mode;               // "solo" | "coop"
+    std::vector<std::string> tags;  // [a-z0-9_]+, unique
+    std::string file;               // "<name>.dmo" (assets/demos/)
+    int lengthFrames = 0;           // the dts' count (>= 1)
+};
+
+struct DemoIndex {
+    std::vector<DemoIndexEntry> demos; // file order = the data's order
+};
+
+// The scene asset's path (the committed deterministic save document;
+// the .json's extension rides the save family's gzip-magic discipline).
+std::filesystem::path demoScenePath(const std::string& name);
+
+// The index's strict parse (the closed keys / the vocabularies / the
+// charsets / the seq's contiguity / the uniqueness — every violation
+// named).
+Result<DemoIndex> parseDemoIndex(const Json& root);
+
+// The cross-check over EXPLICIT directories (the unit test's face: the
+// demosDir's files + the scenesDir's scenes; every violation named):
+// each entry's file exists AND loads (the container + the payload +
+// the SIM gate) AND its dts' count == length_frames AND a scene-
+// world's scene file exists.
+Result<void> checkDemoIndexDir(const DemoIndex& index,
+                               const std::filesystem::path& demosDir,
+                               const std::filesystem::path& scenesDir);
+
+// The shipped face: read assets/demos/index.json (a missing index =
+// named) + the strict parse + checkDemoIndexDir over the committed
+// directories.
+Result<DemoIndex> loadDemoIndexChecked();
+
 // -- the injection kernel ---------------------------------------------------
 //
 // The REPLAY side: a frame's events -> the target Input's handle* (in
@@ -235,8 +361,12 @@ public:
     bool hasGamepadEvents() const { return m_file.hasGamepadEvents; }
     // The frame's events, injected in file order. A frame without
     // events = zero calls (the no-op is structural). frame outside
-    // [0, frameCount) is a caller bug (asserts).
-    void injectForFrame(int frame, Input& target) const;
+    // [0, frameCount) is a caller bug (asserts). The panelClick's
+    // resolver (the V3-16a face — absent = the PanelClick event's
+    // named problem string, the replay's loop's loud line).
+    std::string injectForFrame(int frame, Input& target,
+                               const PanelClickResolver& panelClick =
+                                   nullptr) const;
     // The frame's dt (the simulation's step — the frame-locked systems
     // advance per call, the real-dt systems per this value).
     double dtForFrame(int frame) const;
@@ -311,9 +441,13 @@ struct TimelineAction {
         MouseUp,
         MouseMove,
         Wheel,
+        PanelClick, // V3-16a: the geometry-free panel click (the
+                    // panel/slot/button names)
     } type = Type::KeyDown;
     int atFrame = 0;
     std::string key;    // Key*: the author's key name (the closed set)
+    std::string panel;  // PanelClick: the panel's name
+    std::string pslot;  // PanelClick: the slot's name
     int untilFrame = -1; // Hold only
     std::string button; // Mouse*: left / right / middle
     double dx = 0.0;    // MouseMove: the delta pixels

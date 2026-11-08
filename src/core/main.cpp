@@ -75,6 +75,10 @@ void printUsage() {
         "                    events + the per-frame dts; o = the output\n"
         "                    path, default data/demos/rec_<ts>.dmo) and save\n"
         "                    it on exit (the window close / the ESC exit)\n"
+        "  --list-demos      V3-16a: list the guide demo's index (the\n"
+        "                    category/seq/mode/tags/file/length) + run the\n"
+        "                    shipped content's cross-check — STANDALONE\n"
+        "                    headless (the save management's twin)\n"
         "  --log-level <l>   trace|debug|info|warn|error\n"
         "  -h, --help        Show this help\n");
 }
@@ -242,6 +246,8 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             args.demo = v;
         } else if (arg == "--demo-force") {
             args.demoForce = true;
+        } else if (arg == "--list-demos") {
+            args.listDemos = true;
         } else if (arg == "--demo-author") {
             const char* v = nextValue(i, "--demo-author");
             if (!v) return false;
@@ -402,6 +408,20 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
               "sim version gate only)";
         return false;
     }
+    // V3-16a: --list-demos is STANDALONE headless (the index's parse +
+    // the shipped content's cross-check — the save management's twin).
+    if (args.listDemos &&
+        (args.frames != 0 || args.saveSlot.has_value() ||
+         !args.screenshotPath.empty() || args.newWorld ||
+         args.time >= 0.0 || args.seed >= 0 ||
+         args.weather.has_value() || args.explode.has_value() ||
+         args.saveFullDiff || !args.demoAuthor.empty() ||
+         !args.demo.empty() || args.demoRecord ||
+         args.listenPort != 0 || !args.connectHost.empty() ||
+         !args.script.empty())) {
+        err = "--list-demos runs headless: drop the game-run flags";
+        return false;
+    }
     // V3-9: --demo-author is STANDALONE headless (the timeline expands
     // to the .dmo, the game never boots — the save management's twin).
     if (!args.demoAuthor.empty() &&
@@ -546,6 +566,61 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    // V3-16a: the --list-demos STANDALONE headless run (the index's
+    // parse + the cross-check + the table — the game never boots).
+    if (args.listDemos) {
+        auto index = loadDemoIndexChecked();
+        if (!index.ok()) {
+            std::fprintf(stderr, "Demo index error: %s\n",
+                         index.error().message.c_str());
+            return 1;
+        }
+        const auto& demos = index->demos;
+        std::printf("demo index (assets/demos/index.json) — %zu entr%s"
+                    " (sim %d):\n",
+                    demos.size(), demos.size() == 1 ? "y" : "ies",
+                    kDemoSimVersion);
+        for (const auto& cat : kDemoCategories) {
+            std::vector<const DemoIndexEntry*> rows;
+            for (const auto& e : demos) {
+                if (e.category == cat.id) {
+                    rows.push_back(&e);
+                }
+            }
+            std::sort(rows.begin(), rows.end(),
+                      [](const DemoIndexEntry* a, const DemoIndexEntry* b) {
+                          return a->seq < b->seq;
+                      });
+            std::printf("  [%s %s]\n", cat.id, cat.title);
+            if (rows.empty()) {
+                std::printf("    (empty — the later face)\n");
+                continue;
+            }
+            for (const auto* e : rows) {
+                const int total = e->lengthFrames;
+                const int mm = total / 3600;
+                const int ss = (total % 3600) / 60;
+                char timebuf[16];
+                std::snprintf(timebuf, sizeof(timebuf), "%02d:%02d", mm, ss);
+                std::string tags;
+                for (const auto& t : e->tags) {
+                    if (!tags.empty()) {
+                        tags += ",";
+                    }
+                    tags += t;
+                }
+                std::printf("    #%-2d %-24s %6df (%s)  %-4s  tags: %s\n",
+                            e->seq, e->file.c_str(), e->lengthFrames,
+                            timebuf, e->mode.c_str(),
+                            tags.empty() ? "-" : tags.c_str());
+            }
+        }
+        std::printf("cross-check: OK (the files' loads + the SIM's gate "
+                    "+ the lengths' match + the scenes' existence)\n");
+        Logger::instance().shutdown();
+        return 0;
+    }
+
     // V3-9: the --demo replay (the file LOADS + PARSES headless — the
     // strict schema + the version fingerprint reject before the window
     // boots; the world spec is the start-point authority).
@@ -573,7 +648,7 @@ int main(int argc, char** argv) {
             // out by construction; the --save, when given, stays the
             // EXIT write of the replay's result).
             args.newWorld = true;
-        } else {
+        } else if (d.world.type == DemoWorldSpec::Type::Save) {
             if (args.saveSlot.has_value() &&
                 *args.saveSlot != d.world.slot) {
                 std::fprintf(stderr,
@@ -584,6 +659,11 @@ int main(int argc, char** argv) {
             }
             args.saveSlot = d.world.slot;
         }
+        // The SCENE spec (V3-16a): the scene's name is NOT a save
+        // slot (the committed asset, the read-only) — the CLI's
+        // --save composes like the fresh spec (the EXIT write of
+        // the replay's result).
+
         args.demoFile = std::move(demo).value();
     }
 
