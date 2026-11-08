@@ -3,8 +3,27 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–413，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–414，新条目继续前插于尾部块首。
 
+- **guide authoring 二批四坑（PITS 414，门 223 v3.33.0 V3-16b ⑤⑥）**
+  ——① **f0 捕获点击的 hold 尾部 = 挖掘**：5f LMB（down f0/up f5）
+  = f0 捕获（!locked 分支 return）+ f1-f4 **locked 挖掘**——起姿射
+  线穿硬度 0 作物（wheat 1..7 全硬度 0）= 无声瞬破 3 株（f60 无
+  demo 对照跑完好 vs demo f300 缺株 = 二分定位；16a pilot 起姿朝
+  树 = 硬度 2.0 无瞬破故未暴露）——**capture() 定案 2f**（down f /
+  up f+1 = 零 locked-mining 帧，场景起姿任意安全）。② **scene
+  journal 同格重复**：平台石 y53 + farmland y53 同格双条目 = init
+  点名 "duplicate block edits"（存档 strict parse 面）——挖洞再铺。
+  ③ **1f vs 2f tap 的硬度 0 连锁**：每挖掘帧 = 射线首 solid 瞬破
+  （duration 0 当帧 break）：4f tap 顺破 2 株 + **f3000 后年轻麦
+  全熟（帧锁定 360 拍/级 roll）变硬度 0 = 射线后方也瞬破**（wheat_1
+  混入库存污染合成节奏 = h1 wheat_1×3 实证）——作物 tap 定案
+  **hold=1**（1 破帧 = 恰 1 破）；硬度 > 0 的块 4f tap 无连锁
+  （续帧 < 破碎时间）。④ **perf A/B 的 cwd 陷阱**：`cd A && cmake
+  --build A; cd B && ...` 后 `;` 接的 run 若不带显式路径 = B 的
+  二进制——旧树臂误用新二进制且 banner 同版不可辨（两次 v3.32.0
+  输出同值 = 假 A/B）——**perf 跑显式全路径 + 独立 cwd**（本门旧树
+  臂重跑才入档）。
 - **authored guide demo 编写十九坑（PITS 413，门 222 v3.32.0
   V3-16a 扩展指导 demo 族 pilot ④）**——① **demo 须初始 LMB 捕获**：
   首事件 = 帧 0 的 LMB tap（指针锁定 = look/面板 E 的门；未捕获的

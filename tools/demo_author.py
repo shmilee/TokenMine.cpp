@@ -97,11 +97,15 @@ class Guide:
         only run while the pointer is locked, the demo's first click
         is the capture, not a world action)."""
         self.at(f)
+        # 2f: the down's edge captures (the !locked's branch), the up's
+        # at f+1 leaves ZERO locked-mining frame (the 5-f's hold's
+        # gate-catch: f1-f4's locked isDown = the aim's ray's instant
+        # break — the hardness-0's crop's 3-plant's destroy's root).
         self.actions.append({"at_frame": f, "action": "mouse_down",
                              "button": "left"})
-        self.actions.append({"at_frame": f + 5, "action": "mouse_up",
+        self.actions.append({"at_frame": f + 1, "action": "mouse_up",
                              "button": "left"})
-        self.cursor = f + 5
+        self.cursor = f + 1
         return self
 
     # -- the look's face -------------------------------------------------
@@ -161,50 +165,6 @@ class Guide:
         self.yaw = yaw
         self.pitch = pitch
         return self
-
-    def walk_polyline(self, f, points, seg=1.6):
-        """A multi-leg walk (the axis-aligned's discipline — the
-        sub-axis's component's physics drop's gate-catch: every leg is
-        due E/W/N/S, the segments' 1.6-m's, the re-aim's between).
-        points = the (x, z)'s float's list (the corners' exact — the
-        cell-center's +0.5's the caller's face). The track's advance =
-        the EFFECTIVE distance (the reg's loss's deduct — the segment's
-        mx's full-ratio's drift's gate-catch: the step's target is the
-        current track's eff's ahead, not the leg's k/n). Returns the
-        end's frame."""
-        for (tx, tz) in points:
-            px, pz = self.x, self.z
-            total = math.hypot(tx - px, tz - pz)
-            if total < 0.05:
-                continue
-            ux = (tx - px) / total
-            uz = (tz - pz) / total
-            while math.hypot(tx - self.x, tz - self.z) > 0.05:
-                step = min(seg, math.hypot(tx - self.x, tz - self.z))
-                frames = int(round(step / WALK * 60)) + WALK_REG_LOSS - 2
-                if frames < WALK_REG_LOSS + 4:
-                    frames = WALK_REG_LOSS + 4
-                mx = self.x + ux * step
-                mz = self.z + uz * step
-                # the segment's re-aim (the same line's yaw)
-                dx = mx - self.x
-                dz = mz - self.z
-                if math.hypot(dx, dz) > 0.01:
-                    yaw = math.atan2(-dx, -dz)
-                    d = (yaw - self.yaw + math.pi) % (2 * math.pi) - math.pi
-                    if abs(d) > 0.001:
-                        self.actions.append({
-                            "at_frame": f, "action": "mouse_move",
-                            "dx": round(-d / SENS, 3), "dy": 0.0})
-                        self.yaw = yaw
-                eff = max(0, frames - WALK_REG_LOSS) * WALK / 60.0
-                self.actions.append({"at_frame": f, "action": "hold",
-                                     "key": "w", "until_frame": f + frames})
-                self.x += ux * eff
-                self.z += uz * eff
-                f += frames + 8  # the segment's settle's pause
-        self.cursor = f
-        return f
 
     def place_at(self, f, cell, ground_y=54.0):
         """The RMB's place in the cell (the ground's aim + the click)."""

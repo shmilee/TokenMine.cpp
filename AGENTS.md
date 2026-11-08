@@ -72,7 +72,23 @@ SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V
   / REG 2.5f 标定 / 放置瞄地面 / 相对放置 / 行墙挡视线 / 磁吸衰减 /
   工具态破碎时长 / 续挖穿平台 / mobs 误击耐久 / furnace 共享格三开
   态 / base19 f60 / --frames 白等 / journal 同态移除 / scene 完整性
-  约束】）——**3.x 矩阵
+  约束】）；**v3.33.0 = V3-16b 扩展指导 demo 族 ⑤⑥（门 223，
+  11-08：day1 章节第二三支配送——内核零变更【16a scene/panel_click/
+  索引全复用】纯内容 + 工具链增量：**⑤ guide_food 18262f 05:04**
+  【6×4 麦田 scene【farmland 挖洞铺——同格 journal 重复点名】+
+  wheat_7×8 可收 + 年轻梯度 ×16 demo 期间帧锁定生长视觉长熟】→
+  逐格收割【1f tap = 恰 1 破——硬度 0 连锁坑】→ E 面板面包 ×5 →
+  进食 ×2【1.6s 通道 96f】hunger 10→20 满】+ **⑥ guide_regen
+  18344f 05:05**【5 格石柱 5 落差台 → 走下台 hp 20→18 → 进食 →
+  **10s 门 + 2×4s 自然回血**【每半心耗 1 饥饿】hp 18→20 满】+
+  工具链【**capture 2f 化** = 零 locked-mining 帧——f0 捕获 hold 尾
+  部瞬破 0 硬度作物 ×3 的门内捕获根 / 旧分段 walk_polyline 死码清
+  除】；终态双钉【⑤ h0 麦 1/h1 面包 3/hunger 17/田 16 熟 / ⑥ hp 20/
+  hunger 13/面包 1 余】；2998/2998【内容相位零新增】+ S1 第 104 次
+  + canary 4 EXACT + ⑤⑥ ×2 RAW/savenorm + 性能 A/B 同档；门内捕获
+  PITS 414 四坑【f0 捕获尾部挖掘 / scene journal 同格重复 / 1f vs
+  2f tap 硬度 0 连锁 + 年轻麦 f3000 全熟 / perf A/B cwd 陷阱】）
+  ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
 / v3.16.0（门 206）/ v3.17.0（门 207）/ v3.18.0（门 208）/ v3.19.0
@@ -86,8 +102,9 @@ REJOIN + format 33 players[] = 矩阵收官项·V3-12 全 4 相位完成】+
 **11-07 用户实机诉求 2 项 ⬜【V3-16 扩展指导 demo 族
 【10 主题 3-10 分钟级：下界门/末影龙/房子+床/挖矿工具/体力/回血/皇
 宫/材料/河流/完整黑夜历险——**16a ✅ v3.32.0 = 内核 + 工具链 +
-pilot ④**（门 222），16b~g 待执行】+ V3-17 主菜单系统【标题/设置
-/登陆/教学/多人五页 + MOTD 并入】】**【大项已相位拆分 V3-10a~d /
+pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）**，
+16c~g 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
+MOTD 并入】】**【大项已相位拆分 V3-10a~d /
 V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~g，BACKLOG 待执行项明细】**）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
@@ -312,6 +329,51 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 223（**V3-16b 扩展指导 demo 族 ⑤⑥ v3.33.0** 门 223 全
+  PASS【V3-16 相位 B/7 = day1 章节 ⑤体力 + ⑥回血两支；**内核零变
+  更**——16a 的 scene/panel_click/索引全复用，纯内容 + 工具链增
+  量】：**⑤ guide_food 18262f 05:04**【scene guide_food：6×4 麦田
+  （farmland 24 格 y53【平台挖洞——**同格 journal 重复点名拒收**的
+  门内捕获②】+ wheat y54：wheat_7×8 可收 + 年轻梯度 ×16【wheat_6×5
+  / wheat_4×5 / wheat_2×4 / wheat_1×2——帧锁定生长 360 拍/级 roll
+  在 demo 期间视觉长熟 = 教学细节，f3000 后全熟 = 后方也硬度 0】）
+  + player (0.5,54,0.5) 起姿 yaw 2.5 朝空旷侧【**门内捕获①：起姿
+  朝麦田 = f0 捕获点击 hold 尾部瞬破 3 株**——5f LMB = f0 捕获
+  （!locked return）+ f1-f4 locked 挖掘，硬度 0 作物瞬破；f60 无
+  demo 对照跑完好 vs demo f300 缺株二分定位；16a pilot 起姿朝树 =
+  硬度 2.0 无瞬破未暴露】+ hunger 10 / 空库存；timeline 249
+  actions：巡视 → **逐格收割 8 株**【**1f tap = 恰 1 破**——门内
+  捕获③：2f tap = 2 破帧顺破射线后方（f3046 实证 (2,-3) wheat_5
+  被顺破 = wheat_1 混入库存污染合成节奏 h1 wheat_1×3】→ 周长收集
+  → E 面板面包 ×5【16 麦耗 15 剩 1】→ **进食 ×2**【RMB hold 100f
+  ≥ 1.6s 通道 96f，hunger 10→20 满 + sat 12→衰减 8】→ 满条巡视收
+  尾；**终态钉** h0 麦 1 / h1 面包 3 / sel h1 / hp 20 / hunger 17 /
+  sat 8【8 tick 衰减确定性值】/ 田 16 株全熟 / farmland 24 完好 /
+  z-1 行 + z-4 x2,x3 空 / 零实体】+ **⑥ guide_regen 18344f 05:05**
+  【scene guide_regen：5 格石柱 (10,54..58,-8)【**5 落差台 = fall 5
+  − offset 3 = 2 伤害**的精确教学几何】+ player 柱顶 (10.5,59,-7.5)
+  + hunger 14 + **h0 bread ×2**【场景预置 = guide 的 prepared start
+  面】；timeline 82 actions：柱顶巡视 → **走下台**【walk_leg 1.6m
+  越台缘 + 自由落体 ~50f，hp 20→18】→ 落地观察 → 进食【hunger
+  14→19 sat 6】→ **回血等待**【10s 门 + 2×4s tick = hp 18→20，每
+  半心耗 1 饥饿——自然回血完整教学面】→ 满条第三人称收尾；**终态
+  钉** hp 20 / hunger 13 / sat 2 / h0 面包 1 / 落点 (10.5,54,-10.04)
+  / 柱 5 格完好 / 零实体】+ **工具链增量**【**capture() 2f 化**
+  （down f / up f+1 = 零 locked-mining 帧——场景起姿任意安全；16a
+  pilot 已 author dmo 不受影响）+ 旧分段 walk_polyline 死码清除
+  （引用已改名常量 = 雷）】；2998/2998【内容相位零新增单测——init
+  交叉检查 3 条目全量 boot 复验】；S1 结构免疫第 104 次【f60 ×2 ≡
+  base19 + savenorm EXACT + banner 3.33.0 零像素】+ canary 4 EXACT
+  + **⑤⑥ ×2 RAW + savenorm EXACT** + 终态断言 + **性能 A/B 同档**
+  【旧 = 75266af v3.32.0 worktree + g139 双树 27 markers：OW 900f
+  无输入 PERF-WIN 三窗 upd med 0.559/0.588/0.585 vs 0.537/0.570/
+  0.564 同档 + render 0.584/0.683/0.651 vs 0.585/0.666/0.624 同档 +
+  swap 15.33/15.22/15.24 vs 15.34/15.24/15.31 同档 + changesApplied
+  9/3/1 逐位 + 终档 savenorm EXACT = 内容相位结构性零成本；**门内
+  捕获④ = perf cwd 陷阱**【`;` 后 run 用 B 的 cwd 二进制 = 假
+  A/B，显式全路径重跑才入档】】；PITS 414【四坑：f0 捕获尾部挖掘
+  / scene journal 同格重复 / 1f vs 2f tap 硬度 0 连锁 + 年轻麦 f3000
+  全熟 / perf A/B cwd 陷阱】）；
   门计数 222（**V3-16a 扩展指导 demo 族：数据层 + scene + panel_click
   + pilot ④ v3.32.0** 门 222 全 PASS【V3-16 相位 A/7 = 10 主题 3-10
   分钟级教学 demo 族的内核 + 工具链 + 首支 pilot ④ 挖矿打造工具】：
@@ -1305,7 +1367,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（413 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（414 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

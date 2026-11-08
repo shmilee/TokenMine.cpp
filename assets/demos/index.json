@@ -7,6 +7,22 @@
       "tags": ["mining", "crafting", "furnace"],
       "file": "guide_mining.dmo",
       "length_frames": 11387
+    },
+    {
+      "category": "day1",
+      "seq": 2,
+      "mode": "solo",
+      "tags": ["wheat", "bread", "eating", "hunger"],
+      "file": "guide_food.dmo",
+      "length_frames": 18262
+    },
+    {
+      "category": "day1",
+      "seq": 3,
+      "mode": "solo",
+      "tags": ["fall", "healing", "regeneration"],
+      "file": "guide_regen.dmo",
+      "length_frames": 18344
     }
   ]
 }
