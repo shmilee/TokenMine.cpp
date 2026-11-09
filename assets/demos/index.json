@@ -31,6 +31,14 @@
       "tags": ["house", "bed", "sleep", "night"],
       "file": "guide_house.dmo",
       "length_frames": 18875
+    },
+    {
+      "category": "build",
+      "seq": 1,
+      "mode": "solo",
+      "tags": ["creative", "wall", "tower", "fly"],
+      "file": "guide_palace.dmo",
+      "length_frames": 19536
     }
   ]
 }

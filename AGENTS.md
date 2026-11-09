@@ -97,7 +97,30 @@ SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V
   0 块 + Slept at the bed (4,54,-5) + 黎明巡视；walk_leg 尾参
   y/hold + mk_scene 容器态透传；门内捕获 PITS 415 七坑【出生点表格
   重叠静默顶 y55 全链死 / 侧底面截断 / 坠腿 W 漂 / 长 leg 损耗 / 屋
-  顶 walk z stop 1cm 生死 / 容器态三处同步 / gzip 0x8b】）**
+  顶 walk z stop 1cm 生死 / 容器态三处同步 / gzip 0x8b】）；
+  **v3.35.0 = V3-16d 扩展指导 demo 族 ⑦皇宫（门 225，11-09：
+  guide_palace 19536f 05:25 = build 章首支，**100 块 = 92 墙 + 8
+  四角塔**【内圈地板 38 块 CUT 偏离记档 = 走位漂移与 1-m 格 aim
+  容差根本冲突】——双层围墙 92【t1 stone_bricks + t2
+  terracotta_yellow，门洞 x8/x9 双层开，地面行走绝对格 aim =
+  92/92 ×4 版实证】+ 四角塔 = 垂直-only 角循环【B 单按 fly ON →
+  45f 升 3.0m 精确（脚 57.0 眼 58.62——65f 眼 59.95 时 8 aim 全
+  4.12-4.15m 超 kReach 4.09 = 0/8 门内捕获反解）→ aim t2 顶面
+  【点在面 = 命中与眼高无关】→ B 单按 fly OFF → 0.1-m 墙线地面
+  走到下一角 9/16/9-m】×4（SW→NW→NE→SE；NW→NE 走线 z-12.0 外圈
+  北绕行【v9 z-10.5 北墙隧道 + v10 z-9.0 东墙隧道双门内捕获——
+  内圈 z 线必撞东墙，逐线三轴核】）+ 航拍展示 2 + 结尾四面巡视
+  【SE 落地即出，终姿 (8.55,54,3.8)】；飞行 toggle 全 gamepad B
+  单按【creative scene = 入场飞行 PITS 416①，无墙钟窗 sim 确定】+
+  dmo 后贴 demo_fly_patch【pinned gzip 字节 parity】；门内捕获
+  PITS 416 十三坑【入场飞行 / 飞行 7.12 实测 / 脚手架死路 / 帧停
+  诊断 + autosave 覆写 / scene inventory 严格形 / 后贴 parity /
+  纯注入 / checker 名称比 / 飞行 aim 双坑 / 窗焦点臂杀手 / 走位
+  漂移 fps 函数 / 走线墙隧道 / 元数核对】；2998/2998【内容相位
+  零新增 + banner re-pin】+ S1 第 106 次【f60 ×2 ≡ base19】+
+  canary 4 EXACT + guide_palace ×2 RAW/savenorm EXACT + 性能 A/B
+  同档【终档跨树 savenorm EXACT ×2 = 结构性零成本最强形——src/
+  逐文件恒等仅 banner 差】**）
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
@@ -113,10 +136,11 @@ REJOIN + format 33 players[] = 矩阵收官项·V3-12 全 4 相位完成】+
 【10 主题 3-10 分钟级：下界门/末影龙/房子+床/挖矿工具/体力/回血/皇
 宫/材料/河流/完整黑夜历险——**16a ✅ v3.32.0 = 内核 + 工具链 +
 pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
-16c ✅ v3.34.0 = ③房子+床（门 224，day1 全 4 支完成）**，
-16d~g 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
+16c ✅ v3.34.0 = ③房子+床（门 224，day1 全 4 支完成）
++ 16d ✅ v3.35.0 = ⑦皇宫（门 225，build 章首支，100 块）**，
+16e~h 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
 MOTD 并入】】**【大项已相位拆分 V3-10a~d /
-V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~g，BACKLOG 待执行项明细】**）
+V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
   实机报障 4 项全完成（v1.50.0 = 最后 v1.x 版本）+ 2.0.0 扫尾三件事——
@@ -175,7 +199,7 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~g，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -340,6 +364,43 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 225（**V3-16d 扩展指导 demo 族 ⑦皇宫 v3.35.0** 门
+  225 全 PASS【V3-16 相位 D/7 = build 章节首支；**16d 拆两版用户定
+  案**（v3.35.0 = ⑦皇宫 / v3.36.0 = ⑧材料）；**内核零变更**——16a
+  的 scene/panel_click/索引全复用，纯内容 + 工具链增量；**用户在场
+  定案简化 = 100 块（92 墙 + 8 塔）**，内圈地板 38 块 CUT【走位漂移
+  0.02-0.07m/leg（fps 函数）开放路径累积 0.5-1.1m > 1-m 格 aim 容差
+  0.5m + 预计算输入无法自校正 = 结构性边界，记偏离】】：**guide_
+  palace 19536f 05:25**【scene = 21×18 扩台平台 x0..20 z-13..4 顶
+  y54 正午 + creative flag + 8301 edits；开场第三人称 + 双层围墙
+  92【t1 stone_bricks + t2 terracotta_yellow，门洞 x8/x9】+ 四角塔
+  8 = 垂直-only 角循环【B 单按 fly ON → 45f 升 3.0m（脚 57.0 眼
+  58.62，65f 眼 59.95 超 kReach 4.09 = 0/8 反解）→ aim t2 顶面
+  2.2-3.0m → fly OFF → 0.1-m 墙线地面走到下一角】×4 + NW→NE 走线
+  z-12.0 外圈北绕行【v9 z-10.5 北墙隧道 + v10 z-9.0 东墙隧道双门内
+  捕获 = PITS 416⑫】+ 航拍展示 2 + 四面巡视 SE 落地即出】+ **工具
+  链增量**【demo_author FLY 7.12 实测 + walk_leg(fly) + sweep_gradual
+  + fly_toggle side-car + demo_fly_patch.py dmo 后贴器【pinned gzip
+  字节 parity + no-op 自校】+ mk_scene creative 透传】；飞行 toggle
+  全 gamepad B 单按【creative scene = 入场飞行根因 PITS 416①，无墙
+  钟窗 sim 帧确定 = 双击 flake 族结构性免疫】；终态钉 100 块 + 零
+  stray + 平台零挖 + 零实体 + 终姿 (8.55,54,3.8) yaw 12.566 = 4 扫视
+  对之和】；2998/2998【内容相位零新增 + banner re-pin】；S1 第 106
+  次【f60 ×2 ≡ base19 225272 B + banner 零像素】+ canary 4 EXACT
+  【sim 2 不 bump——B toggle 仅本 demo】+ guide_palace ×2 RAW
+  【487726 B】/savenorm EXACT + **性能 A/B 同档**【旧 = 7e4a1a2
+  v3.34.0 worktree + g139 双树 27 markers：banner 实证 v3.34.0/
+  v3.35.0 + OW 900f 无输入三窗 upd 0.577-0.642 vs 0.636-0.714 同档
+  + render 同档 + swap 15.0-15.1 同档 + changesApplied 9/3/1
+  【old1 win2=2 = 旧树自身 run-to-run real-dt 域】+ **终档跨树
+  savenorm EXACT ×2** = src/ 逐文件恒等仅 banner 差的结构零成本最
+  强形】；PITS 416【十三坑：creative 入场飞行 + 双击墙钟窗 flake /
+  飞行 7.12 vs 6.88 名义 / 脚手架 step-up 死路 / 帧停诊断 + autosave
+  覆写陷阱 / scene inventory 严格对象形 / dmo 后贴字节 parity / demo
+  纯注入 = 用户鼠标仅帧节奏例外 / checker stray 名称比 / 飞行 aim
+  双坑【kReach 超 6cm + track 高度不同步】/ 游戏窗焦点臂杀手
+  【isolate_win + grep finished】/ 走位漂移 fps 函数 / 走线墙内隧
+  道双捕获【逐线三轴核】/ 集合元数核对【3-tuple vs 4-tuple】】）；
   门计数 224（**V3-16c 扩展指导 demo 族 ③完整房子+床 v3.34.0** 门
   224 全 PASS【V3-16 相位 C/7 = day1 章节 ③ 一支，**day1 ④⑤⑥③ 全 4
   支完成**；**内核零变更**——16a 的 scene/panel_click/索引全复用，纯
@@ -1410,7 +1471,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（414 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（416 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

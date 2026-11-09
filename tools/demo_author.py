@@ -31,6 +31,13 @@ import sys
 
 SENS = 0.0025          # radians / pixel (the mouseSensitivity's default)
 WALK = 4.3             # blocks / second (the walkSpeed's default)
+# The creative fly's horizontal: the walkSpeed x kFlySpeedMultiplier's
+# NOMINAL 6.88, the MEASURED 7.12 (the 17-f hold's 2.0112-m's twin, the
+# PITS 416's calibration's). The fly's v is the isDown's direct-set's (no
+# registration's, no ramp's — the vertical's kFlyVerticalSpeed 4.0's twin):
+# a hold of round(d/FLY*60) lands within 0.01 m (the walk's +2 margin's NOT
+# for the fly — the fly's self-anchoring's face).
+FLY = 7.12             # blocks / second (the creative fly's horizontal)
 EYE = 1.62             # the eye's height over the feet
 WALK_STOP_MARGIN = 2  # the hold's stop margin (frames): the hold's
                        # start's input-registration's loss (~2.5f, the
@@ -58,6 +65,11 @@ class Guide:
         self.cursor = 0
         self.actions = []
         self._last_panel_click = -10 ** 9
+        # The fly's toggles' frames (the gamepad's B's the post-patch's face —
+        # the timeline's vocabulary's the keyboard/mouse's only, the dmo's
+        # demo_fly_patch.py's the insertion's; the PITS 416's wall-clock's
+        # double-tap's window's the flake's the gate-catch's root).
+        self.fly_toggles = []
 
     # -- the state's face ------------------------------------------------
     def at(self, f):
@@ -76,6 +88,19 @@ class Guide:
 
     def _now(self):
         return self.cursor
+
+    def fly_toggle(self, f):
+        """Record a gamepad-B fly toggle at frame f (the sim-frame's
+        deterministic's face). The Space's double-tap's the toggle's the
+        wall-clock's window's the flake's (a 120-s auto-save stall's or the
+        startup burst's straddling the pair = the PITS 416's gate-catch), so
+        the fly's ON/OFF goes through the B's single-press (no window, no
+        jump grant). It lands as a SIDE-CAR frame list (the timeline's author
+        vocabulary's keyboard/mouse only — the record's face); demo_fly_patch.
+        py inserts the gamepad_button events into the authored dmo. No
+        movement, no cursor advance (a zero-duration input)."""
+        self.at(f)
+        self.fly_toggles.append(int(f))
 
     def _track_walk(self, frames, yaw=None):
         """Advance the position (the W/A/S/D's intent — the caller
@@ -184,6 +209,22 @@ class Guide:
         return self
 
     # -- the walk's face -------------------------------------------------
+    def sweep_gradual(self, f, dur, dyaw, steps=12):
+        """A GRADUAL look sweep (the showcase's face: the 360-deg's the
+        12-step's — the sweep's single-event's snap's the audience's
+        the disorient's twin). The 12 mouse_moves spread over dur, the
+        track's yaw's per-step's advance."""
+        self.at(f)
+        step = dyaw / steps
+        for i in range(steps):
+            fi = f + (i * dur) // steps
+            self.actions.append({
+                "at_frame": fi, "action": "mouse_move",
+                "dx": round(-step / SENS, 3), "dy": 0.0})
+            self.yaw += step
+        self.cursor = f + dur
+        return self
+
     def face(self, f, yaw):
         """Set the tracked yaw's absolute (the delta's look emit)."""
         self.at(f)
@@ -195,7 +236,7 @@ class Guide:
             self.yaw = yaw
         return self
 
-    def walk_leg(self, f, tx, tz, y=None, hold=None):
+    def walk_leg(self, f, tx, tz, y=None, hold=None, fly=False):
         """One axis-aligned walk leg to the EXACT point (tx, tz) (the
         cell-center's +0.5's the caller's face). The hold's length =
         the distance's frames + the stop margin (the reg's loss's twin:
@@ -205,7 +246,9 @@ class Guide:
         step-up's +1 / the drop's -N — the track's flat assumption's
         lift, the V3-16c's roof's face); hold: an explicit hold's
         frames (the short-hop's drop: the w's release before the edge,
-        the air's drift's the calibration's twin)."""
+        the air's drift's the calibration's twin); fly: the creative's
+        flight's leg (the FLY's pace's the no-margin's — the fly's v's
+        the isDown's direct-set's the no-registration's face)."""
         self.at(f)
         dx = tx - self.x
         dz = tz - self.z
@@ -221,8 +264,12 @@ class Guide:
                 "at_frame": f, "action": "mouse_move",
                 "dx": round(-dyaw / SENS, 3), "dy": 0.0})
             self.yaw = yaw
-        frames = (hold if hold is not None
-                  else int(round(d / WALK * 60)) + WALK_STOP_MARGIN)
+        if hold is None:
+            if fly:
+                hold = int(round(d / FLY * 60))
+            else:
+                hold = int(round(d / WALK * 60)) + WALK_STOP_MARGIN
+        frames = hold
         assert frames >= 8, "walk_leg: a too-short leg"
         self.actions.append({"at_frame": f + 1, "action": "hold",
                              "key": "w", "until_frame": f + 1 + frames})
@@ -338,6 +385,15 @@ class Guide:
         self.cursor = f + dur
         return self
 
+    def wheel(self, f, ticks):
+        """A wheel's tick (the creative's grid scroll — the V3-16d's
+        grant's face: 1 tick = 1 item)."""
+        self.at(f)
+        self.actions.append({"at_frame": f, "action": "wheel",
+                             "ticks": int(ticks)})
+        self.cursor = f + 1
+        return self
+
     # -- the panel's face ------------------------------------------------
     def _panel_raw(self, f, panel, slot, button="left"):
         self.at(f)
@@ -400,10 +456,21 @@ class Guide:
                 "the timeline's out-of-order frame (the author's reject)"
         import json
         json.dump(doc, open(path, "w"), indent=2)
-        total = max(a["at_frame"] +
-                    (a.get("until_frame", a["at_frame"]) + 1
-                     if a["action"] == "hold" else 1)
-                    for a in doc["actions"])
+        # The fly's toggle's side-car (the dmo's post-patch's input —
+        # demo_fly_patch.py's): written next to the timeline (the same
+        # directory's the .fly_toggles.json's suffix's).
+        if self.fly_toggles:
+            import os
+            tp = os.path.join(os.path.dirname(os.path.abspath(path)),
+                              os.path.basename(path) + ".fly_toggles.json")
+            json.dump(sorted(self.fly_toggles), open(tp, "w"))
+            print("fly toggles: %d (-> %s)"
+                  % (len(self.fly_toggles), os.path.basename(tp)))
+        # the dmo's length = the C++'s twin (authorDemoFile): the max's
+        # at_frame+1 over every action, the hold's until_frame+1 the bound.
+        total = max([a["at_frame"] + 1 for a in doc["actions"]] +
+                    [a["until_frame"] + 1 for a in doc["actions"]
+                     if a["action"] == "hold" and a.get("until_frame", -1) >= 0])
         print("timeline %s: %d actions, ~%d frames (%.1f min)"
               % (os.path.basename(path), len(doc["actions"]), total,
                  total / 3600.0))

@@ -11,6 +11,45 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.35.0（2026-11-09）— V3-16d 扩展指导 demo 族：⑦ 皇宫（门 225 全 PASS）
+
+**V3-16 相位 D/7**（build 章节首支 = 建造与大地 ⑦⑨⑧ 的 ⑦；16d 拆
+两版用户定案：本支 = ⑦皇宫，⑧材料 → 16e v3.36.0；内核零变更 = 16a
+的 scene/panel_click/索引全复用，本相位 = 内容 + 工具链增量）：
+**guide_palace**（19536f 05:25：scene = 21×18 扩台平台 x0..20 z-13..4
+顶 y54 正午 + creative flag + 8301 edits；**定案结构（v10 简化）** = 开场
+第三人称（建造全程观众视角，aim 射线自眼位不变）→ 双层围墙 92
+【t1 stone_bricks + t2 terracotta_yellow，门洞 x8/x9 双层开，地面行走
+绝对格 aim】→ **四角塔 8 = 垂直-only 角循环**【B 单按 fly ON → 升 45f = 3.0m
+（脚 57.0 眼 58.62，v7 的 65f = 58.33 眼 59.95 时 8 aim 全 4.12-4.15-m
+超 kReach 4.09 = 0/8 门内捕获反解）→ aim 目标 t2/t3 顶面【aim 点在面
+平面 = 命中与眼高无关，8 aim 逐一射线核证 2.2-3.0-m】→ B 单按 fly
+OFF → 地面走到下一角（9/16/9-m，0.1-m 裕量墙线 = 92/92 实证域）×4
+（SW→NW→NE→SE；NW→NE 走线 z-12.0 外圈北绕行【v9 门内捕获：z-10.5
+线在北墙 z 带内 = 16-m 墙隧道卡死；v10 门内捕获同族：z-9.0 线撞东
+墙 (15,54,-9) 卡 x14.6——内圈 z 线必撞东墙，环外唯一解，逐线三轴
+核 PITS 416⑫】）+
+航拍展示 2（SW 墙成 / SE 塔成 360° 渐进环绕）→ 结尾四面巡视【SE
+塔落地即出】；终态钉 100 块 + 零 stray + 平台零挖 + 零实体 +
+终姿 (8.5,3.5)）；**门内捕获 PITS 416 十三坑**【**creative scene = 入场飞行**【applySave
+setFlying(true) V3-11a：v6 墙段 airwalk 7.12 = +0.89m/leg 15m 漂移
+stray 网格实证】+ 双击墙钟窗 120s autosave stall flake【v4 入口侥幸
+入窗 / 塔段 flake = 塔 0/8 地板 0/38】→ **gamepad B 单按定案**【入口
+B fly OFF + 4 处飞行 toggle，无窗无 jump grant sim 帧确定；timeline
+词表拒 gamepad = dmo 后贴 demo_fly_patch.py：pinned gzip 字节 parity +
+sorted JSON + no-op 自校每次断言 + 文件序保持】/ 飞行 7.12 实测 vs
+6.88 名义【自锚定无 margin】/ 脚手架 step-up 死路【S2 AABB 恒重叠
+静默拒收 + 角落 tie + creative 30f 即挖连锁 2 深坑穿平台】→ 飞行悬
+停放 / 帧停诊断法 + autosave 中途覆写陷阱 / scene inventory 严格对
+象形 / demo 玩家通道纯注入【用户鼠标 = audience orbit 仅渲染，唯一
+例外 = 帧节奏】/ checker stray = 名称比较非存在性】；工具链增量
+【demo_author FLY 7.12 + walk_leg(fly) + sweep_gradual + fly_toggle
+side-car + demo_fly_patch.py 后贴器】；2998/2998（内容相位零新增——
+init 交叉检查 5 条目全量 boot 复验）；S1 第 106 次（f60 ×2 ≡ base19
++ banner 3.35.0 零像素）+ canary 4 EXACT + guide_palace ×2
+RAW/savenorm + 性能 A/B 同档（结构性零成本）；详见
+`docs/archive/phase-3.35.0.md`。
+
 ## v3.34.0（2026-11-09）— V3-16c 扩展指导 demo 族：③ 完整房子+床（门 224 全 PASS）
 
 **V3-16 相位 C/7**（day1 章节 ③ 一支 = day1 ④⑤⑥③ 全 4 支完成；

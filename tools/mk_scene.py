@@ -63,7 +63,8 @@ def apply_spec(doc, spec):
         p = doc['players'][0]
         pl = spec['player']
         for k in ('pos', 'yaw', 'pitch', 'health', 'hunger', 'saturation',
-                  'respawn', 'inventory', 'inv_grid', 'selected'):
+                  'respawn', 'inventory', 'inv_grid', 'selected',
+                  'creative'):
             if k in pl:
                 if k == 'selected':
                     p['inventory']['selected'] = pl['selected']
