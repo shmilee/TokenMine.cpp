@@ -3066,7 +3066,7 @@ void Game::runGameplayLoop(double lastFrame) {
         // pointer, while the inventory is open it closes it, while dead
         // the death screen owns the input — all handled in update).
         if (m_input.quitRequested() ||
-            (!m_window.relativeMouseMode() && !panelOpen() &&
+            (!(m_demoPlayer ? true : m_window.relativeMouseMode()) && !panelOpen() &&
              !localPlayer()->isDead() &&
              m_input.wasPressed(GameKey::Escape))) {
             MC_LOG_INFO("Exit requested, shutting down");

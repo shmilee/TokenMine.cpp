@@ -120,7 +120,18 @@ SDL 三大布局归一化单表 + 首个实际 sim bump 1→2）；**v3.15.0 = V
   零新增 + banner re-pin】+ S1 第 106 次【f60 ×2 ≡ base19】+
   canary 4 EXACT + guide_palace ×2 RAW/savenorm EXACT + 性能 A/B
   同档【终档跨树 savenorm EXACT ×2 = 结构性零成本最强形——src/
-  逐文件恒等仅 banner 差】**）
+  逐文件恒等仅 banner 差】）；**v3.36.0 = V3-16e 扩展指导 demo 族
+⑧材料（门 226，11-11：guide_materials 25383f 07:03 = 7 biome 床
+33 标本收集族【森林/沙漠/羊毛/针叶林/矿脉 depth-1/花田/走道】+
+SURVIVAL 收集面【真破格时长 + 磁吸收集 + E 面板展示 + C 第三人称
+巡视】+ 内核 1 行×10 demo 恒锁定【初 3 处 + canary RAW diff 捕获
+7 处【C 相机会话态 = 根】——12 处 relativeMouseMode() 审计全表】+
+demo_author 向量行走模型【_walk_dd 角进入速度轴归属 + 0.66m 可
+表达带】+ 分段前缀验证 11 段【用户定案 ≤30 段】；门内捕获 PITS
+417 二十二坑；2998/2998【banner re-pin 1】+ S1 第 107 次【f60 ×2
+≡ base19】+ canary 4×2 新≡旧二进制 RAW+savenorm EXACT +
+guide_materials ×2 RAW/savenorm EXACT + 性能 A/B 同档【终档跨树
+savenorm EXACT = 结构性零成本】）**
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
@@ -137,8 +148,9 @@ REJOIN + format 33 players[] = 矩阵收官项·V3-12 全 4 相位完成】+
 宫/材料/河流/完整黑夜历险——**16a ✅ v3.32.0 = 内核 + 工具链 +
 pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
 16c ✅ v3.34.0 = ③房子+床（门 224，day1 全 4 支完成）
-+ 16d ✅ v3.35.0 = ⑦皇宫（门 225，build 章首支，100 块）**，
-16e~h 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
++ 16d ✅ v3.35.0 = ⑦皇宫（门 225，build 章首支，100 块）
++ 16e ✅ v3.36.0 = ⑧材料（门 226，build 章第二支，7 biome 床
+33 标本）**，16f~h 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
 MOTD 并入】】**【大项已相位拆分 V3-10a~d /
 V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
 
@@ -199,7 +211,7 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -364,6 +376,47 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 226（**V3-16e 扩展指导 demo 族 ⑧材料 v3.36.0** 门
+  226 全 PASS【V3-16 相位 E/7 = build 章节第二支；**内核零变更**——
+16a 的 scene/panel_click/索引全复用，纯内容 + 工具链增量 + **内
+核 1 行×10 = demo 恒锁定**【初 3 处 + canary RAW diff 捕获 7 处
+【C 相机会话态 = 根】——物理锁窗 flap（失焦/OS 释放）吞注入事
+件 = 5/5 复现的"随机脱轨"红鲱鱼源，demo 确定性环境无关化；12
+处 relativeMouseMode() 读取审计全表，2 处有意不门控】】：**guide_
+materials 25383f 07:03**【scene = 30×26 平台 x0..29 z-25..0 顶
+y54 正午 + SURVIVAL【收集面——真破格时长/磁力收集/E 面板展示】+
+预置 wooden_pickaxe h2 + 8580 cells；**7 biome 床 33 标本** = B1
+森林【橡木 3 + 草 2】/ B2 沙漠【仙人掌 2 + 砂 4】/ B3 针叶林【云
+杉 2 + 雪 3】/ B4 矿脉【石出露 4×2 depth-1 + 煤 2 铁 1】/ B5 花
+田【葱绒/矢车菊/郁金香 各 2 non-solid】/ B6 羊毛【羊毛 3 + 荧石
+2】；tour = B5 六花 1f tap → B4 **ore 先 stone 后**【单拍链破 3
+格修复形 PITS 417⑮】→ B6 → B2 → B1 → B3 → E 面板 1020f 展示 →
+C 第三人称四面巡视 → 收束；终态钉 33 全破 + 保留格（出露 x18
+双层 + 树干 y55/56 层 + (9,53,-5) 雪地板 67% 部分破）+ 地板零
+挖 + 零实体（33 drop 全收集）+ 库存精确 + 终姿 (15.5,-1.5)±1.0
+hp 20】+ **22 轮根因迭代（v3.1-v3.22）= PITS 417 二十二坑**【ENT-7
+镜像模型 / 探针协议 / 锁 flap / AABB pin 死路 / 花 tap DDA 边界 /
+g139 参数 / 旧树重建纪律 / STAND-ON 踩层 / aim 面带 / tour×AABB /
+探针 pos≠世界 pos / cell 范围读反 / **demo 确定性 = 物理锁读取全
+门控（C 相机会话态捕获）** / 掉落 120s 消散 + 磁力纯水平 / B4
+链破工具切换时序 / aim 角点 DDA 跳格 / rest-entry 短走 / 磁吸速
+度模型 / 自家树干 y55 拦体带 / 分段 trim 纪律 / 角进入速度向量
+模型 / 新增 leg 必过审计；分段链 11/11 全段 pos 偏差 ≤0.017m】
++ 工具链增量【demo_author _walk_dd/_walk_hold_for 全向量化 +
+_coast 带位移 + 诚实落点 + walk_to 0.66m 可表达带 / 审计脚本族
+【碰撞 + 33 首 solid + 磁吸 1f 模拟 + 间距分级】/ **分段前缀验
+证用户定案形 ≤30 段 = 11 段**】；2998/2998【内容相位零新增 +
+banner re-pin 1】+ S1 第 107 次【f60 ×2 ≡ base19 + banner 零像素
+复验】+ canary 4×2【新新 RAW EXACT + **新≡旧二进制（tm_v335
+v3.35.0）RAW+savenorm EXACT = 锁定修冷路径位级证明**】+
+guide_materials ×2 RAW/savenorm EXACT【gmA≡gmB】+ index 6 条
+boot 交叉检 OK【--list-demos：文件 + strict load + SIM 门 +
+length 25383 匹配 + scene 存在】+ **性能 A/B 同档**【旧 = 00cb62a
+v3.35.0 worktree + g139 双树 27 markers：banner 实证 v3.35.0/
+v3.36.0 + OW 900f 无输入邻窗复跑定档 upd med f300/f600 0.407/
+0.412 vs 0.386/0.387 同档 + render/swap 同档 + changesApplied
+9/3/1 逐位 + **终档跨树 savenorm EXACT ×2【三方 = 结构性零成
+本】**】；详见 `docs/archive/phase-3.36.0.md`）；
   门计数 225（**V3-16d 扩展指导 demo 族 ⑦皇宫 v3.35.0** 门
   225 全 PASS【V3-16 相位 D/7 = build 章节首支；**16d 拆两版用户定
   案**（v3.35.0 = ⑦皇宫 / v3.36.0 = ⑧材料）；**内核零变更**——16a
@@ -1471,7 +1524,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（416 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（417 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

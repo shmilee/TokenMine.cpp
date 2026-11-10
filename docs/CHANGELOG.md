@@ -11,6 +11,51 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.36.0（2026-11-11）— V3-16e 扩展指导 demo 族：⑧ 材料（门 226 全 PASS）
+
+**V3-16 相位 E/7**（build 章节第二支；内核 = 1 行×10 的 demo 恒锁定 +
+工具链的 entry-aware 向量行走模型——16a 的 scene/panel_click/索引全复用）：
+**guide_materials**（25383f 07:03：scene = 30×26 平台 x0..29 z-25..0
+顶 y54 正午 + SURVIVAL + **预置 wooden_pickaxe h2** + 8580 cells；
+**7 biome 床 33 标本** = B1 森林【橡木 3 + 草凸块 2】/ B2 沙漠【仙人
+掌 2 + 砂凸块 4】/ B3 针叶林【云杉 2 + 雪凸块 3】/ B4 矿脉【石出露
+4×2 depth-1 + 煤 2 铁 1】/ B5 花田【葱绒/矢车菊/郁金香 各 2，
+non-solid】/ B6 羊毛【羊毛 3 + 荧石 2】；tour = P0 扫视 → B5 六花
+1f tap → B4 **ore 先 stone 后**【单拍链破 3 格修复形，铁 1 煤 2 短拍
+1.25s → 石 3 ×2.3s 尾 2.2% 部分破零过挖】→ B6 → B2 → B1 → B3 →
+E 面板 1020f 展示 → C 第三人称四面巡视 → 收束；终态钉 33 全破 +
+保留格（出露 x18 双层 + 树干 y55/56 层）+ 地板零挖 + 零实体 +
+库存精确【wood 3/dirt 2/snow 3/spruce 2/cactus 2/sand 4/coal 2/iron 1/
+cobble 3/wool 3/glowstone 6 每块 3/花 6 + pickaxe 1】+ 终姿
+(15.5,-1.5)）；**22 轮根因迭代（v3.1-v3.22）= PITS 417 二十二坑**（guide authoring
+的步行校准 + 收集 + 间距全域）：ENT-7 镜像模型【指数逼近 4.3 + 松键
+9f 滑行，k 8.0/12.0 与 player.cpp 358-394 孪生，7×33f 链 15.4917 vs
+实测 15.4922】→ leg 类 {1.0,2.0} only【0.5/1.5 未校准类 = 11% 过走
+死源，walk_to 响亮断言】→ **entry-aware 修正**【稳态链表对 rest-entry
+腿短走 ~0.19m = 0.2-m 线裕量吃光 = B3 脱轨真根】→ aim = 面点【4 格
+角点 = DDA 跳格】→ **收集红线**【磁吸 = 速度 6(1-d/2.5)² + 前 0.5s
+不吸不拾 + ready 后 d≤1.0 当帧即拾——每 drop 必有轨迹帧 ≤1.05m，
+stand d≤1.0 或 detour 路过点，33/33 审计】→ **间距规则**【走线与完
+好 y54/55 实体 ≥0.8m 首选，0.2m 平面部类保留（12/12 实证 + 校准腿
+±0.03m = 0.17m 结构裕量）；自家树干 y55 层拦体带 = 同柱线须绕】→
+雪块/仙人掌搬迁【(9,-8) 与 z-8.5 线 0.2m 擦碰 = 角接触 float-ulp pin
+死点】→ **分段前缀验证定案**【用户定案 ≤30 段 = 11 段：trim 跨 F
+hold 响亮拒 + wheel-0 延长按；段检查 = pos ±0.5m 漂移金丝雀 / 累计
+broken / 累计库存 / 实体 0——前缀 = 全跑逐帧恒等，段 PASS 可传递】；
+**内核 1 行×10 = demo 恒锁定**【初 3 处 = game_frame inputLocked 镜像
++ game_interaction mine 门 + game_ui UI 组：m_demoPlayer ? true :
+relativeMouseMode()——物理锁窗 flap（失焦/OS 释放）吞注入旋转/挖掘
+= 5/5 复现的"随机脱轨"红鲱鱼源，demo 确定性环境无关化；canary RAW
+diff 再捕获 7 处【新 vs 旧二进制截图 byte 35/36 + savenorm EXACT =
+像素面分叉 sim 位级恒等：C 相机 toggle 会话态【同一 C 事件一 run 处理
+一 run 丢弃 → First↔ThirdBack 分叉】+ T 教程/HUD/进食/ESC 退出/手臂/
+准星——12 处 relativeMouseMode() 读取审计全表，2 处有意不门控】】；
+format 33/sim 2 不变（canary 4 EXACT 执法）；2998/2998（banner re-pin 1，内容
+相位零新增单测）；S1 第 107 次（f60 ×2 ≡ base19 + banner 3.36.0 零
+像素）+ canary 4×2 新≡旧二进制 RAW+savenorm EXACT【锁定修冷路径位级证明】+
+guide_materials ×2 RAW/savenorm EXACT + 性能 A/B 同档【终档跨树
+savenorm EXACT = 结构性零成本】；详见 `docs/archive/phase-3.36.0.md`。
+
 ## v3.35.0（2026-11-09）— V3-16d 扩展指导 demo 族：⑦ 皇宫（门 225 全 PASS）
 
 **V3-16 相位 D/7**（build 章节首支 = 建造与大地 ⑦⑨⑧ 的 ⑦；16d 拆

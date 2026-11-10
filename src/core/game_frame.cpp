@@ -413,8 +413,14 @@ void Game::update(double dt) {
         // R18: the pointer-lock SIM mirror — solo syncs from the SDL
         // state (the original read's value, bit-identical); net reads
         // the FrameState-carried flag (the local fact in the sim).
+        // V3-16e: the demo's player input = the pure injection (the
+        // audience's pump owns the physical mouse); the physical lock's
+        // flap (the focus loss's the OS's relative-mouse release) must
+        // never drop the injected event (the gate-226's 5/5 repro —
+        // the demo's determinism is environment-independent by
+        // construction).
         if (m_players.size() == 1) {
-            s.inputLocked = m_window.relativeMouseMode();
+            s.inputLocked = m_demoPlayer ? true : m_window.relativeMouseMode();
         }
         p.update(dt, inputFor(i), s.inputLocked);
         if (i == 0) {

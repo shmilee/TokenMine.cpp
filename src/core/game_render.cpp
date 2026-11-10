@@ -530,7 +530,8 @@ void Game::drawHeldHand(const Mat4& view, const Mat4& projection) {
     // eat-lift offset, so the hand carries the arm.
     // Pure rendering: it reads the selected slot + the bow/eat channel
     // state and draws the arm + one item model; it mutates nothing.
-    if (!firstPersonArmVisible(m_cameraMode, m_window.relativeMouseMode(),
+    if (!firstPersonArmVisible(m_cameraMode,
+                               m_demoPlayer ? true : m_window.relativeMouseMode(),
                                panelOpen())) {
         return;
     }
@@ -647,7 +648,7 @@ void Game::drawWorldOverlay(const Mat4& view, const Mat4& projection) {
     // block being broken; the outline over whatever block the ray hits.
     // Both are world-space draws through the UI shader (unlit).
     const bool playing =
-        m_window.relativeMouseMode() && !panelOpen();
+        (m_demoPlayer ? true : m_window.relativeMouseMode()) && !panelOpen();
     if (!playing) {
         return;
     }

@@ -91,10 +91,13 @@ void Game::handleInteraction(Player& p, PlayerSession& s, const Input& in, doubl
     m_sound.setListener(m_camera.position, m_camera.yaw);
     // R18: the SIM lock read — solo: the SDL state (the original value,
     // bit-identical); net: the player's N−D FrameState flag (the local
-    // fact enters the simulation through it).
+    // fact enters the simulation through it). V3-16e: the demo's player
+    // = the pure injection (always "locked" — the physical flap's
+    // drop's twin, see game_frame's inputLocked mirror).
     const bool locked =
-        (m_players.size() == 1) ? m_window.relativeMouseMode()
-                                : s.inputLocked;
+        (m_players.size() == 1)
+            ? (m_demoPlayer ? true : m_window.relativeMouseMode())
+            : s.inputLocked;
     if (!locked) {
         // Left click captures the pointer (standard first-person behavior)
         // — but never while dead (the death screen owns the input; R
@@ -2610,7 +2613,7 @@ void Game::updateEatChannel(Player& p, PlayerSession& s, const Input& in, double
     // the stack emptied some other way). Any of them cancels the channel
     // — the food is NOT consumed.
     const ItemStack& stack = s.inventory.at(s.selectedSlot);
-    if (p.isDead() || !m_window.relativeMouseMode() ||
+    if (p.isDead() || !(m_demoPlayer ? true : m_window.relativeMouseMode()) ||
         panelOpen() || p.health() < s.interaction.eatStartHealth ||
         s.selectedSlot != s.interaction.eatSlot || stack.item != s.interaction.eatItem) {
         resetEatChannel(s);

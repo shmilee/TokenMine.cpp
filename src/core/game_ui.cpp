@@ -257,7 +257,7 @@ void Game::handleUiKeys() {
     // screen) C does nothing — the E-key pattern. The mode is session
     // state (never saved): a loaded world starts in first person, the
     // Minecraft convention.
-    if (m_input.wasPressed(GameKey::C) && m_window.relativeMouseMode()) {
+    if (m_input.wasPressed(GameKey::C) && (m_demoPlayer ? true : m_window.relativeMouseMode())) {
         m_cameraMode =
             m_cameraMode == CameraMode::First
                 ? CameraMode::ThirdBack
@@ -310,7 +310,7 @@ void Game::handleUiKeys() {
                 m_input.setTypingSuppressed(false);
             }
         } else if (m_input.wasPressed(GameKey::T) &&
-                   m_window.relativeMouseMode() && !panelOpen() &&
+                   (m_demoPlayer ? true : m_window.relativeMouseMode()) && !panelOpen() &&
                    !localPlayer()->isDead()) {
             m_chatInputActive = true;
             m_chatBuffer.clear();
@@ -325,10 +325,14 @@ void Game::handleUiKeys() {
         PlayerSession& s = *m_sessions[i];
         const Input& in = inputFor(i);
         // R18: the sim lock read — solo: the SDL state (the original
-        // value); net: the player's N−D FrameState flag.
+        // value); net: the player's N−D FrameState flag. V3-16e: the
+        // demo's player = the pure injection (always "locked" — the
+        // physical flap's drop's twin, see game_frame's inputLocked
+        // mirror).
         const bool locked =
-            (m_players.size() == 1) ? m_window.relativeMouseMode()
-                                    : s.inputLocked;
+            (m_players.size() == 1)
+                ? (m_demoPlayer ? true : m_window.relativeMouseMode())
+                : s.inputLocked;
         // CRAFT-7: the top-row digits select the hotbar slot directly
         // (Minecraft; the Tab cycle stays). V3-11b: with the creative
         // search FOCUSED (the 物品栏 tab open) a digit is TEXT (it types
@@ -1451,7 +1455,7 @@ void Game::renderUi() {
     // player, the pre-V3-12b value).
     Player* lplayer = localPlayer();
     PlayerSession& lsess = localSession();
-    const bool locked = m_window.relativeMouseMode();
+    const bool locked = m_demoPlayer ? true : m_window.relativeMouseMode();
     const Mat4 ortho = uiProjection(w, h);
 
     // Palette (Minecraft-like: dark translucent panels, gray borders, the

@@ -26,11 +26,95 @@ the build script:
   g.dump("assets/demos/guide_mining_timeline.json")
 """
 import math
+import json
 import os
 import sys
 
 SENS = 0.0025          # radians / pixel (the mouseSensitivity's default)
-WALK = 4.3             # blocks / second (the walkSpeed's default)
+# The ENT-7's ground walk's calibration model (the player.cpp 358-394's
+# twin's): the exponential approach to the walkSpeed (the kGroundAccelRate
+# 8.0's k) + the release's slide (the kGroundDecelRate 12.0's k, the
+# kVelocityStopEps 0.001's rest's). The per-leg's distance is the hold's
+# length's FUNCTION (the inertia's — a constant m/s's WRONG): the 33-f's
+# hold's 2.2056-m's steady's, the gate-226's probe's ground truth's (7
+# chained 33-f's legs = 15.4922 m's the measured's vs the model's 15.4917
+# = 0.0005-m's match). The old's flat WALK constant's (the 4.3's nominal's
+# / the 3.55's the mis-attributed's) both the wrong's = the v3.1-v3.11's
+# 6/6's gate-catch's root's (PITS 417).
+K_WALK_ACCEL = 8.0     # the kGroundAccelRate's (player.hpp)
+K_WALK_DECEL = 12.0    # the kGroundDecelRate's (player.hpp)
+WALK_TARGET = 4.3      # the walkSpeed's param's (player.hpp's 4.3f's)
+_WALK_DT = 1.0 / 60.0  # the demo's dt's (the created dmo's 16.6667-ms's uniform's)
+_WALK_FA = 1.0 - math.exp(-K_WALK_ACCEL * _WALK_DT)
+_WALK_FD = math.exp(-K_WALK_DECEL * _WALK_DT)
+_WALK_EPS = 0.001      # the kVelocityStopEps's (player.hpp's)
+_WALK_COAST = 9        # the release's frames per leg: the up's frame's + the 8-f's settle's pause (the next leg's face frame = the 9th's, the W-up's)
+
+
+def _walk_dd(n, vx, vz, axis):
+    """The n-f's W hold's + the 9-f's coast's (the game's per-frame's the
+    mirror's): returns (axis's dist, perp's dist, exit's vx, exit's vz).
+    axis = +1/-1 = the x's leg, +2/-2 = the z's leg. The game's face
+    (player.cpp 358-394): per frame the axis's component ramps
+    (T - v)*FA toward the wish's, the PERP's (the old's direction's —
+    the corner's entry's) decays v*(1-FA) while W's the held's, then the
+    coast's 9-f's both decay's FD's the kVelocityStopEps's the zero's —
+    the v3.21's gate-226's root 8: the entry's the velocity's at the
+    corner's is the PERP's (the previous's leg's the coast's exit's),
+    NOT the along-axis's (the scalar's model's the corner's the along's
+    0.06-0.16-m's the UNDERSHOOT's + the perp's 0.07-0.08-m's the
+    DRIFT's the twin's; the S1's the per-leg's the probe's the rest-entry
+    17-f's the +0.010-vs-model-+0.0096's the per-frame's exact's
+    re-verified's)."""
+    T = WALK_TARGET
+    s = 1.0 if axis > 0 else -1.0
+    # the entry's the component's ALONG the axis's (the sign's the flip's
+    # for the negative's axis's — the v3.21's gate-226's the 11-m-at-8-f's
+    # the mis-signed entry's the loud's the assert's the twin's)
+    if axis in (1, -1):  # the x's leg
+        va, vp = vx * s, vz
+    else:                # the z's leg
+        va, vp = vz * s, vx
+    da = dp = 0.0
+    for _ in range(n):
+        va += (T - va) * _WALK_FA
+        vp *= (1.0 - _WALK_FA)
+        da += va * _WALK_DT
+        dp += vp * _WALK_DT
+    for _ in range(_WALK_COAST):
+        va *= _WALK_FD
+        if abs(va) < _WALK_EPS:
+            va = 0.0
+        vp *= _WALK_FD
+        if abs(vp) < _WALK_EPS:
+            vp = 0.0
+        da += va * _WALK_DT
+        dp += vp * _WALK_DT
+    s = 1.0 if axis > 0 else -1.0
+    if axis in (1, -1):  # the x's leg: axis = x, perp = z
+        evx, evz = s * va, vp
+    else:                # the z's leg: axis = z, perp = x
+        evx, evz = vp, s * va
+    return s * da, dp, evx, evz
+
+
+def _walk_hold_for(d, vx, vz, axis):
+    """The hold's frames for the door-to-door's distance d along `axis`
+    from the ACTUAL entry velocity vector (the vector's model's the face
+    — the v3.21's root 8's the fix's), within the +-0.04-m's the
+    assert's face."""
+    best = None
+    besterr = None
+    for n in range(8, 160):
+        da, dp, evx, evz = _walk_dd(n, vx, vz, axis)
+        err = abs(da) - d
+        if besterr is None or abs(err) < abs(besterr):
+            best, besterr = n, err
+    assert abs(besterr) <= 0.04, (
+        "walk_leg: %s m along axis %s from entry (%.3f, %.3f) not "
+        "reachable within tolerance (the nearest's %d f = %s m)"
+        % (round(d, 2), axis, vx, vz, best, round(abs(da), 3)))
+    return best
 # The creative fly's horizontal: the walkSpeed x kFlySpeedMultiplier's
 # NOMINAL 6.88, the MEASURED 7.12 (the 17-f hold's 2.0112-m's twin, the
 # PITS 416's calibration's). The fly's v is the isDown's direct-set's (no
@@ -39,15 +123,6 @@ WALK = 4.3             # blocks / second (the walkSpeed's default)
 # for the fly — the fly's self-anchoring's face).
 FLY = 7.12             # blocks / second (the creative fly's horizontal)
 EYE = 1.62             # the eye's height over the feet
-WALK_STOP_MARGIN = 2  # the hold's stop margin (frames): the hold's
-                       # start's input-registration's loss (~2.5f, the
-                       # calibration's face: 103f -> 100.4f eff) means a
-                       # hold of round(d/WALK*60)+2 frames stops 0.03-
-                       # 0.11 m SHORT of the leg's end — inside the cell
-                       # (the relative aim's tolerance). The TRACK models
-                       # the exact corner arrival (the face below).
-                       # (the axis-aligned probe's face: a hold's first
-                       # ~2.5 frames move ~0 — the track deducts 3)
 MIN_CLICK_GAP = 20     # the panel's click's spacing (the 0.3-s
                        # double-click collect window's 18-frame's margin)
 
@@ -63,6 +138,12 @@ class Guide:
         self.yaw = float(yaw)
         self.pitch = float(pitch)
         self.cursor = 0
+        # the tracked velocity VECTOR (the v3.21's root 8's face — the
+        # scalar's the _walkV's the corner's the perp's the loss's the
+        # twin's): the axis's the ramp's + the perp's the decay's the
+        # game's the mirror's the (player.cpp 358-394's).
+        self._walkVx = 0.0
+        self._walkVz = 0.0
         self.actions = []
         self._last_panel_click = -10 ** 9
         # The fly's toggles' frames (the gamepad's B's the post-patch's face —
@@ -78,6 +159,8 @@ class Guide:
         pure no-op event — the wall's dts' face, the sim's zero)."""
         f = int(f)
         assert f >= 0, "a frame is not negative"
+        if f > self.cursor:
+            self._coast(f - self.cursor)
         if f >= self.cursor:
             # the extension's event (a zero wheel = the inject's
             # handleMouseWheel(0)'s no-op, the length's carrier)
@@ -88,6 +171,36 @@ class Guide:
 
     def _now(self):
         return self.cursor
+
+    def _coast(self, frames):
+        """The release's slide (the player.cpp 375-394's twin's): the
+        tracked velocity's exp decay over `frames` of no-W — the
+        position's the ADVANCE's too (the v3.21's root 8: the settle's
+        gap's the residual's the 0.05-m's the slide's the S1's the f938-f
+        1028's the +0.052-m's the probe's the twin's — the old's
+        no-position's _coast's the track's the 0.05-m's the off's)."""
+        x, z = self.x, self.z
+        vx, vz = self._walkVx, self._walkVz
+        for _ in range(int(frames)):
+            vx *= _WALK_FD
+            if abs(vx) < _WALK_EPS:
+                vx = 0.0
+            vz *= _WALK_FD
+            if abs(vz) < _WALK_EPS:
+                vz = 0.0
+            x += vx * _WALK_DT
+            z += vz * _WALK_DT
+        self.x, self.z = x, z
+        self._walkVx, self._walkVz = vx, vz
+
+    def _to(self, f):
+        """Advance the cursor to f, coasting the gap (the release's
+        slide's track's twin's — the walk's calibration's state stays
+        honest across every non-walk beat)."""
+        f = int(f)
+        if f > self.cursor:
+            self._coast(f - self.cursor)
+        self.cursor = max(self.cursor, f)
 
     def fly_toggle(self, f):
         """Record a gamepad-B fly toggle at frame f (the sim-frame's
@@ -101,19 +214,6 @@ class Guide:
         movement, no cursor advance (a zero-duration input)."""
         self.at(f)
         self.fly_toggles.append(int(f))
-
-    def _track_walk(self, frames, yaw=None):
-        """Advance the position (the W/A/S/D's intent — the caller
-        passes the held key's set; the flat ground's assumption: the
-        guide scenes are the platform's face, the y's constant)."""
-        if yaw is None:
-            yaw = self.yaw
-        fx = -math.sin(yaw)
-        fz = -math.cos(yaw)
-        rx = -fz
-        rz = fx
-        dist = WALK * frames / 60.0
-        return (fx, fz, rx, rz, dist)
 
     # -- the capture's face (the pointer's lock) --------------------------
     def capture(self, f):
@@ -130,7 +230,7 @@ class Guide:
                              "button": "left"})
         self.actions.append({"at_frame": f + 1, "action": "mouse_up",
                              "button": "left"})
-        self.cursor = f + 1
+        self._to(f + 1)
         return self
 
     # -- the look's face -------------------------------------------------
@@ -205,7 +305,7 @@ class Guide:
             "at_frame": f, "action": "mouse_move",
             "dx": round(-dyaw / SENS, 3), "dy": 0.0})
         self.yaw += dyaw
-        self.cursor = f + dur
+        self._to(f + dur)
         return self
 
     # -- the walk's face -------------------------------------------------
@@ -222,7 +322,7 @@ class Guide:
                 "at_frame": fi, "action": "mouse_move",
                 "dx": round(-step / SENS, 3), "dy": 0.0})
             self.yaw += step
-        self.cursor = f + dur
+        self._to(f + dur)
         return self
 
     def face(self, f, yaw):
@@ -239,8 +339,9 @@ class Guide:
     def walk_leg(self, f, tx, tz, y=None, hold=None, fly=False):
         """One axis-aligned walk leg to the EXACT point (tx, tz) (the
         cell-center's +0.5's the caller's face). The hold's length =
-        the distance's frames + the stop margin (the reg's loss's twin:
-        the actual stop is 0.03-0.11 m short, the cell's inside); the
+        the ENT-7 model's solve for the door-to-door's distance (the
+        inertia's twin: the accel's ramp + the release's 9-f slide —
+        the +-0.03-m's land, the gate-226's probe's calibrated); the
         track models the exact corner (the relative aim's tolerance).
         y: the caller's KNOWLEDGE of the leg's END's feet height (the
         step-up's +1 / the drop's -N — the track's flat assumption's
@@ -257,6 +358,8 @@ class Guide:
         assert abs(dx) < 0.05 or abs(dz) < 0.05, \
             "walk_leg: axis-aligned legs only (the diagonal's sub-axis" \
             " physics loss — split the corner)"
+        axis = (1 if dx > 0 else -1) if abs(dx) > abs(dz) \
+            else (2 if dz > 0 else -2)
         yaw = math.atan2(-dx, -dz)
         dyaw = (yaw - self.yaw + math.pi) % (2 * math.pi) - math.pi
         if abs(dyaw) > 0.001:
@@ -268,16 +371,32 @@ class Guide:
             if fly:
                 hold = int(round(d / FLY * 60))
             else:
-                hold = int(round(d / WALK * 60)) + WALK_STOP_MARGIN
+                hold = _walk_hold_for(d, self._walkVx, self._walkVz, axis)
         frames = hold
         assert frames >= 8, "walk_leg: a too-short leg"
         self.actions.append({"at_frame": f + 1, "action": "hold",
                              "key": "w", "until_frame": f + 1 + frames})
-        self.x = tx
-        self.z = tz
+        if fly:
+            self._walkVx, self._walkVz = 0.0, 0.0  # the fly's exit's velocity's unmodeled's
+        else:
+            da, dp, evx, evz = _walk_dd(frames, self._walkVx,
+                                        self._walkVz, axis)
+            self._walkVx, self._walkVz = evx, evz
+            # the HONEST track's (the v3.21's root 8's face): the axis's
+            # lands at the model's da (≈ d's the +-0.04-m's the solve's
+            # granularity's — the walk_to's 0.05's snap's absorbs it),
+            # the PERP's drift's dp's the OLD's direction's the adds to
+            # the position's (the track's the game's the frame-by-frame's
+            # twin's now — the S1's the 0.07-m's the boundary's the
+            # self-correcting's the walk_to's the residual's the face).
+            x0, z0 = self.x, self.z
+            if axis in (1, -1):
+                self.x, self.z = x0 + da, z0 + dp
+            else:
+                self.x, self.z = x0 + dp, z0 + da
         if y is not None:
             self.y = y
-        f = f + 1 + frames + 8  # the settle's pause
+        f = f + 1 + frames + 8  # the settle's pause (the 9th coast frame = the next leg's face frame, modeled in _walk_dd)
         self.cursor = f
         return f
 
@@ -343,14 +462,14 @@ class Guide:
                              "key": key})
         self.actions.append({"at_frame": f + gap, "action": "key_up",
                              "key": key})
-        self.cursor = f + gap
+        self._to(f + gap)
         return self
 
     def hold_key(self, f, dur, key):
         self.at(f)
         self.actions.append({"at_frame": f, "action": "hold",
                              "key": key, "until_frame": f + dur})
-        self.cursor = f + dur
+        self._to(f + dur)
         return self
 
     def mine(self, f, seconds=3.5):
@@ -363,7 +482,7 @@ class Guide:
                              "button": "left"})
         self.actions.append({"at_frame": f + frames, "action": "mouse_up",
                              "button": "left"})
-        self.cursor = f + frames
+        self._to(f + frames)
         return self
 
     def click(self, f, button="left", hold=4):
@@ -374,7 +493,7 @@ class Guide:
                              "button": button})
         self.actions.append({"at_frame": f + hold, "action": "mouse_up",
                              "button": button})
-        self.cursor = f + hold
+        self._to(f + hold)
         return self
 
     def pick_up_walk(self, f, dur=50):
@@ -382,7 +501,7 @@ class Guide:
         the walk_dir's w/s/a/d's quarter turns)."""
         self.walk_dir(f, dur // 4, "w")
         self.walk_dir(f + dur // 4, dur // 4, "s")
-        self.cursor = f + dur
+        self._to(f + dur)
         return self
 
     def wheel(self, f, ticks):
@@ -391,7 +510,7 @@ class Guide:
         self.at(f)
         self.actions.append({"at_frame": f, "action": "wheel",
                              "ticks": int(ticks)})
-        self.cursor = f + 1
+        self._to(f + 1)
         return self
 
     # -- the panel's face ------------------------------------------------
@@ -400,7 +519,7 @@ class Guide:
         self.actions.append({"at_frame": f, "action": "panel_click",
                              "panel": panel, "slot": slot,
                              "button": button})
-        self.cursor = f + 1
+        self._to(f + 1)
         return self
 
     def panel(self, f, panel, slot, button="left"):
@@ -424,7 +543,7 @@ class Guide:
         self._panel_raw(f + 10, panel, slot, "left")
         self._panel_raw(f + 35, panel, target, "left")
         self._last_panel_click = f + 35
-        self.cursor = f + 35
+        self._to(f + 35)
         return self
 
     def open_panel(self, f):
@@ -454,13 +573,11 @@ class Guide:
             assert doc["actions"][i]["at_frame"] >= \
                 doc["actions"][i - 1]["at_frame"], \
                 "the timeline's out-of-order frame (the author's reject)"
-        import json
         json.dump(doc, open(path, "w"), indent=2)
         # The fly's toggle's side-car (the dmo's post-patch's input —
         # demo_fly_patch.py's): written next to the timeline (the same
         # directory's the .fly_toggles.json's suffix's).
         if self.fly_toggles:
-            import os
             tp = os.path.join(os.path.dirname(os.path.abspath(path)),
                               os.path.basename(path) + ".fly_toggles.json")
             json.dump(sorted(self.fly_toggles), open(tp, "w"))
