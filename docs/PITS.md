@@ -3,8 +3,25 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–419，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–420，新条目继续前插于尾部块首。
 
+- **下界门 guide authoring 传送坑（PITS 420，门 229 v3.39.0 V3-16h①
+  ① 下界门）**——① **点火瞄准 = 底行顶面（朝内面）**：portal 框单格厚
+  （内 air 与 obsidian 环共面），aim 环格**朝框内的面**（底行 y54 的 +y
+  顶面：aim 点 (5.5,55,-3.5) 命中 (5,54,-4) 顶面，法向邻格 (5,55,-4) =
+  interior → 点火）；aim 外侧面（法向邻格 = 框外）= 机制正确无反应
+  （PITS 386① 同款，flint_and_steel 的 ignites_flamable 分支）。② **传送
+  = 瞬移，author track 失效**：travel 换维度（8:1 映射），Guide 的
+  self.x/y/z 不随瞬移更新 → **手动 re-anchor**（直设 g.x/g.y/g.z 到落点
+  (1,55,-0.5)，无公开 set_pos API）——漏 re-anchor = 后续 walk_leg 从错
+  位起算全脱轨。③ **返程 auto-re-travel 乒乓**：落点即在生成 portal 内
+  （底中心 (1,55,-0.5) 重叠 portal 格 y55-57）→ 900-f 共享冷却后 auto
+  返程 → 回 overworld 落点也在原 portal 内 → 再 auto 去下界（实测三振
+  乒乓）。**规避 = 下 frame 到地面**（walk +z 4-m 离 frame，2-m 落 y53
+  无坠伤）→ 出 portal AABB = 无 re-travel；本支终态在下界地面（非 portal
+  内）。④ **下界 frame 悬空 2-m**：生成 portal 帧 y54-58（底行 obsidian
+  y54 顶 y55），下界高原面 y53 → frame 悬 2-m，落点 y55 站 obsidian 底
+  行（非浮空）；下 frame = 2-m 落（fall offset 3 无坠伤）。
 - **黑夜 guide authoring 弓箭 combat 八坑（PITS 419，门 228 v3.38.0
   V3-16g ⑩ 黑夜历险）**——① **弓 = 短程武器（flat range v²/g =
   11.25m）**：shoot_speed 15 + g 20 → 平射极限 11.25m；14-19m 处任何

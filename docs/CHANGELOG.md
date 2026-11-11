@@ -11,6 +11,31 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.39.0（2026-11-12）— V3-16h① 扩展指导 demo 族：① 搭建下界传送门 + 去下界（门 229 全 PASS）
+
+**V3-16 相位 H/7 = dimension 章节首支**（16h 拆两版：① 下界门 = v3.39.0 /
+② 末影龙 = v3.40.0，16d 拆分先例；**零内核**——下界传送门/8:1 映射/下界
+worldgen/flint_and_steel 点火全既有 V3-1 Phase B 基建，16a 的
+scene/panel_click/索引全复用，内容 + 工具链增量）：**guide_nether**
+（10865f 03:01，98 actions：scene = 12×11 平台 x0..11 z-8..3 顶 y54 正
+午 SURVIVAL + 预置 flint_and_steel h0 + **obsidian 4×5 传送门框**
+【14 ring 格平面 z=-4，含角，未点燃——obsidian 挖掘 15-s/格 = 预置】；
+tour = P0 开场 → **点火**【flint_and_steel aim 底行顶面 (5.5,55,-3.5) →
+同帧 "Portal activated at (5,54,-4) (4x5)"】→ **站入 + 传送**【walk 入
+portal 60-f 倒计时 → "Traveled to nether at (1,55,-1) from (5,55,-4)"，
+8:1 映射落生成帧底中心 (1,55,-0.5)】→ **下 frame** 到 nether 地面 y53
+【2-m 落无坠伤】→ **观下界**【walk 回路 + C 第三人称 sweep ×3：玄武岩柱
++ 熔岩海 + 无天穹红天 + 生成 portal】→ 收束（player 下界 (0.97,53,2.87)
+hp20）；**返程不做**【下界生成 portal 返程 = 900-f 冷却 + 2-m 上台帧难
++ auto-re-travel 乒乓，② 走 end exit portal 更自然，本支聚焦"去下界"】）；
+**门内捕获 PITS 420 四坑**【①点火 aim 底行顶面朝内面 ②传送后 author
+track 失效须手动 re-anchor ③返程 auto-re-travel 乒乓 = 下 frame 规避
+④下界 frame 悬空 2-m】；index **dimension seq 1**【tags nether/portal/
+travel】；2998/2998（banner re-pin 1）+ S1 第 110 次【f60 ×2 ≡ base19】
++ canary 4×2 新≡旧二进制（tm_v338 v3.38.0）RAW+savenorm EXACT +
+guide_nether ×2 RAW/savenorm EXACT + 性能 A/B 同档；详见
+`docs/archive/phase-3.39.0.md`
+
 ## v3.38.0（2026-11-12）— V3-16g 扩展指导 demo 族：⑩ 完整黑夜历险（门 228 全 PASS）
 
 **V3-16 相位 G/7**（survival 章节首支；**零内核**——弓/箭/火把/knockback/

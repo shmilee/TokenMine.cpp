@@ -348,7 +348,7 @@ a/b/c1/c2】+ V3-16 进行中【16a/16b/16c/16d/16e/16f ✅】/ V3-17 / V3-18 / 
   + 8 四角塔，内圈地板 38 块 CUT 记偏离；16d 拆两版 = 11-09 用户
   定案（⑧材料 = 16e v3.36.0）】→ ✅ 16e = v3.36.0 门 226【⑧材料
   25383f，7 biome 床 33 标本收集 + 内核 10 处 demo 恒锁定 + 向量行走
-  模型，PITS 417 二十二坑】→ ✅ 16f = v3.37.0 门 227【⑨河流 19841f，挖河 15 + 双舀双倒对称 V 梯度 + 营火水灭 + 火把对比 + 游泳横渡 + E 面板 + 第三人称巡视；1-deep 密封池 + level-7 舀痕钉 + mk_scene fluids/campfires 两 strict 面 + 列/行 2-m 分块末腿同轴纪律，PITS 418 十六坑】→ ✅ 16g = v3.38.0 门 228【⑩黑夜历险 18301f，造火把 + 弓箭 + 打败 zombie + 活到天亮；弓 = 短程 v²/g 11.25-m 弹道 aim pin + release 帧 aim + hold=100 满力 + knockback 定点 5 轮迭代 + 火把环 + seed 7 唯一 hostile，PITS 419 八坑；index survival seq 1】→ 16h ①下界门②末影龙 + coop 占位**）：10 主题玩法指导，
+  模型，PITS 417 二十二坑】→ ✅ 16f = v3.37.0 门 227【⑨河流 19841f，挖河 15 + 双舀双倒对称 V 梯度 + 营火水灭 + 火把对比 + 游泳横渡 + E 面板 + 第三人称巡视；1-deep 密封池 + level-7 舀痕钉 + mk_scene fluids/campfires 两 strict 面 + 列/行 2-m 分块末腿同轴纪律，PITS 418 十六坑】→ ✅ 16g = v3.38.0 门 228【⑩黑夜历险 18301f，造火把 + 弓箭 + 打败 zombie + 活到天亮；弓 = 短程 v²/g 11.25-m 弹道 aim pin + release 帧 aim + hold=100 满力 + knockback 定点 5 轮迭代 + 火把环 + seed 7 唯一 hostile，PITS 419 八坑；index survival seq 1】→ ✅ 16h① = v3.39.0 门 229【①下界门 10865f，obsidian 4×5 帧预置 + flint_and_steel 点火（aim 底行顶面朝内面）+ 站入 60-f 传送（8:1 映射落生成帧）+ 下 frame 观下界（玄武岩柱/熔岩海/红天）；返程不做【auto-re-travel 乒乓规避 = 下 frame，② 走 end exit 更自然】，PITS 420 四坑；index dimension seq 1】→ 16h② 末影龙 + coop 占位**）：10 主题玩法指导，
   每支 3-10 分钟级（现行 300-600 帧 = 5-10s 的 10-100×）：① 搭建
   下界传送门 + 去下界 ② 打末影龙（去末地 + 破晶 + 战斗 + 仪式）
   ③ 完整建造一栋房子 + 床 ④ 挖矿打造工具（木→镐→矿石）⑤ 补充体

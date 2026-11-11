@@ -101,6 +101,18 @@
             ],
             "file": "guide_night.dmo",
             "length_frames": 18301
+        },
+        {
+            "category": "dimension",
+            "seq": 1,
+            "mode": "solo",
+            "tags": [
+                "nether",
+                "portal",
+                "travel"
+            ],
+            "file": "guide_nether.dmo",
+            "length_frames": 10865
         }
     ]
 }
