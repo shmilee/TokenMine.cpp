@@ -145,7 +145,25 @@ fluids/campfires 两 strict 面 + 14 段前缀验证；门内捕获 PITS 418 十
 点落格】；2998/2998【banner re-pin 1】+ S1 第 108 次【f60 ×2 ≡
 base19】+ canary 4×2 新≡旧二进制 RAW+savenorm EXACT + guide_river ×2
 RAW/savenorm EXACT + 性能 A/B 同档【终档跨树 savenorm EXACT = 结构
-性零成本】）**
+性零成本】）**；**v3.38.0 = V3-16g 扩展指导 demo 族 ⑩完整黑夜
+历险（门 228，11-12：guide_night 18301f 05:05 = survival 章首支，
+40×26 平台 + time 0.55 入夜 + SURVIVAL + seed 7【seedhunt 8 粒：首批
+4 = sheep/chicken/chicken/zombie f150 唯一 hostile，无 skeleton
+wither/无 spider kite 账本】+ 预置 planks 9/coal 1/flint 2/feather
+2；tour = P0 开场 → kite NE 造 table → SE 停扎最小 combat kit
+【table (38,54,-2) + sticks + bow（P=g5）+ arrows×1】→ **弓箭
+combat**【N 走到 (38.5,-14) 7-m，4 箭 full-draw 站射击杀 zombie
+f3524——**弓 = 短程 v²/g 11.25-m**，箭 release 发射按 release 帧
+aim + hold=100 满力 + 弹道 lead + knockback 定点 5 轮迭代】→ 回 SE
+造余 kit【select 非弓再开容器】→ **火把环 ×4**【先走到点再放】→
+黑夜巡视【C 第三人称 + E 面板展示】→ 黎明 face E（t0.058）；终态
+钉 hp20 存活 + stick 2/bow(dur380)/arrow 4 + 4 火把 + table +
+entities 0【掉落 120s 消散】；零内核【16a 全复用】+ arrow_sim/
+aim_from_log 弓箭弹道 aim pin 探针族 + 8 段前缀验证；门内捕获 PITS
+419 八坑；2998/2998【banner re-pin 1】+ S1 第 109 次【f60 ×2 ≡
+base19】+ canary 4×2 新≡旧二进制 RAW+savenorm EXACT + guide_night ×2
+RAW(169498 B)/savenorm EXACT + 性能 A/B 同档【changesApplied 9/3/1
+vs 9/2/1，终档跨树 savenorm EXACT = 结构性零成本】）**
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
@@ -164,7 +182,9 @@ pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
 16c ✅ v3.34.0 = ③房子+床（门 224，day1 全 4 支完成）
 + 16d ✅ v3.35.0 = ⑦皇宫（门 225，build 章首支，100 块）
 + 16e ✅ v3.36.0 = ⑧材料（门 226，build 章第二支，7 biome 床
-33 标本）+ 16f ✅ v3.37.0 = ⑨河流（门 227，build 章第三支，19841f）**，16g~h 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
+33 标本）+ 16f ✅ v3.37.0 = ⑨河流（门 227，build 章第三支，19841f）
++ 16g ✅ v3.38.0 = ⑩黑夜历险（门 228，survival 章首支，18301f，弓箭
+ combat + 火把环 + 活到天亮，PITS 419 八坑）**，16h 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
 MOTD 并入】】**【大项已相位拆分 V3-10a~d /
 V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
 
@@ -225,7 +245,7 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -390,6 +410,46 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 228（**V3-16g 扩展指导 demo 族 ⑩完整黑夜历险 v3.38.0** 门
+  228 全 PASS【V3-16 相位 G/7 = survival 章节首支；**零内核**——弓/
+  箭/火把/knockback/mob 生成/磁吸/自然回血全既有，16a 的
+  scene/panel_click/索引全复用，纯内容 + 工具链增量】：**guide_night
+  18301f 05:05**【scene = 40×26 平台 x0..39 z-25..-1 顶 y54 **time
+  0.55 入夜** SURVIVAL **seed 7**【seedhunt 8 粒：首批 4 = sheep/
+  chicken/chicken/**zombie f150 (20.5,-17.5) 唯一 hostile**，无
+  skeleton【wither 箭站桩 9s 死】/无 spider【1.0-b/s 打不过 11.5-m
+  列 kite 账本】】+ 预置 planks 9/coal 1/flint 2/feather 2；tour = P0
+  开场 → kite NE 造 table → SE 停扎最小 combat kit【table
+  (38,54,-2) + sticks + bow（P=g5 非 g4）+ arrows×1】→ **弓箭
+  combat**【N 走到 (38.5,-14) 7-m，4 箭 full-draw 站射击杀 zombie
+  **f3524**】→ 回 SE 造余 kit【select 非弓再开容器】→ **火把环 ×4**
+  【(26,-13)/(19,-13)/(13,-13)/(19,-19)，先走到点再放】→ 黑夜巡视
+  【C 第三人称 + E 面板展示——f3540 新 spawn = cow 被动，玩家 hp20
+  存活至 dawn t0.058】→ 黎明 face E；终态钉 hp20 + stick 2/
+  bow(dur380)/arrow 4 + 4 火把 + table + entities 0【掉落 120s 消散】】+
+  **combat 力学 = 16g 核心创新**【**弓 = 短程 v²/g 11.25-m**
+  【shoot_speed 15 + g 20，14-19-m 任何 ≤12-m lead 不中，v14 19-m
+  4 箭全 miss 实证】+ 箭 **release 发射非 press**【aim→release 121-f
+  追击推进 1.6-m，按 release 帧位置 aim】+ **hold=100 保满力**
+  【hold96 1-frame 欠拉 = 99-power 19.79-dmg 0.2-hp 存活，v19
+  实证】+ 弹道 lead mid-window【7-m +1.85/5.6-m +1.0/4.3-m +0.65/
+  2.5-m +0.25】+ **knockback 定点 5 轮迭代**【arrowKnockback 4-b/s +
+  2.5-lift，zombie 轨迹依赖哪几箭中，v15→v19 2→2→3→3→4 命中收敛，
+  arrow_sim.py/aim_from_log.py 探针族】】+ **工具链增量**【gen_guide_
+  night.py 场景 + build_guide_night.py beat 脚本 + arrow_sim.py/
+  aim_from_log.py 弓箭弹道 aim pin 探针 + 8 段前缀验证】；2998/
+  2998【banner re-pin 1，内容相位零新增】+ S1 第 109 次【f60 ×2 ≡
+  base19 + banner 零像素】+ canary 4×2 新≡旧二进制（tm_v337
+  v3.37.0）RAW+savenorm EXACT + guide_night ×2 RAW(169498 B)/savenorm
+  EXACT + 性能 A/B 同档【OW 900f 三窗 upd med 0.575/0.582/0.586 vs
+  0.562/0.583/0.579 + render/swap 同档 + changesApplied 9/3/1 vs
+  9/2/1【f600 3v2 = real-dt streaming 抖动带，门 207 先例】+ 终档跨
+  树 savenorm EXACT = 结构性零成本】；**门内捕获 PITS 419 八坑**
+  【①弓短程 11.25-m 19-m 全 miss ②release 发射 ③hold96 欠拉 0.2-hp
+  存活 ④knockback 定点迭代 ⑤持弓 RMB = 拉弓非开容器 ⑥火把先走到点
+  再放 ⑦zombie 自 spawn 即追 s2 受 6 伤 ⑧inv_grid = 制作网格非背包
+  + panel tap ≥25-f + bow P = g5】；详见
+  `docs/archive/phase-3.38.0.md`）；
   门计数 227（**V3-16f 扩展指导 demo 族 ⑨河流 v3.37.0** 门 227 全
 PASS【V3-16 相位 F/7 = build 章节第三支；**零内核**——16a 的
 scene/panel_click/索引全复用，纯内容 + 工具链增量，内核零变更】：

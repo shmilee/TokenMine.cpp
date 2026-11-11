@@ -1,60 +1,106 @@
 {
-  "demos": [
-    {
-      "category": "day1",
-      "seq": 1,
-      "mode": "solo",
-      "tags": ["mining", "crafting", "furnace"],
-      "file": "guide_mining.dmo",
-      "length_frames": 11387
-    },
-    {
-      "category": "day1",
-      "seq": 2,
-      "mode": "solo",
-      "tags": ["wheat", "bread", "eating", "hunger"],
-      "file": "guide_food.dmo",
-      "length_frames": 18262
-    },
-    {
-      "category": "day1",
-      "seq": 3,
-      "mode": "solo",
-      "tags": ["fall", "healing", "regeneration"],
-      "file": "guide_regen.dmo",
-      "length_frames": 18344
-    },
-    {
-      "category": "day1",
-      "seq": 4,
-      "mode": "solo",
-      "tags": ["house", "bed", "sleep", "night"],
-      "file": "guide_house.dmo",
-      "length_frames": 18875
-    },
-    {
-      "category": "build",
-      "seq": 1,
-      "mode": "solo",
-      "tags": ["creative", "wall", "tower", "fly"],
-      "file": "guide_palace.dmo",
-      "length_frames": 19536
-    },
-    {
-      "category": "build",
-      "seq": 2,
-      "mode": "solo",
-      "tags": ["materials", "biomes", "collecting", "mining"],
-      "file": "guide_materials.dmo",
-      "length_frames": 25383
-    },
-    {
-      "category": "build",
-      "seq": 3,
-      "mode": "solo",
-      "tags": ["river", "water", "bucket", "swim"],
-      "file": "guide_river.dmo",
-      "length_frames": 19841
-    }
-  ]
+    "demos": [
+        {
+            "category": "day1",
+            "seq": 1,
+            "mode": "solo",
+            "tags": [
+                "mining",
+                "crafting",
+                "furnace"
+            ],
+            "file": "guide_mining.dmo",
+            "length_frames": 11387
+        },
+        {
+            "category": "day1",
+            "seq": 2,
+            "mode": "solo",
+            "tags": [
+                "wheat",
+                "bread",
+                "eating",
+                "hunger"
+            ],
+            "file": "guide_food.dmo",
+            "length_frames": 18262
+        },
+        {
+            "category": "day1",
+            "seq": 3,
+            "mode": "solo",
+            "tags": [
+                "fall",
+                "healing",
+                "regeneration"
+            ],
+            "file": "guide_regen.dmo",
+            "length_frames": 18344
+        },
+        {
+            "category": "day1",
+            "seq": 4,
+            "mode": "solo",
+            "tags": [
+                "house",
+                "bed",
+                "sleep",
+                "night"
+            ],
+            "file": "guide_house.dmo",
+            "length_frames": 18875
+        },
+        {
+            "category": "build",
+            "seq": 1,
+            "mode": "solo",
+            "tags": [
+                "creative",
+                "wall",
+                "tower",
+                "fly"
+            ],
+            "file": "guide_palace.dmo",
+            "length_frames": 19536
+        },
+        {
+            "category": "build",
+            "seq": 2,
+            "mode": "solo",
+            "tags": [
+                "materials",
+                "biomes",
+                "collecting",
+                "mining"
+            ],
+            "file": "guide_materials.dmo",
+            "length_frames": 25383
+        },
+        {
+            "category": "build",
+            "seq": 3,
+            "mode": "solo",
+            "tags": [
+                "river",
+                "water",
+                "bucket",
+                "swim"
+            ],
+            "file": "guide_river.dmo",
+            "length_frames": 19841
+        },
+        {
+            "category": "survival",
+            "seq": 1,
+            "mode": "solo",
+            "tags": [
+                "night",
+                "zombie",
+                "bow",
+                "torch"
+            ],
+            "file": "guide_night.dmo",
+            "length_frames": 18301
+        }
+    ]
 }

@@ -1,0 +1,2496 @@
+{
+  "world": {
+    "type": "scene",
+    "name": "guide_night"
+  },
+  "actions": [
+    {
+      "at_frame": 0,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 0,
+      "action": "mouse_down",
+      "button": "left"
+    },
+    {
+      "at_frame": 1,
+      "action": "mouse_up",
+      "button": "left"
+    },
+    {
+      "at_frame": 30,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 30,
+      "action": "mouse_move",
+      "dx": -140.0,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 120,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 120,
+      "action": "mouse_move",
+      "dx": 360.0,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 240,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 240,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 240,
+      "action": "mouse_move",
+      "dx": -220.0,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 265,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 265,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 266,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 297
+    },
+    {
+      "at_frame": 305,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 306,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 336
+    },
+    {
+      "at_frame": 344,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 345,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 375
+    },
+    {
+      "at_frame": 383,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 384,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 414
+    },
+    {
+      "at_frame": 422,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 423,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 453
+    },
+    {
+      "at_frame": 461,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 461,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 486,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 486,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 487,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 518
+    },
+    {
+      "at_frame": 526,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 527,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 557
+    },
+    {
+      "at_frame": 565,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 566,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 596
+    },
+    {
+      "at_frame": 604,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 605,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 635
+    },
+    {
+      "at_frame": 643,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 644,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 674
+    },
+    {
+      "at_frame": 682,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 683,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 713
+    },
+    {
+      "at_frame": 721,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 722,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 752
+    },
+    {
+      "at_frame": 760,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 761,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 791
+    },
+    {
+      "at_frame": 799,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 800,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 830
+    },
+    {
+      "at_frame": 838,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 839,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 854
+    },
+    {
+      "at_frame": 892,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 892,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 892,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 898,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 922,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 922,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h0",
+      "button": "left"
+    },
+    {
+      "at_frame": 947,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 947,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g0",
+      "button": "right"
+    },
+    {
+      "at_frame": 972,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 972,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g1",
+      "button": "right"
+    },
+    {
+      "at_frame": 997,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 997,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g2",
+      "button": "right"
+    },
+    {
+      "at_frame": 1022,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1022,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g3",
+      "button": "right"
+    },
+    {
+      "at_frame": 1047,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1047,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h0",
+      "button": "left"
+    },
+    {
+      "at_frame": 1072,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1072,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "out",
+      "button": "left"
+    },
+    {
+      "at_frame": 1097,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1097,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h4",
+      "button": "left"
+    },
+    {
+      "at_frame": 1122,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1122,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 1128,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 1147,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1147,
+      "action": "mouse_down",
+      "button": "left"
+    },
+    {
+      "at_frame": 1148,
+      "action": "mouse_up",
+      "button": "left"
+    },
+    {
+      "at_frame": 1182,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1182,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1182,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 1183,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1214
+    },
+    {
+      "at_frame": 1222,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1223,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1253
+    },
+    {
+      "at_frame": 1261,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1262,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1292
+    },
+    {
+      "at_frame": 1300,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1301,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1331
+    },
+    {
+      "at_frame": 1339,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1340,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1370
+    },
+    {
+      "at_frame": 1378,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1379,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1409
+    },
+    {
+      "at_frame": 1417,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1418,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1448
+    },
+    {
+      "at_frame": 1456,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1457,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1487
+    },
+    {
+      "at_frame": 1495,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1496,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1526
+    },
+    {
+      "at_frame": 1534,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1535,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1565
+    },
+    {
+      "at_frame": 1573,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1574,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1597
+    },
+    {
+      "at_frame": 1635,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1635,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1635,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1635,
+      "action": "mouse_move",
+      "dx": 1256.637,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 1636,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 1653
+    },
+    {
+      "at_frame": 1661,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1661,
+      "action": "key_down",
+      "key": "5"
+    },
+    {
+      "at_frame": 1667,
+      "action": "key_up",
+      "key": "5"
+    },
+    {
+      "at_frame": 1686,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1686,
+      "action": "mouse_move",
+      "dx": 1256.637,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 1711,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1711,
+      "action": "mouse_move",
+      "dx": 0.0,
+      "dy": 367.106
+    },
+    {
+      "at_frame": 1741,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1741,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 1745,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 1771,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1771,
+      "action": "mouse_move",
+      "dx": 0.0,
+      "dy": -70.329
+    },
+    {
+      "at_frame": 1801,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1801,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 1805,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 1866,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1866,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h0",
+      "button": "left"
+    },
+    {
+      "at_frame": 1891,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1891,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "g0",
+      "button": "right"
+    },
+    {
+      "at_frame": 1916,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1916,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "g1",
+      "button": "right"
+    },
+    {
+      "at_frame": 1941,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1941,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h0",
+      "button": "left"
+    },
+    {
+      "at_frame": 1966,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1966,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "out",
+      "button": "left"
+    },
+    {
+      "at_frame": 1991,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 1991,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 2016,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2016,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 2041,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2041,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "g1",
+      "button": "right"
+    },
+    {
+      "at_frame": 2066,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2066,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "g3",
+      "button": "right"
+    },
+    {
+      "at_frame": 2091,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2091,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "g7",
+      "button": "right"
+    },
+    {
+      "at_frame": 2116,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2116,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 2141,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2141,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h0",
+      "button": "left"
+    },
+    {
+      "at_frame": 2166,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2166,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "g5",
+      "button": "right"
+    },
+    {
+      "at_frame": 2191,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2191,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h0",
+      "button": "left"
+    },
+    {
+      "at_frame": 2216,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2216,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "out",
+      "button": "left"
+    },
+    {
+      "at_frame": 2241,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2241,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h6",
+      "button": "left"
+    },
+    {
+      "at_frame": 2266,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2266,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 2272,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 2291,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2291,
+      "action": "mouse_down",
+      "button": "left"
+    },
+    {
+      "at_frame": 2292,
+      "action": "mouse_up",
+      "button": "left"
+    },
+    {
+      "at_frame": 2326,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2326,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 2332,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 2356,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2356,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h2",
+      "button": "left"
+    },
+    {
+      "at_frame": 2381,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2381,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g0",
+      "button": "right"
+    },
+    {
+      "at_frame": 2406,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2406,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 2431,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2431,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g1",
+      "button": "right"
+    },
+    {
+      "at_frame": 2456,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2456,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 2481,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2481,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h3",
+      "button": "left"
+    },
+    {
+      "at_frame": 2506,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2506,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g2",
+      "button": "right"
+    },
+    {
+      "at_frame": 2531,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2531,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "out",
+      "button": "left"
+    },
+    {
+      "at_frame": 2556,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2556,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h7",
+      "button": "left"
+    },
+    {
+      "at_frame": 2581,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2581,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 2587,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 2606,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2606,
+      "action": "mouse_down",
+      "button": "left"
+    },
+    {
+      "at_frame": 2607,
+      "action": "mouse_up",
+      "button": "left"
+    },
+    {
+      "at_frame": 2641,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2641,
+      "action": "key_down",
+      "key": "7"
+    },
+    {
+      "at_frame": 2647,
+      "action": "key_up",
+      "key": "7"
+    },
+    {
+      "at_frame": 2671,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2671,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2671,
+      "action": "mouse_move",
+      "dx": 1256.637,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 2672,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 2703
+    },
+    {
+      "at_frame": 2711,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2712,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 2742
+    },
+    {
+      "at_frame": 2750,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2751,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 2781
+    },
+    {
+      "at_frame": 2789,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2790,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 2820
+    },
+    {
+      "at_frame": 2828,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2829,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 2859
+    },
+    {
+      "at_frame": 2867,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2868,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 2890
+    },
+    {
+      "at_frame": 2928,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2928,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2928,
+      "action": "mouse_move",
+      "dx": -344.904,
+      "dy": -386.392
+    },
+    {
+      "at_frame": 2953,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 2953,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 3053,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 3083,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3083,
+      "action": "mouse_move",
+      "dx": -63.66,
+      "dy": 34.703
+    },
+    {
+      "at_frame": 3108,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3108,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 3208,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 3238,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3238,
+      "action": "mouse_move",
+      "dx": -7.516,
+      "dy": 62.394
+    },
+    {
+      "at_frame": 3263,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3263,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 3363,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 3393,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3393,
+      "action": "mouse_move",
+      "dx": 91.993,
+      "dy": 72.755
+    },
+    {
+      "at_frame": 3418,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3418,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 3518,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 3698,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3698,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3698,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3698,
+      "action": "mouse_move",
+      "dx": -932.55,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 3699,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 3730
+    },
+    {
+      "at_frame": 3738,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3739,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 3769
+    },
+    {
+      "at_frame": 3777,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3778,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 3808
+    },
+    {
+      "at_frame": 3816,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3817,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 3847
+    },
+    {
+      "at_frame": 3855,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3856,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 3886
+    },
+    {
+      "at_frame": 3894,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3895,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 3918
+    },
+    {
+      "at_frame": 3956,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3956,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 3956,
+      "action": "key_down",
+      "key": "6"
+    },
+    {
+      "at_frame": 3962,
+      "action": "key_up",
+      "key": "6"
+    },
+    {
+      "at_frame": 3981,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4001,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4001,
+      "action": "mouse_move",
+      "dx": 0.0,
+      "dy": 216.54
+    },
+    {
+      "at_frame": 4031,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4031,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 4035,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 4096,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4096,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h0",
+      "button": "left"
+    },
+    {
+      "at_frame": 4121,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4121,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "g0",
+      "button": "right"
+    },
+    {
+      "at_frame": 4146,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4146,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "g1",
+      "button": "right"
+    },
+    {
+      "at_frame": 4171,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4171,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h0",
+      "button": "left"
+    },
+    {
+      "at_frame": 4196,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4196,
+      "action": "panel_click",
+      "panel": "table",
+      "slot": "out",
+      "button": "left"
+    },
+    {
+      "at_frame": 4221,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4221,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 4246,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4246,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 4252,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 4271,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4271,
+      "action": "mouse_down",
+      "button": "left"
+    },
+    {
+      "at_frame": 4272,
+      "action": "mouse_up",
+      "button": "left"
+    },
+    {
+      "at_frame": 4306,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4306,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 4312,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 4336,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4336,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "b4",
+      "button": "left"
+    },
+    {
+      "at_frame": 4361,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4361,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g0",
+      "button": "right"
+    },
+    {
+      "at_frame": 4386,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4386,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 4411,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4411,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g1",
+      "button": "right"
+    },
+    {
+      "at_frame": 4436,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4436,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 4461,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4461,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "b5",
+      "button": "left"
+    },
+    {
+      "at_frame": 4486,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4486,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g2",
+      "button": "right"
+    },
+    {
+      "at_frame": 4511,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4511,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "out",
+      "button": "left"
+    },
+    {
+      "at_frame": 4536,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4536,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h7",
+      "button": "left"
+    },
+    {
+      "at_frame": 4561,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4561,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h1",
+      "button": "left"
+    },
+    {
+      "at_frame": 4586,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4586,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g0",
+      "button": "right"
+    },
+    {
+      "at_frame": 4611,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4611,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 4636,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4636,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "g1",
+      "button": "right"
+    },
+    {
+      "at_frame": 4661,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4661,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h5",
+      "button": "left"
+    },
+    {
+      "at_frame": 4686,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4686,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "out",
+      "button": "left"
+    },
+    {
+      "at_frame": 4711,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4711,
+      "action": "panel_click",
+      "panel": "inventory",
+      "slot": "h8",
+      "button": "left"
+    },
+    {
+      "at_frame": 4736,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4736,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 4742,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 4761,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4761,
+      "action": "mouse_down",
+      "button": "left"
+    },
+    {
+      "at_frame": 4762,
+      "action": "mouse_up",
+      "button": "left"
+    },
+    {
+      "at_frame": 4796,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4796,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4796,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 4797,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 4828
+    },
+    {
+      "at_frame": 4836,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4837,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 4867
+    },
+    {
+      "at_frame": 4875,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4876,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 4906
+    },
+    {
+      "at_frame": 4914,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4915,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 4945
+    },
+    {
+      "at_frame": 4953,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4954,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 4984
+    },
+    {
+      "at_frame": 4992,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 4992,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 4993,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5024
+    },
+    {
+      "at_frame": 5032,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5032,
+      "action": "mouse_move",
+      "dx": -628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5033,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5064
+    },
+    {
+      "at_frame": 5072,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5072,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5073,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5104
+    },
+    {
+      "at_frame": 5112,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5112,
+      "action": "mouse_move",
+      "dx": -628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5113,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5144
+    },
+    {
+      "at_frame": 5152,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5152,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5153,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5184
+    },
+    {
+      "at_frame": 5192,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5192,
+      "action": "mouse_move",
+      "dx": -628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5193,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5224
+    },
+    {
+      "at_frame": 5232,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5232,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5233,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5264
+    },
+    {
+      "at_frame": 5272,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5272,
+      "action": "mouse_move",
+      "dx": -628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5273,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5304
+    },
+    {
+      "at_frame": 5312,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5312,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5313,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5347
+    },
+    {
+      "at_frame": 5385,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5385,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5385,
+      "action": "key_down",
+      "key": "9"
+    },
+    {
+      "at_frame": 5391,
+      "action": "key_up",
+      "key": "9"
+    },
+    {
+      "at_frame": 5415,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5415,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5415,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5416,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5447
+    },
+    {
+      "at_frame": 5455,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5456,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5486
+    },
+    {
+      "at_frame": 5494,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5494,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5495,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5533
+    },
+    {
+      "at_frame": 5541,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5541,
+      "action": "mouse_move",
+      "dx": -628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5542,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5577
+    },
+    {
+      "at_frame": 5585,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5585,
+      "action": "mouse_move",
+      "dx": -628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5610,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5610,
+      "action": "mouse_move",
+      "dx": 2.504,
+      "dy": -15.974
+    },
+    {
+      "at_frame": 5635,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5635,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 5639,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 5695,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5695,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5695,
+      "action": "mouse_move",
+      "dx": -630.823,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5696,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5727
+    },
+    {
+      "at_frame": 5735,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5736,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5766
+    },
+    {
+      "at_frame": 5774,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5775,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5805
+    },
+    {
+      "at_frame": 5813,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5814,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5830
+    },
+    {
+      "at_frame": 5838,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5838,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5863,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5863,
+      "action": "mouse_move",
+      "dx": -4.228,
+      "dy": -0.007
+    },
+    {
+      "at_frame": 5888,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5888,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 5892,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 5948,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5948,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5948,
+      "action": "mouse_move",
+      "dx": -624.091,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 5949,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 5980
+    },
+    {
+      "at_frame": 5988,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 5989,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 6019
+    },
+    {
+      "at_frame": 6027,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6028,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 6058
+    },
+    {
+      "at_frame": 6066,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6066,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 6091,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6091,
+      "action": "mouse_move",
+      "dx": 5.001,
+      "dy": -0.004
+    },
+    {
+      "at_frame": 6116,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6116,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 6120,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 6176,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6176,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6176,
+      "action": "mouse_move",
+      "dx": 623.317,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 6177,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 6208
+    },
+    {
+      "at_frame": 6216,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6216,
+      "action": "mouse_move",
+      "dx": -628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 6217,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 6248
+    },
+    {
+      "at_frame": 6256,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6257,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 6287
+    },
+    {
+      "at_frame": 6295,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6295,
+      "action": "mouse_move",
+      "dx": 628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 6296,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 6327
+    },
+    {
+      "at_frame": 6335,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6336,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 6366
+    },
+    {
+      "at_frame": 6374,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6374,
+      "action": "mouse_move",
+      "dx": -628.319,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 6375,
+      "action": "hold",
+      "key": "w",
+      "until_frame": 6406
+    },
+    {
+      "at_frame": 6414,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6439,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6439,
+      "action": "mouse_move",
+      "dx": -14.843,
+      "dy": 6.879
+    },
+    {
+      "at_frame": 6464,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6464,
+      "action": "mouse_down",
+      "button": "right"
+    },
+    {
+      "at_frame": 6468,
+      "action": "mouse_up",
+      "button": "right"
+    },
+    {
+      "at_frame": 6524,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6524,
+      "action": "key_down",
+      "key": "7"
+    },
+    {
+      "at_frame": 6530,
+      "action": "key_up",
+      "key": "7"
+    },
+    {
+      "at_frame": 6554,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6554,
+      "action": "key_down",
+      "key": "c"
+    },
+    {
+      "at_frame": 6560,
+      "action": "key_up",
+      "key": "c"
+    },
+    {
+      "at_frame": 6594,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 6594,
+      "action": "mouse_move",
+      "dx": -400.0,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 7494,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 7494,
+      "action": "mouse_move",
+      "dx": 800.0,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 8394,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 8394,
+      "action": "mouse_move",
+      "dx": -400.0,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 9294,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 9294,
+      "action": "key_down",
+      "key": "c"
+    },
+    {
+      "at_frame": 9300,
+      "action": "key_up",
+      "key": "c"
+    },
+    {
+      "at_frame": 9334,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 9334,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 9340,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 10874,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 10874,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 10874,
+      "action": "key_down",
+      "key": "e"
+    },
+    {
+      "at_frame": 10880,
+      "action": "key_up",
+      "key": "e"
+    },
+    {
+      "at_frame": 10899,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 10899,
+      "action": "mouse_down",
+      "button": "left"
+    },
+    {
+      "at_frame": 10900,
+      "action": "mouse_up",
+      "button": "left"
+    },
+    {
+      "at_frame": 10994,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 10994,
+      "action": "mouse_move",
+      "dx": -280.0,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 12094,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 12094,
+      "action": "mouse_move",
+      "dx": 560.0,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 14394,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 17800,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 17800,
+      "action": "wheel",
+      "ticks": 0
+    },
+    {
+      "at_frame": 17800,
+      "action": "mouse_move",
+      "dx": 363.162,
+      "dy": 0.0
+    },
+    {
+      "at_frame": 18300,
+      "action": "wheel",
+      "ticks": 0
+    }
+  ]
+}

@@ -11,6 +11,35 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.38.0（2026-11-12）— V3-16g 扩展指导 demo 族：⑩ 完整黑夜历险（门 228 全 PASS）
+
+**V3-16 相位 G/7**（survival 章节首支；**零内核**——弓/箭/火把/knockback/
+mob 生成/磁吸/自然回血全既有，16a 的 scene/panel_click/索引全复用，
+内容 + 工具链增量）：**guide_night**（18301f 05:05，454 actions：
+scene = 40×26 平台 x0..39 z-25..-1 顶 y54 **time 0.55 入夜** SURVIVAL
+**seed 7**【seedhunt 8 粒：首批 4 = sheep/chicken/chicken/**zombie
+f150 唯一 hostile**，无 skeleton【wither 箭站桩 9s 死】/无 spider【1.0
+b/s 打不过 kite 账本】】+ 预置 planks 9/coal 1/flint 2/feather 2；
+tour = P0 开场 → **kite NE + 造 table** → **SE 停扎最小 combat kit**
+【table place (38,54,-2) + sticks + bow（P = **g5** 非 g4）+ arrows
+×1】→ **弓箭 combat**【N 走到 (38.5,-14) 7-m，4 箭 full-draw 站射
+击杀 zombie **f3524**——弓 = 短程 v²/g 11.25-m，箭 **release 发射**
+按 release 帧位置 aim + **hold=100** 保满力 + 弹道 lead + **knockback
+定点 5 轮迭代**】→ 回 SE 造余 kit【sticks + arrows + torch，**select
+非弓**再开容器】→ **火把环 ×4**【先走到点再放】→ 黑夜巡视【C 第三人
+称 + E 面板展示】→ **黎明** face E（t0.058）；终态钉 player
+(19.57,54,-16.57) **hp20 存活** / stick 2 + bow 1 (dur 380) + arrow 4
+/ 4 火把 + table / entities 0【掉落 120s 消散】/ time 0.058 dawn）；
+**工具链增量** = gen_guide_night.py 场景 + build_guide_night.py beat
+脚本 + **arrow_sim.py / aim_from_log.py 弓箭弹道 aim pin 探针族**；
+**门内捕获 PITS 419 八坑**【①弓短程 11.25-m 19-m 全 miss ②release
+发射 aim→release 1.6-m 推进 ③hold96 欠拉 99-power 0.2-hp 存活 ④
+knockback 定点迭代 ⑤持弓 RMB = 拉弓非开容器 ⑥火把先走到点再放 ⑦
+zombie 自 spawn 即追 s2 受 6 伤 ⑧inv_grid = 制作网格非背包 + panel
+tap ≥25-f + bow P = g5】；index **survival seq 1**【tags night/
+zombie/bow/torch】；2998/2998 + banner re-pin 1 + 结构免疫 + canary
+4×2 + S1 base19 + 性能 A/B 同档；详见 `docs/archive/phase-3.38.0.md`
+
 ## v3.37.0（2026-11-11）— V3-16f 扩展指导 demo 族：⑨ 河流（门 227 全 PASS）
 
 **V3-16 相位 F/7**（build 章节第三支；**零内核**——水桶/流体/营火/

@@ -3,8 +3,43 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–418，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–419，新条目继续前插于尾部块首。
 
+- **黑夜 guide authoring 弓箭 combat 八坑（PITS 419，门 228 v3.38.0
+  V3-16g ⑩ 黑夜历险）**——① **弓 = 短程武器（flat range v²/g =
+  11.25m）**：shoot_speed 15 + g 20 → 平射极限 11.25m；14-19m 处任何
+  ≤12m 上仰 lead 都不中（arrow_sim.py 实证 19m/14m 全 NO HIT）——
+  v14「19m 站射 4 箭全 miss」= 纯弹道 drop（箭初速 vy=0，19m 落
+  10·(19/15)² = 16m）。combat 必须 ≤10m，aim 带垂直 drop lead（7m
+  = +1.8m / 5m = +0.9m / 3m = +0.4m / 2m = +0.15m，mid-window 取值
+  留 ±1m 边际）。② **箭在 RELEASE 发射非 press**：bow draw 于 RMB
+  press 累积、release（wasReleased）才发射——4 箭实际发射帧 =
+  press+96f。aim→release 的 121f 里追击 zombie 朝玩家推进 1.6m →
+  按 press 帧位置 aim 必欠；须按 **release 帧**位置 aim（zombie 朝
+  玩家来 = 无水平 lead，只垂直 drop lead）。③ **hold=96 有 1-frame
+  欠拉边界 = 99% power**：满拉 = 1.6s = 96f，但注册 1-frame 滞后给
+  1.583s → power 0.99 → 4.95/箭 → 4 箭 19.79 < 20 → zombie 0.2hp
+  存活续 melee（v19 实证）；**hold=100**（1.667s > cap）保满力。
+  ④ **箭 knockback = 定点迭代**：箭中 = 4 b/s 水平 + 2.5 lift 击退
+  （arrowKnockback，Phase 42），zombie 轨迹依赖哪几箭命中 → aim 须
+  按**实测**位置迭代 pin（v15→v19：2→2→3→3→4 命中，5 轮收敛）；
+  「无 knockback = 路径与 aim 独立」只对 wander/瞬移 mob 成立，追击
+  mob 被击退。⑤ **持 launcher 时 RMB = 拉弓非开容器**：combat 后弓
+  仍在手，s5 的 open_ahead（RMB）被 bow draw 吞 → table 不开 = 35
+  panel error；开容器前须 g.select 切**非弓非块**物（sticks，digit
+  6）。⑥ **火把放置 = 先走到点再放**：place-after-walk = 6-7m aim >
+  kReach 4.09 拒收（v22 1-of-4）；每把先 walk_to 目标格南 2m，再
+  face + look_point + click。⑦ **zombie 自 spawn 即追**：seed 7 的
+  zombie f150 距玩家 4.6m < detect 16 → 立即追，s2 kite 期玩家受 6
+  伤（20→14）自然回血 s4 满；无 skeleton seed = seedhunt 8 粒实证
+  （skeleton 箭带 10s wither = 站桩 9s 死，spider 1.0 b/s 打不过
+  11.5m 列 kite 账本）。⑧ **inv_grid = 3×3 制作网格非背包**（E 2×2
+  = 格 0/1/3/4 三列式 r*3+c）：备料放背包 slot 13/14（b4/b5 词表）
+  非 inv_grid（v11 捕获：grid cell 4 撞 E 面板 g3 = table pattern
+  破）；panel tap 间隔 ≥25f（20f 双击收集窗边界吞点击，16a pilot
+  形）；bow pattern " S "/"S P "/" S " 的 P = **g5**（MR idx 5）非
+  g4；select(n) = digit n = h(n-1)（table h4=5 / bow h6=7 / torch
+  h8=9）；carry 换货语义 = 取 B 前先 merge 回（out 前 carry 须空）。
 - **河流 guide authoring 十六坑（PITS 418，门 227 v3.37.0 V3-16f ⑨
   河流）**——① **journal 重复块响亮拒**：mk_scene campfires 面只写
   state entry（块须 spec blocks 自携 "campfire"，自 append 同格 =
