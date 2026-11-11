@@ -47,6 +47,14 @@
       "tags": ["materials", "biomes", "collecting", "mining"],
       "file": "guide_materials.dmo",
       "length_frames": 25383
+    },
+    {
+      "category": "build",
+      "seq": 3,
+      "mode": "solo",
+      "tags": ["river", "water", "bucket", "swim"],
+      "file": "guide_river.dmo",
+      "length_frames": 19841
     }
   ]
 }

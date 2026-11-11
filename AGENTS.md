@@ -131,7 +131,21 @@ demo_author 向量行走模型【_walk_dd 角进入速度轴归属 + 0.66m 可
 417 二十二坑；2998/2998【banner re-pin 1】+ S1 第 107 次【f60 ×2
 ≡ base19】+ canary 4×2 新≡旧二进制 RAW+savenorm EXACT +
 guide_materials ×2 RAW/savenorm EXACT + 性能 A/B 同档【终档跨树
-savenorm EXACT = 结构性零成本】）**
+savenorm EXACT = 结构性零成本】）**；**v3.37.0 = V3-16f 扩展指导 demo 族
+⑨河流（门 227，11-11：guide_river 19841f 05:30 = build 章第三支，24×15
+平台 + dirt 表层 + 1-deep 密封源水池 16 + campfire LIT + SURVIVAL
+bucket/torch 预置；tour = 挖河 15 + 舀水 1 + 倒水 W + 观西梯度 +
+舀水 2 + 倒水 E + 观东梯度 + 火把 (14,54,-5) 水火对比 + 游泳横渡
+【probe v3 pin 实测落点 (0.65,54,-6.16)】+ E 面板 15 泥土 + 第三人
+称双线巡视；终态钉 对称 V 沟形 + 池 14 源 2 痕 + campfire_
+extinguished + 零实体；零内核【16a 全复用】+ mk_scene
+fluids/campfires 两 strict 面 + 14 段前缀验证；门内捕获 PITS 418 十
+六坑【mid-coast jog 漂移放大器两实例 + 游泳入口末腿同轴修 + 池穿列
+落水 + finished 模拟冻结 dwell 240 + campfire 侧面邻格挖 + y54 穿越
+点落格】；2998/2998【banner re-pin 1】+ S1 第 108 次【f60 ×2 ≡
+base19】+ canary 4×2 新≡旧二进制 RAW+savenorm EXACT + guide_river ×2
+RAW/savenorm EXACT + 性能 A/B 同档【终档跨树 savenorm EXACT = 结构
+性零成本】）**
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
@@ -150,7 +164,7 @@ pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
 16c ✅ v3.34.0 = ③房子+床（门 224，day1 全 4 支完成）
 + 16d ✅ v3.35.0 = ⑦皇宫（门 225，build 章首支，100 块）
 + 16e ✅ v3.36.0 = ⑧材料（门 226，build 章第二支，7 biome 床
-33 标本）**，16f~h 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
+33 标本）+ 16f ✅ v3.37.0 = ⑨河流（门 227，build 章第三支，19841f）**，16g~h 待执行】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
 MOTD 并入】】**【大项已相位拆分 V3-10a~d /
 V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
 
@@ -211,7 +225,7 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -376,6 +390,54 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 227（**V3-16f 扩展指导 demo 族 ⑨河流 v3.37.0** 门 227 全
+PASS【V3-16 相位 F/7 = build 章节第三支；**零内核**——16a 的
+scene/panel_click/索引全复用，纯内容 + 工具链增量，内核零变更】：
+**guide_river 19841f 05:30**【scene = 24×15 平台 x0..23 z-15..-1 顶
+y54 正午 + stone 垫 y50-52 + **dirt 表层 y53**【裸手 0.75-s 挖掘面】
++ **1-deep 密封源水池** x18..21 z-13..-10 16 源【2-deep 弃用：顶层
+源 resting-on-fluid 无水平传播 = 舀痕永久空洞——1-deep 痕 = 邻源
+1 tick 补 level-7 稳，probe B 实证】+ campfire (10,53,-7) LIT +
+SURVIVAL 预置 bucket h0 + torch h1；tour = 池巡视 → **挖河 15**【x2
+顶面自 bank + x3..x9 沟内侧面带 + x10 过营火 + **x11 顶面挖**【门
+内捕获：campfire 格内侧面挖邻格 = 射线首 non-air 必中 cross 块】+
+x12..x17；磁吸随进随收】→ **舀水 1**【池远角源 (19,53,-13)——
+level-7 痕不可舀（isSource = level==8 严格），第二舀必换格】→
+**倒水 W** (2,53,-7)【站位 y54 穿越点落格盘算 PITS 418⑭ + re-anchor
+pin (1.58,-7.0)】→ 观西梯度【8..1 铺 8 格，营火邻格 x9 湿 = T0+21
+tick，**灭 = T0+22 帧**】→ 舀水 2 (20,53,-13) → 倒水 E (17,53,-7)
+→ 观东梯度【2..8】→ **火把置沟北岸 (14,54,-5)**【水火对比：营火灭
+vs 火把亮——MC 偏离记档；站位 (14.5,-3.5) AABB 零重叠盘算】→
+**游泳横渡**【step-in 15-f + 14-m 252-f + space 25-f 升 + step-out
+30-f——probe v3 pin，实测落点 (0.65,54,-6.16)，游后诚实 re-anchor
+（v3.21 纪律）】→ E 面板展示 15 泥土 → C 第三人称双线巡视【终点
+21.5 = 东缘 2.3-m margin——门内捕获 22.5 开放路径漂移冲过平台缘
+y38 hp13】→ 收束；终态钉 对称 V 沟形【(x2..x17,y53) = 8,7,6,5,
+4,3,2,1,campfire_extinguished,2,3,4,5,6,7,8】+ 池 14 源 2 痕 +
+dirt 15 + bucket 空 + 零实体 + 终姿 (1.36,54,-4.76) hp 20】+
+**工具链增量**【mk_scene fluids/campfires 两 strict 面【幂等 10232
+B】+ 分段前缀验证 14 段【≤30 用户定案】+ **行走路线 = 列/行 2-m
+分块 + 末腿同轴纪律**【PITS 418⑬ 两实例：mid-coast 1-m 横向 jog =
+漂移放大器——s7 倒水三轮 + 游泳入口 4-m 东腿 coast 的 at(20) settle
+不足 = 入口 x +1.77-m 东冲 → 252-f 泳 pin 短停河心 x6.25 → 后续
+20-m 巡视东腿冲过平台缘；修 = 入口列 x18.5 走 z 末腿同轴（coast 仅
+z 向，x 列锁定）】】；**门内捕获 PITS 418 十六坑**【journal 重复块
+响亮拒 / 2-deep 顶层源不传播 / 第二舀必换源格 / 沟端列长穿线挖后
+卡死 / fire remaining real-dt / --demo-author 输出形 / scene 名
+committed 目录 / timeline 键词表小写 / zsh $GC 空 / 游泳腿显式
+hold + 相对坐标 + pos 断言带 y + 平台域 / walk_leg 显式 hold = 帧非
+米 / campfire 侧面邻格挖 / mid-coast jog 漂移放大器 / y54 穿越点落
+格 / 池格非实心 = 选列验整列身下实心【x18.5 列穿池落水停池心】/
+**finished = 模拟冻结 dwell ≥240-f**【s8 段 F+100 存档 cascade 仅
+1 tick 实证】】；2998/2998【内容相位零新增 + banner re-pin 1】+
+**S1 第 108 次**【f60 ×2 ≡ base19 + banner 零像素复验】+ canary
+4×2 新≡旧二进制（tm_v336 v3.36.0）RAW+savenorm EXACT + guide_river
+×2 RAW/savenorm EXACT【gmA≡gmB 433812 B】+ **性能 A/B 同档**【OW
+900-f 无输入三窗 upd med 0.555/0.609/0.583 vs 0.599/0.626/0.625 +
+render 0.563/0.708/0.642 vs 0.620/0.706/0.683 + swap 15.32/15.23/
+15.27 vs 15.23/15.18/15.18 + changesApplied 9/3/1 逐位 + 终档跨树
+savenorm EXACT = 结构性零成本】；详见
+`docs/archive/phase-3.37.0.md`）；
   门计数 226（**V3-16e 扩展指导 demo 族 ⑧材料 v3.36.0** 门
   226 全 PASS【V3-16 相位 E/7 = build 章节第二支；**内核零变更**——
 16a 的 scene/panel_click/索引全复用，纯内容 + 工具链增量 + **内

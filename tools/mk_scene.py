@@ -22,7 +22,9 @@ The spec (the closed face):
               "inventory": {"selected": 0, "slots": [[slot, item, count], ...]},
               "inv_grid": []},
    "clear_entities": true,
-   "blocks": [[x, y, z, "name"], ...]}
+   "blocks": [[x, y, z, "name"], ...],
+   "fluids": [[x, y, z, level, "water"|"lava"], ...],
+   "campfires": [[x, y, z], ...]}
 
 The base run's slot is __scene_tmp (overwritten each run — the scene
 is the source of truth, never the base's slot).
@@ -86,6 +88,56 @@ def apply_spec(doc, spec):
         doc['tables'] = spec['tables']
     if 'furnaces' in spec:
         doc['furnaces'] = spec['furnaces']
+    # V3-16f: the fluid journal passthrough (the pool's prepared water —
+    # the PITS 390 sealed form): entries [x, y, z, level, "kind"]
+    # (level 0 = the drain). The base worldgen's journal cells are
+    # authoritative — a spec collision is a loud reject.
+    if 'fluids' in spec:
+        fls = doc.setdefault('fluids', [])
+        base_cells = {(e[0], e[1], e[2]) for e in fls}
+        for i, e in enumerate(spec['fluids']):
+            if len(e) != 5:
+                raise SystemExit('scene %s: fluids entry #%d must be '
+                                 '[x, y, z, level, "kind"]' % (name, i))
+            x, y, z, level, kind = e
+            if not all(isinstance(v, int) for v in (x, y, z, level)):
+                raise SystemExit('scene %s: fluids entry #%d = integers'
+                                 % (name, i))
+            if kind not in ('water', 'lava'):
+                raise SystemExit('scene %s: fluids entry #%d unknown kind'
+                                 ' %r' % (name, i, kind))
+            if not 0 <= level <= 8:
+                raise SystemExit('scene %s: fluids entry #%d level %d out'
+                                 ' of [0, 8]' % (name, i, level))
+            if (x, y, z) in base_cells:
+                raise SystemExit('scene %s: fluids entry #%d at (%d,%d,%d)'
+                                 ' collides with the base worldgen'
+                                 ' journal' % (name, i, x, y, z))
+            fls.append([x, y, z, level, kind])
+    # V3-16f: the prepared campfires (lit): the four-slot
+    # cooking-state entry (the format 13 cross-check: every
+    # campfire-family block owns a state entry). The block journal
+    # entry is the spec's own (a campfires entry without a "campfire"
+    # block at the cell desyncs; a second block edit at the cell is
+    # the load's loud duplicate reject — the probe A's capture).
+    if 'campfires' in spec:
+        cfs = doc.setdefault('campfires', [])
+        have = {tuple(c['pos']) for c in cfs}
+        block_cells = {(e[0], e[1], e[2]): e[3] for e in doc['blocks']}
+        for i, p in enumerate(spec['campfires']):
+            if len(p) != 3 or not all(isinstance(v, int) for v in p):
+                raise SystemExit('scene %s: campfires entry #%d must be'
+                                 ' [x, y, z]' % (name, i))
+            if tuple(p) in have:
+                raise SystemExit('scene %s: campfire at %s duplicate'
+                                 % (name, p))
+            if block_cells.get(tuple(p)) != 'campfire':
+                raise SystemExit('scene %s: campfire at %s requires a'
+                                 ' "campfire" block at the cell in the'
+                                 ' spec blocks' % (name, p))
+            cfs.append({'pos': list(p),
+                        'slots': [{'item': '', 'count': 0,
+                                   'progress_substeps': 0}] * 4})
     return doc
 
 

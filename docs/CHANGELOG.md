@@ -11,6 +11,47 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.37.0（2026-11-11）— V3-16f 扩展指导 demo 族：⑨ 河流（门 227 全 PASS）
+
+**V3-16 相位 F/7**（build 章节第三支；**零内核**——水桶/流体/营火/
+火把/游泳全既有，16a 的 scene/panel_click/索引全复用，内容 + 工具链
+增量）：**guide_river**（19841f 05:30，443 actions：scene = 24×15 平
+台 x0..23 z-15..-1 顶 y54 正午 stone 垫 y50-52 + **dirt 表层 y53**
+【裸手 0.75-s 挖掘面】+ **1-deep 密封源水池** x18..21 z-13..-10 16
+源【2-deep 弃用 = 顶层源 resting-on-fluid 无水平传播，舀痕永久——
+1-deep 痕 = 邻源 1 tick 补 level-7 稳，probe B 实证】+ **campfire
+(10,53,-7) LIT** + SURVIVAL 预置 bucket h0 + torch h1；tour = P0 开
+场 → 池巡视 → **挖河 15**【x2 顶面自 bank + x3..x9 沟内侧面带 +
+x10 过营火 + x11 顶面挖 + x12..x17；磁吸随进随收】→ **舀水 1**
+【池远角源 (19,53,-13)——level-7 痕不可舀，第二舀必换格】→ **倒水
+W** (2,53,-7)【站位 y53 穿越落格盘算 + re-anchor pin】→ 观西梯度
+【8..1 铺 8 格，营火邻格 x9 湿 = T0+21 tick，**灭 = T0+22 帧**】→
+舀水 2 (20,53,-13) → 倒水 E (17,53,-7) → 观东梯度【2..8】→ **火把
+置沟北岸 (14,54,-5)**【水火对比：营火灭 vs 火把亮——MC 偏离记档】
+→ **游泳横渡**【step-in 15-f + 14-m 252-f + space 25-f 升 + step-out
+30-f——probe v3 pin，实测落点 (0.65,54,-6.16)，游后诚实 re-anchor】
+→ E 面板展示 15 泥土 → C 第三人称双线巡视【终点 21.5 = 东缘 2.3-m
+margin】→ 收束；终态钉 对称 V 沟形 + 池 14 源 2 痕 + campfire_
+extinguished 存续 + dirt 15 + bucket 空 + 零实体 + 终姿
+(1.36,54,-4.76) hp 20）；**工具链增量** = mk_scene fluids/campfires
+两 strict 面【幂等 10232 B】+ 分段前缀验证 14 段【≤30 ✓】；**门内
+捕获 PITS 418 十六坑**【mid-coast 1-m 横向 jog = 漂移放大器两实例
+——s7 倒水三轮 + 游泳入口 4-m 东腿 coast 的 at(20) settle 不足 =
+入口 x +1.77-m 东冲 → 252-f 泳 pin 短停河心 x6.25 → 20-m 巡视东腿
+冲过平台缘 y38 hp13【修 = 入口列走 z 末腿同轴，coast 仅 z 向】/ 池
+格非实心 = 干路选列须验整列身下实心【x18.5 列穿池落水停池心】/
+**demo finished = 模拟冻结**【cascade 须 replay 内完成，dwell ≥240-f】
+/ campfire 格内侧面挖邻格 = 必中 cross 块【x11 顶面挖修】/ 倒水 y54
+穿越点落格纪律 / 游泳腿显式 hold + 相对坐标 + pos 断言须带 y + 平台
+域】；2998/2998【内容相位零新增 + banner re-pin 1】；S1 第 108 次
+【f60 ×2 ≡ base19 + banner 零像素】+ canary 4×2 新≡旧二进制
+（tm_v336）RAW+savenorm EXACT + guide_river ×2 RAW/savenorm EXACT +
+性能 A/B 同档【OW 900-f 无输入三窗 upd med 0.555/0.609/0.583 vs
+0.599/0.626/0.625 + render 0.563/0.708/0.642 vs 0.620/0.706/0.683 +
+swap 15.32/15.23/15.27 vs 15.23/15.18/15.18 + changesApplied 9/3/1
+逐位 + 终档跨树 savenorm EXACT = 结构性零成本】；详见
+`docs/archive/phase-3.37.0.md`。
+
 ## v3.36.0（2026-11-11）— V3-16e 扩展指导 demo 族：⑧ 材料（门 226 全 PASS）
 
 **V3-16 相位 E/7**（build 章节第二支；内核 = 1 行×10 的 demo 恒锁定 +
