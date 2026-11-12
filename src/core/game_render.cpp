@@ -792,6 +792,11 @@ void Game::drawParticles(const Mat4& view, const Mat4& projection,
 // Phase 15: the screen-space UI pass
 // ---------------------------------------------------------------------------
 
+float Game::effectiveRenderFov() const {
+    return (m_panoramaFovDegrees >= 0.0f) ? m_panoramaFovDegrees
+                                          : kFovDegrees;
+}
+
 void Game::render(bool withUi) {
     const int w = m_window.width();
     const int h = m_window.height();
@@ -829,8 +834,12 @@ void Game::render(bool withUi) {
                         Vec3 {weatherPulse, weatherPulse, weatherPulse};
     m_renderer.clear({sky.x, sky.y, sky.z, 1.0f});
 
+    // V3-21: the effective FOV (the panorama's capture's 45-degree's
+    // tile-exact; the gameplay's -1 override = the kFovDegrees' line).
+    const float fovRadians = effectiveRenderFov() *
+                             static_cast<float>(M_PI) / 180.0f;
     const Mat4 projection = Mat4::perspective(
-        kFovDegrees * static_cast<float>(M_PI) / 180.0f,
+        fovRadians,
         static_cast<float>(w) / static_cast<float>(h), kNear, kFar);
     const Mat4 view = m_camera.viewMatrix();
 
@@ -1208,8 +1217,11 @@ void Game::render(bool withUi) {
 void Game::drawSkyObjects(const Mat4& view, const Mat4& projection,
                           int viewportHeight) {
     // View-space length of one pixel at the sprite's depth (see sky.vert).
+    // V3-21: the effective FOV (the panorama's capture's 45-degree's
+    // tile-exact — the sky sprite's pixel-to-world's twin).
     const float pxToWorld = 2.0f *
-                             std::tan(kFovDegrees * static_cast<float>(M_PI) /
+                             std::tan(effectiveRenderFov() *
+                                      static_cast<float>(M_PI) /
                                       360.0f) /
                              static_cast<float>(viewportHeight);
 
@@ -1415,6 +1427,9 @@ Result<void> Game::renderPanorama() {
     const Vec3 basePos = m_camera.position;
     const float baseYaw = m_camera.yaw;
     const float basePitch = m_camera.pitch;
+    // V3-21: the tile-exact's FOV for the whole capture (the warm-up's
+    // render + the views; restored before the return).
+    m_panoramaFovDegrees = kPanoramaFovDegrees;
     m_camera.position = basePos + Vec3 {0.0f, kPanoramaAltitude, 0.0f};
     m_camera.pitch = kPanoramaPitch;
     // The warm-up render (the first swap's capture races the GL's first
@@ -1433,6 +1448,7 @@ Result<void> Game::renderPanorama() {
         MC_TRY(readFrontBuffer(tile));
         tiles.push_back(std::move(tile));
     }
+    m_panoramaFovDegrees = -1.0f; // the gameplay's FOV's restore
     m_camera.position = basePos;
     m_camera.yaw = baseYaw;
     m_camera.pitch = basePitch;

@@ -55,6 +55,11 @@ constexpr int kCrackStages = 5;
 constexpr int kPanoramaViews = 8;
 constexpr int kPanoramaViewWidth = 640;
 constexpr int kPanoramaViewHeight = 360;
+// V3-21: the panorama's per-view FOV = 360 / views — the views must
+// TILE the circle exactly (no overlap, no gap): the 70-degree game FOV
+// made 8 views span 560 degrees, the wrap's 200-degree jump = the
+// user's visible seam's on-machine catch.
+constexpr float kPanoramaFovDegrees = 360.0f / kPanoramaViews;
 
 inline double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /

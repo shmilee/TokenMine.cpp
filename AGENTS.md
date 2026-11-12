@@ -271,7 +271,7 @@ net.motd 默认 "TokenMine.cpp"【键缺省不写用户 config P32】→ 客户�
 CLI --listen 显式面不变】+ **R7 菜单面守卫**【writeSave 收口 +
 connectHost.empty()——菜单加入运行时设 connectHost 绕过 argv 拒收
 = 客机写档可覆主机槽，门内定案捕获 PITS 428②】；menuStub* 死码 +
-2 单测清除（17d 实面取代）；**零字体**（创建/游戏/加入全在 457 表）；3021/3021（+4：Multiplayer 2 + Join 3 + Welcome codec 1，Stub 2 删净）+ S1 重锚 base20 = v3.46.0 标题【×2 逐字节 + 版本行有界】+ 登陆臂回归 ≡ --new savenorm EXACT + **网络臂 A/B/D 三形×2**【A 菜单主机 hgate + CLI 客：WELCOME hostName → 客机 net chat[hgate] 首聊行 + 主机 client 'client' joined + hash f300/f600 逐字 / B CLI 主机 + 菜单客机 cgate：HELLO 名 + 旧形 "host" 回落 + 主机 save savenorm×2 / D 纯 CLI：legacy host/client + 默认 MOTD + hash 逐字】+ canary 4×2 新≡旧（tm_v345）跨树 RAW EXACT ×4【零字体门面延续】+ 性能 A/B 同档【new upd med 0.607/0.599/0.599 vs old 0.591/0.597/0.584 median 同档 + render/swap 同档 + changesApplied 9/3/1 vs 9/2/1【win2 = real-dt 域先例】】；PITS 428 四坑【WM 二窗互杀方向定式 / R7 菜单面守卫 / 60fps 帧预算 700 / xdotool 名搜索污染三路冗余】）**；**v3.47.0 = V3-20 用户实机诉求批：demo 中文标题 + 菜单全景背景 + 戏字 + 主机无限等待（门 237，11-13：11-12 用户实机 4 条反馈——①教学二级英文 = index.json 每条目 +title 可选字段【absent = 文件名回落；10 条中文：挖矿打造工具/种植与进食/受伤与回血/房子与床/建造皇宫/材料收集/引水成河/黑夜历险/下界传送门/末影龙讨伐】+ **字形安全 fail-fast**【title 每码点 = ASCII 可打印或 kCjkGlyphs 成员，否则 init 命名拒收 U+XXXX——「创建游？」的门盲点反转为输入纪律：缺字不静默回退问号】；②菜单黑屏 = **全景背景**【`--panorama <out>` CLI seam：config 种子 fresh 世界 + 40 帧 fixed-dt update 预热【地形网格在流送集成，render-only = 纯天空】+ 出生点瞭望 +18 俯 0.30 rad + 8 向 640×360 拼接 5120×360 闭环环带【×2 字节恒等 = 确定性生成器】+ committed 资产 704 KB；renderMenu 延迟加载【仅菜单路径零成本】+ **cover-fit UV**【非等比拉伸 = 树木拉尖捕获】+ 帧锁定慢速平移【m_menuFrame 纯函数 = ×2 RAW；闭环 = GL_REPEAT 无缝】+ 0.55 冷暗面纱；render() +withUi 参数【缺省 true 位级】+ takeScreenshot 重构 readFrontBuffer；缺失 = warn + 旧纯色回落】；③「创建游？」= **字体 +12**【戏植血房宫皇城河黑传送讨——戏 U+620F 实证缺失 = 门 236 文档误记；atlas 2208→2272 71 行 + 后缀重格 + top-512 红线恒等 + FNV re-pin 5062bdace4d01da3 = 跨树文本边缘白名单一次性门面】；④主机 10s 超时 = **首客无限等待**【250ms 轮询 + 1s 重渲染节拍【等待期窗口显示天空+HUD——黑窗改善】+ 10s 心跳日志 + ESC/关窗命名取消【输入泵】；附加客 3s 窗不变；模拟冻结 = fresh WELCOME 零字节权威不变】；3022/3022（+1 IndexTitleParse 6 面）+ S1 重锚 base20 = v3.47.0 全景标题【×2 逐字节 + 100% 背景 diff = 用户诉求论证 + 槽不创建 → 111279 B】+ 全景臂【×2 字节恒等 + ≡ committed】+ 标题臂 + S6 缺字形拒收 + 菜单页 ×2 RAW【多人戏修复 + 教学中文标题】+ 等待臂【13s 延迟连接 ×2：心跳 + net chat[wgate] + 宿主档 savenorm EXACT @700f【火稳态帧纪律 PITS 429⑤】】+ canary 4×2 新≡旧（tm_v346）跨树 RAW = 文本边缘白名单【144-187 px 0.02% 审计 100%】+ 性能 A/B 同档【median 交错 + changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 429 五坑【新菜单页须截图断言门盲点 / 全景两预热 / cover-fit / CJK 列宽 / net 臂火稳态帧 700f】）**
+2 单测清除（17d 实面取代）；**零字体**（创建/游戏/加入全在 457 表）；3021/3021（+4：Multiplayer 2 + Join 3 + Welcome codec 1，Stub 2 删净）+ S1 重锚 base20 = v3.46.0 标题【×2 逐字节 + 版本行有界】+ 登陆臂回归 ≡ --new savenorm EXACT + **网络臂 A/B/D 三形×2**【A 菜单主机 hgate + CLI 客：WELCOME hostName → 客机 net chat[hgate] 首聊行 + 主机 client 'client' joined + hash f300/f600 逐字 / B CLI 主机 + 菜单客机 cgate：HELLO 名 + 旧形 "host" 回落 + 主机 save savenorm×2 / D 纯 CLI：legacy host/client + 默认 MOTD + hash 逐字】+ canary 4×2 新≡旧（tm_v345）跨树 RAW EXACT ×4【零字体门面延续】+ 性能 A/B 同档【new upd med 0.607/0.599/0.599 vs old 0.591/0.597/0.584 median 同档 + render/swap 同档 + changesApplied 9/3/1 vs 9/2/1【win2 = real-dt 域先例】】；PITS 428 四坑【WM 二窗互杀方向定式 / R7 菜单面守卫 / 60fps 帧预算 700 / xdotool 名搜索污染三路冗余】）**；**v3.47.0 = V3-20 用户实机诉求批：demo 中文标题 + 菜单全景背景 + 戏字 + 主机无限等待（门 237，11-13：11-12 用户实机 4 条反馈——①教学二级英文 = index.json 每条目 +title 可选字段【absent = 文件名回落；10 条中文：挖矿打造工具/种植与进食/受伤与回血/房子与床/建造皇宫/材料收集/引水成河/黑夜历险/下界传送门/末影龙讨伐】+ **字形安全 fail-fast**【title 每码点 = ASCII 可打印或 kCjkGlyphs 成员，否则 init 命名拒收 U+XXXX——「创建游？」的门盲点反转为输入纪律：缺字不静默回退问号】；②菜单黑屏 = **全景背景**【`--panorama <out>` CLI seam：config 种子 fresh 世界 + 40 帧 fixed-dt update 预热【地形网格在流送集成，render-only = 纯天空】+ 出生点瞭望 +18 俯 0.30 rad + 8 向 640×360 拼接 5120×360 闭环环带【×2 字节恒等 = 确定性生成器】+ committed 资产 704 KB；renderMenu 延迟加载【仅菜单路径零成本】+ **cover-fit UV**【非等比拉伸 = 树木拉尖捕获】+ 帧锁定慢速平移【m_menuFrame 纯函数 = ×2 RAW；闭环 = GL_REPEAT 无缝】+ 0.55 冷暗面纱；render() +withUi 参数【缺省 true 位级】+ takeScreenshot 重构 readFrontBuffer；缺失 = warn + 旧纯色回落】；③「创建游？」= **字体 +12**【戏植血房宫皇城河黑传送讨——戏 U+620F 实证缺失 = 门 236 文档误记；atlas 2208→2272 71 行 + 后缀重格 + top-512 红线恒等 + FNV re-pin 5062bdace4d01da3 = 跨树文本边缘白名单一次性门面】；④主机 10s 超时 = **首客无限等待**【250ms 轮询 + 1s 重渲染节拍【等待期窗口显示天空+HUD——黑窗改善】+ 10s 心跳日志 + ESC/关窗命名取消【输入泵】；附加客 3s 窗不变；模拟冻结 = fresh WELCOME 零字节权威不变】；3022/3022（+1 IndexTitleParse 6 面）+ S1 重锚 base20 = v3.47.0 全景标题【×2 逐字节 + 100% 背景 diff = 用户诉求论证 + 槽不创建 → 111279 B】+ 全景臂【×2 字节恒等 + ≡ committed】+ 标题臂 + S6 缺字形拒收 + 菜单页 ×2 RAW【多人戏修复 + 教学中文标题】+ 等待臂【13s 延迟连接 ×2：心跳 + net chat[wgate] + 宿主档 savenorm EXACT @700f【火稳态帧纪律 PITS 429⑤】】+ canary 4×2 新≡旧（tm_v346）跨树 RAW = 文本边缘白名单【144-187 px 0.02% 审计 100%】+ 性能 A/B 同档【median 交错 + changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 429 五坑【新菜单页须截图断言门盲点 / 全景两预热 / cover-fit / CJK 列宽 / net 臂火稳态帧 700f】）；**v3.48.0 = V3-21 用户实机诉求批 2：全景接缝 + 菜单 demo 返回（门 238，11-13：11-13 用户实机 2 条反馈——①全景接缝【kPanoramaFovDegrees = 360/8 tile 精确：根因 = 70°×8 = 560° wrap 200° 跳变；render FOV 覆写面 m_panoramaFovDegrees【-1 = 70° 位级】+ effectiveRenderFov 投影/天空像素双消费点；资产再生 384 KB ×2 字节恒等 + ≡ committed】②菜单 demo Q 返回教学菜单【进程干净 re-exec ~2s 重载形——架构裁决：就地重建世界 = 无先例大重构超诉求批；--menu-open <page> 封闭词表深链 seam【九形 bypass 旗互斥拒收】+ m_menuDemoReturn/m_demoQuitByAudienceKey 双旗【窗口关闭 = 进程退出形不变 + CLI --demo Q 位级红线】+ execRestartToMenu【池 drain → 音频 → 窗口/SDL → execv /proc/self/exe；save/record 跳过 = 观察红线】】；3023/3023（+1 MenuOpenTest 10 面）+ S1 重锚 base20 = 全景标题 47961 B【×2 逐字节 + 全背景 diff 37.4% 诉求论证 + 槽不创建】+ 接缝臂【tile 边界 mean-abs-diff max 28.1 ≤ 40 PASS】+ menu-open 臂 ×2 RAW + S6 两面 rc 2 + demo 返回臂 ×2【finished 轮询 + Q + banner ×2 + 日志链路】+ canary 4×2 跨树 RAW EXACT ×4【零字体门面终结，PITS 425④ 不复发】+ 性能 A/B 同档【median 同档 + changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 430 三坑【tile 精确 / demo pacing = 录制机 dt / re-exec banner 计数 + 活捕 ≠ 帧锁定】）**
 
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
@@ -293,7 +293,7 @@ pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
 + 16e ✅ v3.36.0 = ⑧材料（门 226，build 章第二支，7 biome 床
 33 标本）+ 16f ✅ v3.37.0 = ⑨河流（门 227，build 章第三支，19841f）
 + 16g ✅ v3.38.0 = ⑩黑夜历险（门 228，survival 章首支，18301f，弓箭
- combat + 火把环 + 活到天亮，PITS 419 八坑）+ 16h① ✅ v3.39.0 = ①下界门（门 229，dimension 章首支，10865f，obsidian 帧预置 + flint_and_steel 点火 + 站入传送 8:1 落生成帧 + 下 frame 观下界，返程不做，PITS 420 四坑）+ 16h② ✅ v3.40.0 = ②末影龙（门 230，15214f，嵌 12 眼【GOOD cell 末位】+ --dragon-damage 200 仪式 + 珍珠 28° 40-m 一掷 + 破 2 出口水晶 + netherite 甲 enderman 对策，PITS 422 八坑）** = V3-16 10 主题全完成】+ V3-19 死亡屏计时 ✅ v3.41.0（门 231，存活行快照 3 点修，两帧臂 AE 0 vs 旧树 43px 复现）+ V3-18 存档扩展名 ✅ v3.42.0（门 232，.json.gz 新写 + 两级探测零迁移 + scene 资产随改，PITS 424 四坑）+ V3-20 菜单体验小批 ✅ v3.47.0（门 237，demo 中文标题 + 全景背景 + 字体 +12 戏 + 主机无限等待，PITS 429 五坑）+ V3-17 主菜单系统【17a ✅ v3.43.0 标题页 + 教学入口 + 字体 +21
+ combat + 火把环 + 活到天亮，PITS 419 八坑）+ 16h① ✅ v3.39.0 = ①下界门（门 229，dimension 章首支，10865f，obsidian 帧预置 + flint_and_steel 点火 + 站入传送 8:1 落生成帧 + 下 frame 观下界，返程不做，PITS 420 四坑）+ 16h② ✅ v3.40.0 = ②末影龙（门 230，15214f，嵌 12 眼【GOOD cell 末位】+ --dragon-damage 200 仪式 + 珍珠 28° 40-m 一掷 + 破 2 出口水晶 + netherite 甲 enderman 对策，PITS 422 八坑）** = V3-16 10 主题全完成】+ V3-19 死亡屏计时 ✅ v3.41.0（门 231，存活行快照 3 点修，两帧臂 AE 0 vs 旧树 43px 复现）+ V3-18 存档扩展名 ✅ v3.42.0（门 232，.json.gz 新写 + 两级探测零迁移 + scene 资产随改，PITS 424 四坑）+ V3-20 菜单体验小批 ✅ v3.47.0（门 237，demo 中文标题 + 全景背景 + 字体 +12 戏 + 主机无限等待，PITS 429 五坑）+ V3-21 菜单全景接缝 + demo 返回 ✅ v3.48.0（门 238，45° tile 精确拼接 + 进程 re-exec 返回教学菜单 + --menu-open 深链，PITS 430 三坑）+ V3-17 主菜单系统【17a ✅ v3.43.0 标题页 + 教学入口 + 字体 +21
 （门 233，S1 重锚 base20，PITS 425）+ 17b ✅ v3.44.0 设置页（门 234，8 行
 表单 + Config::save 写回 + 字体 +3 不增 atlas，PITS 426）+ 17c ✅ v3.45.0
 登陆 + 教学两级（门 235，文本输入生命周期 + 菜单 ≡ CLI demo 位级孪生，
@@ -359,13 +359,13 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **3022/3022**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】+ v3.41.0 V3-19 死亡屏计时族 1【survivalStatsLine 纯函数】+ v3.42.0 V3-18 存档扩展名族 6【slot 路径族/双形枚举去重/复制重命名迁移/删除全槽/scene 两级探测】+ v3.43.0 V3-17a 主菜单族 5【布局门几何/状态机 11+4 面/词表章表 +
+- 测试 **3023/3023**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】+ v3.41.0 V3-19 死亡屏计时族 1【survivalStatsLine 纯函数】+ v3.42.0 V3-18 存档扩展名族 6【slot 路径族/双形枚举去重/复制重命名迁移/删除全槽/scene 两级探测】+ v3.43.0 V3-17a 主菜单族 5【布局门几何/状态机 11+4 面/词表章表 +
 banner re-pin 1】+ v3.44.0 V3-17b 设置页族 2【布局门几何 8 面 hit/
 状态机 11 面 + banner re-pin 1】+ v3.45.0 V3-17c 登陆/教学族 5【登录
 布局+4 面 / 教学布局+7 面+mm:ss 逐字 / Title re-pin + banner re-pin 1】
 + v3.46.0 V3-17d 多人/MOTD 族 4【Multiplayer 布局+步 / Join 布局+步+
 ParseHostPort / Welcome codec + cap 拒收；Stub 2 删 = 净 +4；banner
-re-pin 1】+ v3.47.0 V3-20 诉求批族 1【IndexTitleParse 6 面 + banner re-pin 1】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+re-pin 1】+ v3.47.0 V3-20 诉求批族 1【IndexTitleParse 6 面 + banner re-pin 1】+ v3.48.0 V3-21 诉求批族 1【MenuOpenTest 10 面 + banner re-pin 1】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -530,6 +530,46 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 238（**V3-21 用户实机诉求批 2：全景接缝 + 菜单 demo 返回 v3.48.0** 门 238 全
+PASS【11-13 用户实机 2 条反馈（v3.47.0 全景/教学首用）——**V3-21**
+（11-13 用户实机诉求入表，V3-18/19/20 先例）】：**①全景接缝 = 45°
+tile 精确**【根因 = 游戏 FOV 70° × 8 向 = 560° 内容，pan 在 360° wrap
+= 200° 跳变 = 用户可见硬接缝；kPanoramaFovDegrees = 360/8 具名 +
+render FOV 覆写面 m_panoramaFovDegrees【-1 = 70° 位级红线】+
+effectiveRenderFov() 双消费点【投影 + drawSkyObjects 像素换算】；
+资产再生 384 KB【×2 字节恒等 + ≡ committed】；门臂 = 环带 tile 边界
+mean-abs-diff 带 max 28.1 ≤ 40 PASS【亚像素边缘位移域，拼接错误
+100+；28.1 = 雾-地形高对比边界目检零跳变】】+ **②菜单 demo Q 返回
+教学菜单 = 进程干净 re-exec**【架构裁决：回放需场景初始态，就地重建
+世界 = 无先例大重构（buildScene 3300+ 行）超诉求批——re-exec 恒得
+fresh 场景 + ~2s 重载形（MC in-process level reload 同款代价）；
+--menu-open <page> 封闭词表深链 seam【title/login/multiplayer/
+settings/tutorial，Join 子页 = 多人页内部态永不 boot 页；menuOpen-
+Page() 纯函数 test 钉 5+5 面；九形 bypass 旗【--demo/--record/
+--demo-author/--listen/--connect/--script/--new/--panorama/--list-
+demos】互斥 rc 2 命名拒收】+ m_menuDemoReturn【run() menuExit 2 置位】
++ m_demoQuitByAudienceKey【回放 Q 键分支置位——窗口关闭 = 进程退出
+形不变】→ execRestartToMenu【teardown 序 = 池 drain → 音频 → 窗口/
+SDL → execv /proc/self/exe【argv[0] 相对形腰带】；--config/--save 透传
++ --frames 丢弃；save/record 跳过 = 观察红线（返回 ≠ 写档）】；
+**CLI --demo Q 行为零变化**【m_menuDemoReturn 缺省 false = 位级红线
+canary 实证】；demo pacing = 录制机 dt【20fps 录制 guide_nether 1×
+≈ 9 min——门臂 2× wheel【一次滚动 = nextSpeed 前进一档】+ finished
+日志行轮询后 Q】；3023/3023（+1 MenuOpenTest 10 面 + banner re-pin 1）；
+S1 重锚 base20 = v3.48.0 全景标题 47961 B【f60 无输入 ×2 RAW 逐字节 +
+旧锚 diff 188762 px 37.4% = 全背景诉求论证 + defined mouse (10,10) +
+槽不创建】+ 接缝臂 + menu-open 臂 ×2 RAW + S6 两面 rc 2 命名拒收 +
+demo 返回臂 ×2【banner 计数 ×2 = re-exec 判据【X 窗 id 复用不可作数】
++ 日志链路 finished→quit→return→tutorial launch + 重启菜单 import 活捕
+留证【活捕 ≠ 帧锁定截图——pan 相位随墙钟，状态确定性由 menu-open 臂
+帧锁定截图执法 PITS 430③】】+ canary 4×2 新≡旧（tm_v347 v3.47.0）树内
+RAW + savenorm + **跨树 RAW EXACT ×4**【零字体 = v-UV 不变，门 237 文本
+边缘白名单不复发 = 一次性门面终结实证】+ 性能 A/B 同档【OW 900f：new
+upd med 0.372/0.385/0.358 vs old 0.352/0.368/0.562 median 同档 + render/
+swap 同档 + changesApplied 9/3/1 逐位 ×2 + 终档跨树 savenorm EXACT =
+FOV 覆写缺省 -1 位级 + re-exec 面全冷结构零成本】；PITS 430 三坑【tile
+精确 / demo pacing = 录制机 dt / re-exec 门面【banner 计数 + teardown 序
++ 活捕 ≠ 帧锁定】】；详见 `docs/archive/phase-3.48.0.md`）；
   门计数 237（**V3-20 用户实机诉求批：demo 中文标题 + 菜单全景背景 + 戏字 + 主机无限等待 v3.47.0** 门 237 全
 PASS【11-12 用户实机 4 条反馈（v3.46.0 多人页首用）——**V3-20**（11-12 用户实机诉求入表，V3-18/19 先例）】：
 **①demo 中文标题**【index.json 每条目 +title 可选【absent = 文件名回落】——10 条：挖矿打造工具/种植与进食/
@@ -2146,7 +2186,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（429 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（430 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

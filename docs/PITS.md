@@ -3,8 +3,29 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–429，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–430，新条目继续前插于尾部块首。
 
+- **全景拼接 + 菜单 demo 返回三坑（PITS 430，门 238 v3.48.0
+  V3-21）**——① **闭环环带的每向角度和 = 360°（tile 精确）**：
+  初版用游戏 FOV 70° 拍 8 向（步长 45°）= 每帧重叠 25°、环带实
+  跨 560°——pan 在 360° wrap = 200° 跳变（用户实机报障「右左衔接
+  明显」）+ 相邻帧 25° 回卷重复带；纪律 = N 向闭环拼接的每向视场
+  必须 = 360/N（render 的 FOV 覆写面 m_panoramaFovDegrees +
+  effectiveRenderFov 双消费点【投影 + 天空像素换算】）；验证 =
+  环带 tile 边界列 mean-abs-diff 带（亚像素边缘位移 <40，拼接错
+  误 100+）。② **demo 的 pacing = 录制机的 dt（门臂定时纪律）**：
+  本批机器 ~20fps 录制 → guide_nether 10865f 1× ≈ 9 min 实墙（初
+  冒烟按 60fps 估 3 min = Q 在 demo 中途按下无效——面板未开）；
+  门臂纪律 = **2× wheel（一次滚动 = nextSpeed 前进一档，与方向无
+  关）+ finished 日志行轮询后 Q**（固定 sleep 必漂）。③ **re-exec
+  返回的门面**：execv 保 pid（X 窗 id 常被复用——「新窗口 id ≠ 旧
+  id」不可作重启判据，**日志 banner 计数 ×2 才是权威**）；teardown
+  序 = 池 drain → 音频 → 窗口/SDL → execv（save/record 跳过——观察
+  红线：返回 ≠ 写档）；/proc/self/exe 绝对路径（argv[0] 相对形的
+  腰带）；**活捕 import ≠ 帧锁定截图**（全景 pan 相位随墙钟，两跑
+  PNG 头区字节差 = 捕获方式工件非模拟差——状态确定性由帧锁定截图
+  面执法【--menu-open 臂 ×2 RAW】，re-exec 返回门只取流程证据面
+  【banner ×2 + 日志链路】，不作 EXACT 断言）。
 - **主菜单 17d 门盲点 + 全景/等待实施五坑（PITS 429，门 237
   v3.47.0 V3-20）**——① **新菜单页须截图断言（门盲点族首案）**：
   「创建游？」缺字（戏 U+620F 不在 457 表）在 v3.46.0 发布后才被

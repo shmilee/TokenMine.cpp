@@ -401,3 +401,24 @@ TEST(MenuJoinTest, ParseHostPort) {
     EXPECT_EQ(menuParseHostPort("h", "1a"), -1);           // the digit's belt
     EXPECT_EQ(menuParseHostPort(std::string(256, 'a'), "5555"), -1); // > 255
 }
+
+// ---------------------------------------------------------------------------
+// V3-21: the --menu-open's page vocabulary (the demo's return's
+// deep-link's belt).
+// ---------------------------------------------------------------------------
+
+TEST(MenuOpenTest, PageVocabulary) {
+    // The 5 words (the Join's sub-page is the Multiplayer's interior —
+    // never a boot's page).
+    EXPECT_EQ(menuOpenPage("title"), MenuPage::Title);
+    EXPECT_EQ(menuOpenPage("login"), MenuPage::Login);
+    EXPECT_EQ(menuOpenPage("multiplayer"), MenuPage::Multiplayer);
+    EXPECT_EQ(menuOpenPage("settings"), MenuPage::Settings);
+    EXPECT_EQ(menuOpenPage("tutorial"), MenuPage::Tutorial);
+    // The reject's faces (the named error's belt).
+    EXPECT_FALSE(menuOpenPage("").has_value());
+    EXPECT_FALSE(menuOpenPage("Title").has_value()); // case's strict
+    EXPECT_FALSE(menuOpenPage("join").has_value());  // the sub-page's
+    EXPECT_FALSE(menuOpenPage("bogus").has_value());
+    EXPECT_FALSE(menuOpenPage("demo").has_value());
+}

@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <optional>
 #include <string>
 
 namespace mc {
@@ -388,6 +389,29 @@ inline std::string menuDemoLengthText(int frames) {
     char buf[16];
     std::snprintf(buf, sizeof(buf), "%02d:%02d", mm, ss);
     return std::string(buf);
+}
+
+// V3-21: the --menu-open's page vocabulary (the closed set — the
+// named reject's belt; the Join's sub-page is the Multiplayer's
+// interior, never a boot's page). The menu's deep-link's face: the
+// demo's return's re-exec lands on the tutorial's page.
+inline std::optional<MenuPage> menuOpenPage(const std::string& word) {
+    if (word == "title") {
+        return MenuPage::Title;
+    }
+    if (word == "login") {
+        return MenuPage::Login;
+    }
+    if (word == "multiplayer") {
+        return MenuPage::Multiplayer;
+    }
+    if (word == "settings") {
+        return MenuPage::Settings;
+    }
+    if (word == "tutorial") {
+        return MenuPage::Tutorial;
+    }
+    return std::nullopt;
 }
 
 // ---------------------------------------------------------------------------

@@ -11,6 +11,31 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.48.0（2026-11-13）— V3-21 用户实机诉求批 2：全景接缝修复 + 菜单 demo 返回教学菜单（门 238 全 PASS）
+
+**11-13 用户实机 2 条反馈**（v3.47.0 全景/教学首用；V3-21 入表 =
+V3-18/19/20 用户诉求先例）：①**全景接缝** → 根因 = 游戏 FOV 70° ×
+8 向 = 560° 内容 wrap 200° 跳变 → **45° tile 精确拼接**（kPanorama-
+FovDegrees = 360/8 具名；render FOV 覆写面 m_panoramaFovDegrees
+【-1 = 70° 位级红线】+ effectiveRenderFov() 投影/天空像素双消费点；
+资产再生 384 KB，×2 字节恒等 + ≡ committed）。②**菜单 demo Q 返回
+教学菜单** → 进程干净 re-exec（~2s 重载形；架构裁决：就地重建世界
+= 无先例大重构超诉求批——回放恒得 fresh 场景 + 深链回教学页）：
+`--menu-open <page>` 封闭词表 seam【title/login/multiplayer/settings/
+tutorial；Join = 多人页内部态永不 boot 页；九形 bypass 旗互斥拒收】
++ m_menuDemoReturn（菜单启动置位）+ m_demoQuitByAudienceKey（回放 Q
+键置位——窗口关闭 = 进程退出形不变）→ execRestartToMenu()【池 drain
+→ 音频 → 窗口/SDL → execv /proc/self/exe；save/record 跳过 = 观察
+红线；CLI --demo Q 行为零变化位级红线】。门 238：3023/3023（+1
+MenuOpenTest 10 面）+ S1 重锚 base20 = 全景标题 47961 B【×2 逐字节
++ 全背景 diff 37.4% 诉求论证】+ 接缝臂【tile 边界 mean-abs-diff 带
+max 28.1 ≤ 40 PASS——亚像素边缘位移域，拼接错误 100+】+ menu-open 臂
+×2 RAW + S6 两面 rc 2 命名拒收 + demo 返回臂 ×2【finished 轮询 + Q +
+banner ×2 + 日志链路】+ canary 4×2 跨树 RAW EXACT ×4【零字体门面
+终结，PITS 425④ 不复发】+ 性能 A/B 同档【median 同档 + changesApplied
+9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 430 三坑；详见
+`docs/archive/phase-3.48.0.md`
+
 ## v3.47.0（2026-11-13）— V3-20 用户实机诉求批：demo 中文标题 + 菜单全景背景 + 戏字 + 主机无限等待（门 237 全 PASS）
 
 **11-12 用户实机 4 条反馈**（v3.46.0 多人页首用；V3-20 入表 =

@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cerrno> // V3-21: the re-exec's named failure
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -2987,6 +2988,11 @@ Result<void> Game::init(const GameArgs& args) {
     if (menuEnabled()) {
         MC_TRY(buildUiAssets());
         m_menuActive = true;
+        // V3-21: the --menu-open's deep-link (the validated word — the
+        // demo's return's re-exec lands on the tutorial's page).
+        if (!m_args.menuOpen.empty()) {
+            m_menuPage = *menuOpenPage(m_args.menuOpen);
+        }
         m_initialized = true;
         return {};
     }
@@ -3067,6 +3073,10 @@ int Game::run() {
                 MC_LOG_INFO("menu: tutorial — the demo's launch (the "
                             "--demo's shape: '" +
                             m_args.demo.filename().string() + "')");
+                // V3-21: the demo's return's marker (the replay's Q =
+                // the menu's return, not the process's exit — the
+                // CLI's --demo's Q keeps the exit's shape).
+                m_menuDemoReturn = true;
             }
             auto scene = buildScene();
             if (!scene.ok()) {
@@ -3139,6 +3149,21 @@ int Game::run() {
         // SDL queue, the demo's dts are the only time source).
         if (m_demoMode == DemoMode::Replay) {
             runDemoReplay();
+            // V3-21: the menu's demo's RETURN (the user's 11-13 request:
+            // the menu's tutorial's Q = the menu's return, distinguished
+            // from the CLI's --demo's Q = the process's exit). The
+            // return's form = the process's clean re-exec with the
+            // --menu-open tutorial's deep-link: the scene's fresh
+            // rebuild's SINGLE PATH (a replay needs the scene's initial
+            // state; the in-place's world rebuild is the project's
+            // never-built face — the big refactor's out of scope; the
+            // re-exec gives every demo a fresh scene + lands the menu
+            // at the tutorial's page). The exec keeps the pid (the
+            // window's close + reopen is the reload's face).
+            if (m_menuDemoReturn && m_demoQuitByAudienceKey) {
+                execRestartToMenu();
+                return 0; // the execv's failure's face — the normal exit
+            }
         } else {
             runGameplayLoop(lastFrame);
         }
@@ -3209,6 +3234,50 @@ int Game::run() {
     m_initialized = false;
     MC_LOG_INFO("Game shut down cleanly");
     return 0;
+}
+
+void Game::execRestartToMenu() {
+    // V3-21: the menu's demo's return's re-exec (see run()'s comment).
+    // The teardown = the run's tail's sequence minus the save / the
+    // record (the demo's observation's red line: nothing is written —
+    // the scene's reference slot is never the exit's write-back).
+    MC_LOG_INFO("menu: the demo's return — the process's re-exec to the "
+                "menu's tutorial's page (the scene's fresh rebuild's "
+                "single path)");
+    if (m_streaming.pool) {
+        m_streaming.pool->flush();
+        m_streaming.pool.reset();
+    }
+    m_sound.shutdown();
+    m_window.shutdown();
+    m_initialized = false;
+    // The exe's path (/proc/self/exe's absolute — the argv[0]'s
+    // relative's belt, the cwd's invariant under the exec).
+    char exe[4096];
+    const ssize_t n = ::readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    if (n <= 0) {
+        MC_LOG_ERROR("menu: the re-exec failed (no /proc/self/exe) — the "
+                     "process's exit");
+        return;
+    }
+    exe[n] = '\0';
+    // The handoff's args (the config's + the tutorial's deep-link + the
+    // save's composition pass-through — the frame's limit's drop: the
+    // restarted menu's budget is fresh; the log level's pass-through).
+    std::vector<const char*> argv;
+    argv.push_back(exe);
+    argv.push_back("--config");
+    argv.push_back(m_args.configPath.c_str());
+    argv.push_back("--menu-open");
+    argv.push_back("tutorial"); // the return's page (the 5-word's belt)
+    if (m_args.saveSlot.has_value()) {
+        argv.push_back("--save");
+        argv.push_back(m_args.saveSlot->c_str());
+    }
+    argv.push_back(nullptr);
+    ::execv(exe, const_cast<char* const*>(argv.data()));
+    MC_LOG_ERROR("menu: the re-exec failed (execv's errno " +
+                 std::to_string(errno) + ") — the process's exit");
 }
 
 // ---------------------------------------------------------------------------
@@ -3437,6 +3506,11 @@ void Game::runDemoReplay() {
         }
         if (panelUp && m_audienceInput.wasPressed(GameKey::Q)) {
             MC_LOG_INFO("Demo replay quit (audience)");
+            // V3-21: the audience's KEY quit (the window's close keeps
+            // the process-exit's shape — the app's quit is the app's
+            // quit). The run's tail distinguishes: the menu's demo's
+            // key-quit = the menu's return's re-exec.
+            m_demoQuitByAudienceKey = true;
             break;
         }
         if (m_audienceInput.wasPressed(GameKey::C)) {

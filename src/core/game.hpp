@@ -207,6 +207,11 @@ struct GameArgs {
     // 360-degree view from the spawn's eye, stitched, then exit — no
     // loop, no save, no net, no demo).
     std::filesystem::path panoramaOut;
+    // V3-21: the --menu-open <page> — the menu's deep-link (the closed
+    // title/login/multiplayer/settings/tutorial vocabulary; the Join's
+    // sub-page is the Multiplayer's interior, never a boot's page).
+    // The demo's return's re-exec's handoff.
+    std::string menuOpen;
 };
 
 // V3-12b: the state hash FNV primitive (net/net_proto.hpp).
@@ -463,6 +468,9 @@ private:
     // V3-20: the withUi's gate (the panorama's seam's world-only's
     // render; the gameplay's default true = the bit-identical's line).
     void render(bool withUi = true);
+    // V3-21: the render's effective FOV (the panorama's capture's
+    // override; the gameplay's -1 = the kFovDegrees' bit-line).
+    float effectiveRenderFov() const;
     // Rebuilds the GPU mesh of every column whose merged GL mesh is stale
     // (ctx.columnRebuildPending). PIPE-1: the mesher's COMPUTE no longer runs
     // here — worker mesh jobs (postMeshJobs / integrateMeshJobs) refresh
@@ -579,6 +587,11 @@ private:
     // V3-20: the menu's panorama strip's generator (the --panorama's
     // seam — see GameArgs::panoramaOut).
     Result<void> renderPanorama();
+    // V3-21: the menu's demo's return's re-exec (the scene's fresh
+    // rebuild's single path — see run()'s comment; the clean teardown
+    // + the /proc/self/exe's execv + the --menu-open tutorial's
+    // handoff).
+    void execRestartToMenu();
 
     // Draw the sun, moon and starfield (unlit billboarded quads, blended).
     // Called between the opaque and transparent chunk passes.
@@ -1763,6 +1776,10 @@ std::optional<MobHit> targetMob() const;
     // lazy load — the menu's path only: the demo/net/--new's boots
     // never render the menu = the asset's zero cost there).
     Texture m_menuPanorama;
+    // V3-21: the render's FOV's override (the panorama's capture's
+    // kPanoramaFovDegrees' tile-exact's face; -1 = the game's
+    // kFovDegrees' bit-line, the gameplay's every render's default).
+    float m_panoramaFovDegrees = -1.0f;
     // V3-17c: the login's name (the net HELLO's carrier — the 17d's
     // consumption; the solo's display-only face) + the tutorial's
     // two-level's state (-1 = the chapters, >= 0 = the chapter's demos)
@@ -1780,6 +1797,13 @@ std::optional<MobHit> targetMob() const;
     std::string m_menuServer;
     bool m_menuJoinError = false;
     bool m_menuNetActive = false;
+    // V3-21: the demo's return's faces (the menu-launched demo's Q =
+    // the menu's return, the CLI's --demo's Q = the process's exit —
+    // the user's 11-13 request's distinction). m_menuDemoReturn is
+    // set at the menu's demo launch; m_demoQuitByAudienceKey is set by
+    // the replay's Q (the window's close keeps the exit's shape).
+    bool m_menuDemoReturn = false;
+    bool m_demoQuitByAudienceKey = false;
     // V3-17d: the client's WELCOME's MOTD (the presentation's pending —
     // displayed as the first chat line after the world's build, the
     // hash's exclusion by construction).

@@ -85,6 +85,9 @@ void printUsage() {
         "                    (the config's seed's 360-degree view from the\n"
         "                    spawn's eye, 8 views stitched — the one-shot,\n"
         "                    no loop / no save)\n"
+        "  --menu-open <p>   V3-21: open the menu at the page (title/login/\n"
+        "                    multiplayer/settings/tutorial — the demo's\n"
+        "                    return's deep-link)\n"
         "  --log-level <l>   trace|debug|info|warn|error\n"
         "  -h, --help        Show this help\n");
 }
@@ -274,6 +277,17 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             const char* v = nextValue(i, "--panorama");
             if (!v) return false;
             args.panoramaOut = v;
+        } else if (arg == "--menu-open") {
+            // V3-21: the menu's deep-link (the closed vocabulary — the
+            // named reject's belt; the demo's return's handoff page).
+            const char* v = nextValue(i, "--menu-open");
+            if (!v) return false;
+            if (!menuOpenPage(v).has_value()) {
+                err = "invalid --menu-open: '" + std::string(v) +
+                      "' (title/login/multiplayer/settings/tutorial)";
+                return false;
+            }
+            args.menuOpen = v;
         } else if (arg == "--listen") {
             // V3-12b: the net HOST (the --port's fixed shape:
             // --listen <port>, the 12b's LAN loopback gate's form).
@@ -450,6 +464,19 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
          !args.script.empty() || args.listDemos)) {
         err = "--panorama runs the world once (the strip's render): "
               "drop the game-run flags";
+        return false;
+    }
+    // V3-21: --menu-open is the MENU's deep-link — every flag that
+    // BYPASSES the menu (the five forms) is its named reject (the
+    // page would be dead state).
+    if (!args.menuOpen.empty() &&
+        (!args.demo.empty() || args.demoRecord || !args.demoAuthor.empty() ||
+         args.listenPort != 0 || !args.connectHost.empty() ||
+         !args.script.empty() || args.newWorld ||
+         !args.panoramaOut.empty() || args.listDemos)) {
+        err = "--menu-open opens the menu: drop the menu-bypass flags "
+              "(--demo / --demo-record / --demo-author / --listen / "
+              "--connect / --script / --new / --panorama / --list-demos)";
         return false;
     }
     // V3-9: --demo-author is STANDALONE headless (the timeline expands
