@@ -3,8 +3,54 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–420，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–422，新条目继续前插于尾部块首。
 
+- **末影龙 guide authoring 珍珠/嵌眼/出口门八坑（PITS 422，门 230
+  v3.40.0 V3-16h② ② 末影龙）**——① **传送后视图 re-anchor = yaw +
+  位置（pitch 已同步勿覆写）**：travelEnd 强制 yaw +π/2（朝西）+ 保
+  pitch（= 12 嵌眼 aim −20.96°），pearl 保视图——author re-anchor 只
+  x/y/z：(a) yaw stale = look_point 鼠标 delta 错 → 珍珠飞东南（gd5
+  玩家死）；(b) pitch 覆写 −0.1 = 珍珠按 −18° 飞 4-m（gd6）。② **珍
+  珠射程 = 仰角主导**：flat 12-m（gd7），28° 弧 = 40-m 全程一掷
+  （v²sin2θ/g + 高度加成，eye y54.62 apex y59.5）——28° 西掷一穿
+  entry platform 40-m 到出口门。③ **珍珠穿晶 = shatter_on_arrow 全
+  projectile 扫掠吞珍珠**（gd10）：V3-10d 的箭碎晶扫掠对所有
+  projectile 生效（含 pearl）——弧穿 (2,54,0) 晶盒 = 碎晶 + 珍珠消
+  耗（无 teleport）；aim z−0.6 绕行。④ **egg box = LMB ray t0 陷阱**
+  （gd14）：dragon_egg 非实心（aim 射线穿过）但 ray ORIGIN 在 egg
+  box 内（眼位 (−0.34,54.62,0.41) ∈ egg (0,54,0)）= raycast 首命中
+  t≈0 = LMB 挖蛋（hardness 0 瞬破 + 3600-f 会话重生）；center 站位
+  眼位离 egg box ≥1-m（(1.0,1.0) pin，−x 晶射线擦 egg x-slab 时
+  z0.93 > egg z-max 0.5 过）。⑤ **chunk 载竞 = 珍珠穿未载地形 / orb
+  沉基岩洋**（gd17）：raw getBlock 未载 chunk = air（PITS 408⑤）——
+  珍珠比地形流送早 40-f 过 origin chunk = 无碰撞 244-f 虚空飞到 kill
+  plane；XP orb 在 pearl catchUpDisk 前穿未载 chunk 沉基岩洋 y5 持久
+  end_xp_entities（12/23 沉 + 11 收集 = xp 92，streaming 时序产物）——
+  throw timing 相对流送钉（f1593 throw 成立 / f1553 不成立，20-f
+  偏移生死）。⑥ **step 事件行走漂移 0.5-m**（gd15）：walk_leg 穿
+  frame step-up/down（出口门环 = 1-block 实心墙）模型未计 step 时耗
+  → 0.49-m 漂移（author (0.5,2.5) vs actual (0.006,2.505)）→ 破晶
+  aim 全 miss；honest-landing re-anchor pin（PITS 416/417 纪律）。
+  ⑦ **rim 大 yaw 多 look 模型漂 = 破晶全 miss**（gd16/gd18）：rim
+  (0.5,2.5) 连两大 yaw 旋转（141°+）的 author 模型漂 → 2 晶皆完好
+  无 shattered 行（journal 无晶编辑 = 假「crystals 0」——晶 = worldgen
+  非 journal，断言须查 shattered 行）；center (1.0,1.0) 小旋站位
+  （1.62/3.56-m reach）= f1960/f2019 双碎实证（gd19）。⑧ **出口门环
+  = 1-block 实心墙**：3×3 center（end_portal 非实心 y53）被 12 实心
+  frame（顶 y54）环围——入 center = step-up + step-down；egg 悬
+  center 上空（y54 非实心）；水晶坐 frame 顶 y54（中心 y55）。
+- - **末地 portal 嵌眼激活坑（PITS 421，V3-16h② 末影龙侦察，门 230 待执行，
+  demo 未发布但机制实证）**——① **末帧嵌眼须在 GOOD cell**：ring 激活扫描只查
+  嵌眼格的 **8 候选中心**（offset (±2,0)(0,±2)(±1,±2)，end_portal.cpp
+  25-38），5×5 ring 中心 (cx,cz) 仅对 12 边框格中的 **8 格**是候选
+  （顶/底行中格 + 左/右列中格 + 顶/底行非角格；侧列非中格 (x=4,z=5/7)
+  (x=8,z=5/7) 的 offset 是 (±2,±1) 非候选）。12/12 嵌满但末帧在 BAD
+  cell = **ring 全 eyed 却不激活**（实测 12 eyed + 0 end_portal）。
+  解 = 末帧嵌 GOOD cell（如 (cx,cz-2) 顶行中格，offset (0,2)）。② **嵌
+  眼 = 场景预置 frame**：end_portal_frame survival 不可得（destroyable
+  false 无 recipe），demo 须场景预置 12 边框格 + 玩家持 12 ender_eye。
+  ③ **4 角 = 缺口**：5×5 ring 的 4 角无 frame（air）= 玩家入 center 的
+  通道（嵌眼时站 center 朝下 aim 12 边框格顶面 y55，比绕 ring 稳）。
 - **下界门 guide authoring 传送坑（PITS 420，门 229 v3.39.0 V3-16h①
   ① 下界门）**——① **点火瞄准 = 底行顶面（朝内面）**：portal 框单格厚
   （内 air 与 obsidian 环共面），aim 环格**朝框内的面**（底行 y54 的 +y

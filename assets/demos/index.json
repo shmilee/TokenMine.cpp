@@ -113,6 +113,19 @@
             ],
             "file": "guide_nether.dmo",
             "length_frames": 10865
+        },
+        {
+            "category": "dimension",
+            "seq": 2,
+            "mode": "solo",
+            "tags": [
+                "end",
+                "dragon",
+                "portal",
+                "pearl"
+            ],
+            "file": "guide_dragon.dmo",
+            "length_frames": 15214
         }
     ]
 }

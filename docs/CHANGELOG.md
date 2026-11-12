@@ -11,6 +11,43 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.40.0（2026-11-12）— V3-16h② 扩展指导 demo 族：② 打末影龙（门 230 全 PASS）
+
+**V3-16 相位 H/7 收官支 = 10 主题全完成**（16h 拆两版：① 下界门 =
+v3.39.0 / ② 末影龙 = v3.40.0；**零内核**——末地嵌眼/travelEnd/龙
+boss/水晶/珍珠/爆炸/netherite 甲全既有 V3-10a-d + V3-10b + SURV-1
+基建，16a 的 scene/panel_click/索引全复用，内容 + 工具链增量）：
+**guide_dragon**（15214f 04:13，176 events：scene = 12×12 平台正午
+SURVIVAL **mobs ON** + 预置 ender_eye 12 (h0) + ender_pearl 1 (h1) +
+**netherite 甲 4 件 (h2-h5)** + end_portal_frame 5×5 环 12 格 center
+(6,6) 未嵌眼【frame survival 不可得 = 预置】；tour = P0 → **装备**
+【netherite RMB 即穿 20 AP 80% 减伤 6→1.2/击】→ **嵌 12 眼**【GOOD
+cell (6,4) 末位 PITS 421 → "End portal activated at (6,54,6)"】→
+站入 60-f 传送【"Traveled to end at (40,53,0)" 落 entry platform】→
+**dragon --dragon-damage 200 同帧杀**【f1442 + egg (0,54,0) + 23 orb
+200XP + 240-f ascension 仪式】→ **珍珠 28° 弧西掷 40-m**【flat 仅
+12-m；"pearl teleport to (1.89,54.69,-4.30)"】→ 入 center【step-up/
+down 出口门环 = 1-block 实心墙】→ **破 2 出口水晶**【f1960/f2019
+bare-hand hardness-0 瞬破 explode r3 爆坑 28 格；tower 晶 ±50
+off-route CUT 偏离】→ 观蛋【**egg 完好**——center 站位眼位离 egg box
+≥1-m PITS 422④】→ 站 center 等 900-f 冷却 → **返程**【"Traveled to
+overworld (end exit)" 落 (0.5,54,0.5)】→ 观点亮门收束；终态钉 hp20 /
+**xp 92**【11/23 orb 收集；12 早落 orb 穿未载 chunk 沉基岩洋 y5 持久
+= streaming 时序产物记档偏离】/ netherite 甲 4 件各 6.5 损 / inv 空 /
+lit portal 9/9 + eyed 12/12 / time 0.6726；**--dragon-damage 200 =
+必带 CLI seam**【龙战不可手编，10d1 同款记档】）；**门内捕获 PITS
+422 八坑**【①传送后视图 re-anchor yaw+位置 pitch 勿覆写 ②珍珠射程
+仰角主导 ③珍珠穿晶 = shatter_on_arrow 全 projectile 吞珍珠 ④egg box
+= LMB ray t0 陷阱 ⑤chunk 载竞 = 珍珠穿未载地形 + orb 沉基岩洋
+⑥step 事件行走漂移 0.5-m ⑦rim 大 yaw 多 look 模型漂 = 破晶全 miss
+⑧出口门环 = 1-block 实心墙】；index **dimension seq 2**【tags
+end/dragon/portal/pearl】；2998/2998（banner re-pin 1）+ S1 第 111
+次【f60 ×2 ≡ base19】+ canary 4×2 新≡旧二进制（tm_v339 v3.39.0）
+RAW+savenorm EXACT + guide_dragon ×2 RAW/savenorm EXACT + 性能 A/B 同
+档【upd med 0.523/0.576/0.565 vs 0.527/0.583/0.557 + swap 同档 +
+终档跨树 savenorm EXACT = 结构性零成本】；详见
+`docs/archive/phase-3.40.0.md`
+
 ## v3.39.0（2026-11-12）— V3-16h① 扩展指导 demo 族：① 搭建下界传送门 + 去下界（门 229 全 PASS）
 
 **V3-16 相位 H/7 = dimension 章节首支**（16h 拆两版：① 下界门 = v3.39.0 /
