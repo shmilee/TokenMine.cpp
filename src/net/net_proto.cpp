@@ -369,6 +369,16 @@ std::vector<std::uint8_t> packWelcome(const NetWelcome& w) {
     putU8(v, w.delay);
     putU8(v, w.hashInterval);
     putU32(v, w.startFrame);
+    // V3-17d: the host's display name (str8, <= 12 — the HELLO's
+    // name's belt) + the lobby's MOTD (str16, <= kNetMotdMax).
+    putU8(v, static_cast<std::uint8_t>(w.hostName.size()));
+    for (char c : w.hostName) {
+        putU8(v, static_cast<std::uint8_t>(c));
+    }
+    putU16(v, static_cast<std::uint16_t>(w.motd.size()));
+    for (char c : w.motd) {
+        putU8(v, static_cast<std::uint8_t>(c));
+    }
     return v;
 }
 
@@ -387,7 +397,10 @@ bool unpackWelcome(const std::uint8_t* p, std::size_t n, NetWelcome& out) {
     out.delay = r.u8();
     out.hashInterval = r.u8();
     out.startFrame = r.u32();
-    return r.ok && out.players <= kNetMaxPlayers;
+    out.hostName = r.str8();
+    out.motd = r.str16();
+    return r.ok && out.players <= kNetMaxPlayers &&
+           out.hostName.size() <= 12 && out.motd.size() <= kNetMotdMax;
 }
 
 std::vector<std::uint8_t> packInput(std::uint32_t frame,

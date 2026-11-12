@@ -11,6 +11,37 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.46.0（2026-11-12）— V3-17d 主菜单：多人页 + MOTD（门 236 全 PASS，V3-17 全 4 相位收官 = 3.x 矩阵收官项）
+
+**V3-17 相位 D/4**（BACKLOG 规格 ⑤ 多人页【主机 --listen / 加入
+--connect host:port + 名字；12c1 大厅 MOTD 意念并入】；零字体——
+创建/游戏/加入全在 457 表）：**多人页**（名字字段 = m_menuName
+共享——文本输入生命周期扩至 Login/Multiplayer/Join，每页单字段
+隐式焦点）+「创建游戏」（fresh 世界 + kNetDefaultPort 5555 具名
+默认端口，CLI --listen 显式面不变）+「加入游戏」→ **加入子页**
+（host:port 字段 + menuParseHostPort 纯函数【7 合法/10 拒收】+
+拒收行）；**网络接线 = init 块原文提取**（netClientStart =
+--connect 块 / netPostScene = --listen 块 + REJOIN 快照 + 客户端
+全玩家体 + MOTD 首聊行——CLI 位级不变，菜单 run() menuExit 3/4
+共用，17c applyDemoArgs 范式）；**WELCOME +hostName +motd**
+（str8 ≤12 空 = CLI 旧形 "host" 回落 / str16 ≤64；混版 = HELLO
+TM_VERSION 指纹先拒 → schema 增长兼容性免费）；**MOTD** = 主机
+config net.motd（默认 "TokenMine.cpp"，键缺省不写用户 config）→
+客户端世界建成后首聊行 + 日志点名【12c1 大厅 MOTD 最小形——服务
+器列表 ping 不做记偏离；表现层不入哈希 D21 先例】；名字消费
+m_menuNetActive 门（CLI 恒 "client"/"host" 位级红线）；**R7 菜单
+面守卫**（写档收口 + connectHost.empty()——菜单加入运行时设
+connectHost 绕过 argv 拒收 = 客机写档可覆主机槽，门内定案捕获）；
+menuStub* 死码 + 2 单测清除；门 236：3021/3021（+4 净）
++ S1 重锚 base20 + 登陆臂回归 ≡ --new savenorm EXACT + **网络臂
+A/B/D 三形×2**【A 菜单主机 hgate：客机 net chat[hgate] 首聊行 +
+主机 client 'client' joined + hash 逐字 / B 菜单客机 cgate：主机
+client 'cgate' joined + 客机 net chat[host] 旧形回落 / D 纯 CLI
+legacy 位级形】+ canary 4×2 新≡旧（tm_v345）跨树 RAW EXACT ×4
++ 性能 A/B 同档【new upd med 0.607/0.599/0.599 vs old 0.591/0.597/0.584 median 同档 + render/swap 同档 + changesApplied 9/3/1 vs 9/2/1【win2 = real-dt 域先例】】；门内捕获 PITS 428
+四坑【WM 二窗互杀方向定式 / R7 菜单面守卫 / 60fps 帧预算 700 /
+xdotool 名搜索污染三路冗余】；详见 `docs/archive/phase-3.46.0.md`
+
 ## v3.45.0（2026-11-12）— V3-17c 主菜单：登陆页 + 教学两级（门 235 全 PASS）
 
 **V3-17 相位 C/4**（BACKLOG 规格 ③ 登陆页【本地名字——net HELLO

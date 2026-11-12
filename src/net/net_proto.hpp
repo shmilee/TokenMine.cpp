@@ -58,6 +58,13 @@ inline constexpr std::size_t kNetFrameStateBytes = 40;
 // the FRAME's u8).
 inline constexpr std::uint8_t kNetMaxPlayers = 8;
 
+// V3-17d: the lobby's faces — the MOTD's cap (the WELCOME's str16's
+// belt, the config net.motd's read) + the menu's host's default port
+// (the CLI's --listen <port> keeps the explicit face; the menu's
+// 创建游戏 rides the named default — the MC 5555's read).
+inline constexpr std::size_t kNetMotdMax = 64;
+inline constexpr std::uint16_t kNetDefaultPort = 5555;
+
 // The FRAME STATE (design §2.3): one player's input for one frame —
 // the level-triggered keys (the OR of the two sources, the V3-8
 // bitmask's relay form), the edges (press / release — the wasPressed /
@@ -128,6 +135,16 @@ struct NetWelcome {
     // apply; 0 on the fresh form + the initial window's save form —
     // the session's frame zero).
     std::uint32_t startFrame = 0;
+    // V3-17d: the host's DISPLAY NAME (str8, <= 12 Latin — the HELLO
+    // name's twin cap; EMPTY = the legacy "host" shape, the CLI's
+    // --listen keeps the pre-17d's bit-identical face) + the lobby's
+    // MOTD (str16, <= kNetMotdMax Latin — the config net.motd's read,
+    // the 12c1's deferred concept's minimal form: the client's first
+    // chat line + the log's naming, the server list's ping face is
+    // out). The mixed versions are rejected at the HELLO's TM_VERSION
+    // BEFORE the WELCOME, so the schema's growth is compatibility-free.
+    std::string hostName;
+    std::string motd;
     bool operator==(const NetWelcome&) const = default;
 };
 

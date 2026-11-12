@@ -117,7 +117,7 @@ Result<void> Game::netClientHandshake() {
         return MC_FAIL(uiScale.error().describe());
     }
     hello.uiScale = *uiScale;
-    hello.name = "client";
+    hello.name = m_menuNetActive ? m_menuName : "client";
     m_nets.push_back(std::make_unique<NetSession>());
     NetWelcome welcome;
     err = m_nets.back()->startClient(m_args.connectHost, m_args.connectPort,
@@ -150,7 +150,18 @@ Result<void> Game::netClientHandshake() {
     m_netInputs.resize(n);
     m_remoteFrameMax.assign(n, 0);
     m_playerNames.assign(n, "player");
-    m_playerNames[0] = "host";
+    // V3-17d: the host's display name (the WELCOME's carrier — empty
+    // = the legacy "host" shape, the CLI's --listen bit-identical).
+    m_playerNames[0] =
+        welcome.hostName.empty() ? "host" : welcome.hostName;
+    // V3-17d: the lobby's MOTD (the 12c1's deferred concept's minimal
+    // form — the host's first chat line + the log's naming, presented
+    // after the world's build in netPostScene; the presentation's
+    // hash-exclusion by construction).
+    m_motdPending = welcome.motd;
+    if (!welcome.motd.empty()) {
+        MC_LOG_INFO("net: the host's MOTD: '" + welcome.motd + "'");
+    }
     MC_LOG_INFO("net: joined the host (slot " + std::to_string(welcome.slot) +
                 " of " + std::to_string(n) + ", the world seed " +
                 std::to_string(welcome.seed) + ")");
@@ -309,6 +320,11 @@ Result<void> Game::netHostHandshake() {
         welcome.startFrame = 0; // the session's frame zero (the host's
                                 // m_frameCount at the handshake)
         welcome.journalPayload = snapshotPayload;
+        // V3-17d: the host's display name + the lobby's MOTD (the
+        // menu's host carries the typed name; the CLI's --listen keeps
+        // the legacy empty-hostName shape = the client's "host" read).
+        welcome.hostName = m_menuNetActive ? m_menuName : "";
+        welcome.motd = netMotdFromConfig();
         err = accepted[i].session->send(NetType::Welcome, packWelcome(welcome));
         if (!err.empty()) {
             accepted[i].session->close();
@@ -329,7 +345,11 @@ Result<void> Game::netHostHandshake() {
     m_frameRings.assign(n, std::vector<FrameState>(kRingDepth, FrameState {}));
     m_netInputs.resize(n);
     m_remoteFrameMax.assign(n, 0);
-    m_playerNames.insert(m_playerNames.begin(), "host");
+    // V3-17d: the host's OWN display name (the menu's host carries the
+    // typed name — its chat lines / the F3's players read it; the
+    // CLI's --listen keeps the legacy "host" = bit-identical).
+    m_playerNames.insert(m_playerNames.begin(),
+                         m_menuNetActive ? m_menuName : "host");
     return {};
 }
 
@@ -713,6 +733,11 @@ void Game::netTryMidSessionAccept() {
                 welcome.startFrame =
                     static_cast<std::uint32_t>(m_frameCount);
                 welcome.journalPayload = snap->dump(-1);
+                // V3-17d: the rejoin's WELCOME carries the same host
+                // name + MOTD face as the initial window's (the
+                // joiner's m_playerNames[0] + the chat line's twin).
+                welcome.hostName = m_menuNetActive ? m_menuName : "";
+                welcome.motd = netMotdFromConfig();
                 if (joinSession->send(
                         NetType::Welcome, packWelcome(welcome))
                         .empty()) {
@@ -1068,6 +1093,14 @@ void Game::netSendChat(const std::string& text) {
     (void)m_nets[0]->send(
         NetType::Chat,
         packChat(static_cast<std::uint8_t>(m_localSlot), clean));
+}
+
+std::string Game::netMotdFromConfig() {
+    // V3-17d: the lobby's MOTD (the config net.motd's read, the
+    // "TokenMine.cpp" default) — the Latin-only sanitize + the
+    // kNetMotdMax's cap (the WELCOME's str16's belt's twin).
+    return latinOnly(m_config.getString("net.motd", "TokenMine.cpp")).substr(
+        0, kNetMotdMax);
 }
 
 void Game::displayChat(int slot, const std::string& text) {

@@ -254,7 +254,24 @@ Hovered 移除】；**零字体**【词表全在 457 表——8 缺字措辞规�
 图 + canary 4×2 新≡旧（tm_v344）跨树 RAW EXACT ×4【零字体门面延续】+
 性能 A/B 同档【median 交错 + changesApplied 9/3/1 vs 9/2/1 + 终档跨树
 savenorm EXACT】；PITS 427 四坑【背景构建竞态旧日志假信号 / tier-2 长
-文件名溢出 / mm:ss 逐字公式 / 清默认名计数 6 非 4】）**
+文件名溢出 / mm:ss 逐字公式 / 清默认名计数 6 非 4】）**；**v3.46.0 = V3-17d 主菜单：多人页 + MOTD
+（门 236，11-12：V3-17 全 4 相位收官 = **3.x 矩阵收官项**——多人页【名字共享
+m_menuName（文本输入生命周期扩至 Login/Multiplayer/Join，每页单字段隐式
+焦点）+ 创建游戏/加入游戏】+ 加入子页【host:port 字段 + menuParseHost-
+Port 纯函数【7 合法/10 拒收 test 钉】+ 拒收行】；**netClientStart/netPost-
+Scene = init --connect/--listen 块原文提取**【CLI 位级不变，菜单 run()
+menuExit 3/4 共用——17c applyDemoArgs 范式】；**WELCOME +hostName +motd**
+【str8 ≤12 空 = CLI 旧形 "host" 回落 / str16 ≤ kNetMotdMax 64；混版 =
+HELLO TM_VERSION 指纹先拒 → schema 增长兼容性免费】；MOTD = config
+net.motd 默认 "TokenMine.cpp"【键缺省不写用户 config P32】→ 客户端世界
+建成后**首聊行** displayChat(0, motd) + 日志点名【12c1 大厅 MOTD 意念
+最小形——服务器列表 ping 不做记偏离；表现层不入哈希 12c1 D21 先例】；
+名字消费 m_menuNetActive 门【CLI --connect 恒 "client" / --listen 恒
+"host" = 位级红线】+ kNetDefaultPort 5555 具名【菜单主机默认端口，
+CLI --listen 显式面不变】+ **R7 菜单面守卫**【writeSave 收口 +
+connectHost.empty()——菜单加入运行时设 connectHost 绕过 argv 拒收
+= 客机写档可覆主机槽，门内定案捕获 PITS 428②】；menuStub* 死码 +
+2 单测清除（17d 实面取代）；**零字体**（创建/游戏/加入全在 457 表）；3021/3021（+4：Multiplayer 2 + Join 3 + Welcome codec 1，Stub 2 删净）+ S1 重锚 base20 = v3.46.0 标题【×2 逐字节 + 版本行有界】+ 登陆臂回归 ≡ --new savenorm EXACT + **网络臂 A/B/D 三形×2**【A 菜单主机 hgate + CLI 客：WELCOME hostName → 客机 net chat[hgate] 首聊行 + 主机 client 'client' joined + hash f300/f600 逐字 / B CLI 主机 + 菜单客机 cgate：HELLO 名 + 旧形 "host" 回落 + 主机 save savenorm×2 / D 纯 CLI：legacy host/client + 默认 MOTD + hash 逐字】+ canary 4×2 新≡旧（tm_v345）跨树 RAW EXACT ×4【零字体门面延续】+ 性能 A/B 同档【new upd med 0.607/0.599/0.599 vs old 0.591/0.597/0.584 median 同档 + render/swap 同档 + changesApplied 9/3/1 vs 9/2/1【win2 = real-dt 域先例】】；PITS 428 四坑【WM 二窗互杀方向定式 / R7 菜单面守卫 / 60fps 帧预算 700 / xdotool 名搜索污染三路冗余】）**
 
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
@@ -267,7 +284,7 @@ v3.16.0 + V3-11 ✅ v3.17.0/v3.18.0 + V3-14a ✅ v3.19.0 + V3-14b ✅
 v3.20.0 + V3-14c ✅ v3.21.0 + V3-14d ✅ v3.22.0【V3-14 全 4 相位完成】+
 V3-10a ✅ v3.23.0 + V3-10b ✅ v3.24.0 + V3-10c ✅ v3.25.0 + V3-10d1 ✅ v3.26.0 + V3-10d2 ✅ v3.27.0【V3-10 全 4 相位完成】+ V3-12a ✅ v3.28.0 + V3-12b ✅ v3.29.0【2 人 PoC 完成】+ V3-12c1 ✅ v3.30.0【大厅/聊天/N/心跳】+ V3-12c2 ✅ v3.31.0【断线恢复
 REJOIN + format 33 players[] = 矩阵收官项·V3-12 全 4 相位完成】+
-**11-07 用户实机诉求 2 项 ⬜【V3-16 扩展指导 demo 族
+**11-07 用户实机诉求 2 项全 ✅【V3-16 扩展指导 demo 族
 【10 主题 3-10 分钟级：下界门/末影龙/房子+床/挖矿工具/体力/回血/皇
 宫/材料/河流/完整黑夜历险——**16a ✅ v3.32.0 = 内核 + 工具链 +
 pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
@@ -280,7 +297,9 @@ pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
 （门 233，S1 重锚 base20，PITS 425）+ 17b ✅ v3.44.0 设置页（门 234，8 行
 表单 + Config::save 写回 + 字体 +3 不增 atlas，PITS 426）+ 17c ✅ v3.45.0
 登陆 + 教学两级（门 235，文本输入生命周期 + 菜单 ≡ CLI demo 位级孪生，
-PITS 427）/ 17d ⬜；标题/设置/登陆/教学/多人五页 + MOTD 并入】】**【大项已相位拆分 V3-10a~d /
+PITS 427）+ 17d ✅ v3.46.0 多人页 + MOTD（门 236，WELCOME +hostName/
++ motd + 网络臂 A/B/D + R7 菜单面守卫，PITS 428）** = V3-17 全 4 相位
+完成；标题/设置/登陆/教学/多人五页 + MOTD 并入】】**【大项已相位拆分 V3-10a~d /
 V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
@@ -340,10 +359,13 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **3017/3017**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】+ v3.41.0 V3-19 死亡屏计时族 1【survivalStatsLine 纯函数】+ v3.42.0 V3-18 存档扩展名族 6【slot 路径族/双形枚举去重/复制重命名迁移/删除全槽/scene 两级探测】+ v3.43.0 V3-17a 主菜单族 5【布局门几何/状态机 11+4 面/词表章表 +
+- 测试 **3021/3021**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】+ v3.41.0 V3-19 死亡屏计时族 1【survivalStatsLine 纯函数】+ v3.42.0 V3-18 存档扩展名族 6【slot 路径族/双形枚举去重/复制重命名迁移/删除全槽/scene 两级探测】+ v3.43.0 V3-17a 主菜单族 5【布局门几何/状态机 11+4 面/词表章表 +
 banner re-pin 1】+ v3.44.0 V3-17b 设置页族 2【布局门几何 8 面 hit/
 状态机 11 面 + banner re-pin 1】+ v3.45.0 V3-17c 登陆/教学族 5【登录
-布局+4 面 / 教学布局+7 面+mm:ss 逐字 / Title re-pin + banner re-pin 1】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+布局+4 面 / 教学布局+7 面+mm:ss 逐字 / Title re-pin + banner re-pin 1】
++ v3.46.0 V3-17d 多人/MOTD 族 4【Multiplayer 布局+步 / Join 布局+步+
+ParseHostPort / Welcome codec + cap 拒收；Stub 2 删 = 净 +4；banner
+re-pin 1】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -508,6 +530,33 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 236（**V3-17d 主菜单：多人页 + MOTD v3.46.0** 门 236 全
+PASS【V3-17 相位 D/4 收官 = **3.x 矩阵收官项 23/23**；**零字体**：
+创建/游戏/加入/服/务 缺口靠「创建游戏/加入游戏」措辞核证全在 457
+表 = 跨树 RAW 恒 EXACT 门面延续】：**多人页**【名字字段 = m_menu-
+Name 共享（登陆页同款态——文本输入生命周期扩至 {Login, Multi-
+player, Join}，每页单字段 = 隐式焦点形）+「创建游戏」+「加入游
+戏」+「返回」；**加入子页**【host:port 字段 + hint +「开始」/「返
+回」+ 解析拒收行 "invalid host:port"（kSelected 橙）】；**menu-
+ParseHostPort 纯函数**【host [A-Za-z0-9.-]{1..255} + 单冒号 + port
+纯数字 1..65535——test 钉 7 合法 + 10 拒收面】；创建 = m_args.
+newWorld + listenPort **kNetDefaultPort 5555 具名**【CLI --listen
+<port> 显式面不变；既存档主机 = CLI-only（D16 fresh-only 先例延
+续）】→ menuExit 3；加入 = host:port → connectHost/connectPort →
+menuExit 4；**网络接线 = init 块原文提取**【netClientStart = --
+connect 块（握手 + WELCOME 种子覆写）/ netPostScene = --listen 块
++ REJOIN 快照 + 客户端全玩家体 + MOTD 首聊行——CLI init 原位调用
+位级不变，菜单 run() 3/4 共用（17c applyDemoArgs 范式）；host =
+buildScene 后（HELLO 比对需世界种子）/ client = buildScene 前
+（WELCOME 种子权威）】；**WELCOME +2 字段**【hostName str8 ≤12
+（**空 = CLI 旧形**——客机回落 "host" 位级红线）+ motd str16 ≤
+kNetMotdMax 64；**混版 = HELLO TM_VERSION 指纹先拒**（既有 face）
+→ schema 增长兼容性免费】；**MOTD** = 主机 config `net.motd`
+（getString 默认 "TokenMine.cpp"——**键缺省不写用户 config** P32
+纪律；latinOnly + 64 cap）→ 客户端**世界建成后首聊行** display-
+Chat(0, motd) + 日志点名【12c1 大厅 MOTD 意念最小形——服务器列表
+ping 面不做记偏离；表现层不入哈希 12c1 D21 先例】；**名字消费**
+= m_menuNetActive 门【菜单驱动才换名：CLI --connect 恒 "client" / --listen 恒 "host" = 位级红线；主机 WELCOME.hostName + 自身 m_playerNames[0] + 客机 HELLO name 三处】；**R7 菜单面守卫**【写档单收口（run 尾 writeSave 门）+ connectHost.empty()——菜单加入运行时设 connectHost 绕过 argv --connect×--save 拒收 = 客机退出写档可覆主机槽【同 slot 名形】，门内定案捕获修 PITS 428②】；menuStubLayout/menuStepStub/kMenuLaterFace + 2 单测死码清除（17d 实面取代，教学 stub 17c 同款先例）；3021/3021（+4：MenuMultiplayerTest Layout 5 面 hit/Step 6 面 + MenuJoinTest Layout/Step/ParseHostPort 10 面 + NetProto.WelcomeHostNameAndMotd round-trip + 空形 + cap 拒收 2 + 边界含界；Stub 2 删 = 净 +4；banner re-pin 1）；**S1 重锚 base20 = v3.46.0 标题**【f60 无输入 ×2 RAW 逐字节 + 旧锚 diff 单行版本行有界断言 + defined mouse (10,10) + 槽不创建】+ **登陆臂回归**【17c 面未动——单人 → gate → 开始 → 600-f ≡ --new savenorm EXACT】+ **网络臂三形×2**【**A 菜单主机 + CLI 客**【hgate 名 + 默认 MOTD：客机 `net chat[hgate]: TokenMine.cpp` 首聊行【WELCOME hostName 消费实证】+ 主机 `client 'client' joined`【CLI legacy 名】+ hash f300/f600 跨机逐字 + 主机 save savenorm ×2】/ **B CLI 主机 + 菜单客机**【cgate 名：主机 `client 'cgate' joined`【HELLO name 消费实证】+ 客机 `net chat[host]: TokenMine.cpp`【空 hostName 旧形回落】+ 主机 save savenorm ×2（客机不写 = R7 守卫生效）】/ **D 纯 CLI**【legacy "host"/"client" + 默认 MOTD 首聊行 + hash 逐字 + save savenorm ×2——CLI 位级形实证】；双窗臂方向定式 PITS 428①【WM 二窗互杀：受驱动窗 = 存活窗】】+ canary 4×2 新≡旧（tm_v345 v3.45.0）【**solo 路径 net 面全冷** = 结构免疫：树内 RAW r1==r2 EXACT ×4 + savenorm 跨树 EXACT ×4 + 跨树 RAW EXACT ×4【零字体 = v-UV 不变，PITS 425④ 不复发】】+ 性能 A/B 同档【OW 900f --new：new upd med 0.607/0.599/0.599 vs old 0.591/0.597/0.584 median 同档 + render/swap 同档 + changesApplied 9/3/1 vs 9/2/1【win2 = real-dt 域先例】+ 终档跨树 savenorm EXACT = 多人页/MOTD 零世界面结构零成本】；**门内捕获 PITS 428 四坑**【①WM 二窗互杀 + reparent BadWindow = findw 重试 + 臂方向定式 ②R7 菜单面漏网 = 写档收口守卫 ③60fps 机菜单臂 --frames 700 帧预算 ④xdotool 名搜索环境污染 = 锚定正则 + 异标题 config + search --pid 三路冗余】；详见 `docs/archive/phase-3.46.0.md`）；
   门计数 235（**V3-17c 主菜单：登陆页 + 教学两级 v3.45.0** 门 235 全
 PASS【V3-17 相位 C/4——BACKLOG 规格③④；**零字体**：17c 词表全在
 457 表【登/陆/请/符/暂/支/演/示 8 缺字靠措辞规避——「名字（可
@@ -2052,7 +2101,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（427 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（428 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

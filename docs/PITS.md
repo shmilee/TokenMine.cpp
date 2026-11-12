@@ -3,9 +3,34 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–427，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–428，新条目继续前插于尾部块首。
 
-- **主菜单 17c 登陆/教学 + 门 235 前置四坑（PITS 427）**——①
+- **主菜单 17d 多人/MOTD 门 236 前置四坑（PITS 428）**——①
+  **WM 二窗互杀（OpenChamber 环境实证）**：第二个游戏进程的窗
+  口映射时，**第一个**游戏窗口从 X 树消失（进程存活、SDL 正常
+  渲染，xdotool search --pid 恒空）——双窗 xdotool 臂只有单向可
+  行：受驱动窗必须是存活窗。定式 = 菜单主机臂【菜单先启 + CLI
+  客后启（客窗死无害——CLI 无需输入）】/ 菜单客机臂【CLI 主机
+  先启 + 菜单客后启（菜单窗存活可驱动）】，反序必败（4 连踩）；
+  另窗口 id 随 WM reparent 变 BadWindow（windowactivate 后首次
+  点击常成功、随后 stale）——findw 重试循环（search --pid +
+  getwindowname 活性验证）是双窗臂必备。② **R7 的菜单面漏网**：
+  「client never writes」原仅在 argv 层执法（--connect×--save
+  拒收）——菜单加入运行时才设 m_args.connectHost，--save 可静默
+  通过 = 客机退出写档可覆写主机槽（同 slot 名形）；修 = 写档
+  单收口（run 尾 writeSave 门）加 `m_args.connectHost.empty()`
+  守卫（CLI 客 argv 先拒 + 菜单客运行时名 = 双形单闸）。③ **60fps
+  机的菜单臂帧预算**：机载漂移致菜单渲染 20→60fps，--frames 300
+  的窗在操作序（~8-10s）中途退出 = BadWindow 假象（窗口死 =
+  进程退出的首征）——菜单操作臂一律 --frames 700（17c 先例 300
+  在 20fps 机够，帧预算是 fps 函数 PITS 416⑩ 续篇）。④ **xdotool
+  名搜索环境污染**：用户 Firefox 标签「TokenMine.cpp | Open-
+  Chamber」含产品名 = search --name "TokenMine" 假命中——锚定
+  正则 ^TokenMine.cpp$ + 双进程臂用**异标题 config 变体**
+  （window.title "TokenMine.cpp HOST"，HELLO 指纹不含 title 安
+  全）+ search --pid（无 timeout 包装直跑 = _NET_WM_PID 可用，
+  PITS 388① 正读）三路冗余。
+- - **主菜单 17c 登陆/教学 + 门 235 前置四坑（PITS 427）**——①
   **背景构建未确认完成就改源 = 混合 .o 态 + 陈旧日志误判**（门 235
   前置实证）：版本 bump 全量重编还在后台跑时误信了**上一次运行写同
   路径**的 tests 日志（3017/3017 假完成信号）→ 中途 g139 插桩改

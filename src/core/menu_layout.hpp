@@ -21,9 +21,10 @@ namespace mc {
 enum class MenuPage {
     Title,
     Login,       // 17c: the name's entry (before the singleplayer's start)
-    Multiplayer,
+    Multiplayer, // 17d: the host/join's page (the name's field + the two actions)
     Settings,
     Tutorial,    // 17c: the two-level's host (the chapter's list / the demos')
+    Join,        // 17d: the join's sub-page (the host:port's field)
 };
 
 // The actions a menu step raises (the loop consumes them).
@@ -32,6 +33,8 @@ enum class MenuAction {
     Back,             // a stub page -> the title (ESC / the 返回 click)
     StartSingleplayer, // the login page's 开始 -> the fresh world's start
     LaunchDemo,        // the tutorial's demo row (solo) -> the replay's start
+    HostGame,          // 17d: the multiplayer's 创建游戏 -> the host's start
+    JoinGame,          // 17d: the join's 开始 -> the client's connect
     Quit,              // the title's 退出 / the ESC -> the process exit
 };
 
@@ -98,32 +101,6 @@ inline MenuTitleLayout menuTitleLayout(int w, int h, int versionWidthPx) {
     return l;
 }
 
-// Pure: a stub page's geometry (the page title + the back button + the
-// tutorial's chapter rows — the display rects, the two-level's 17c
-// clicks them later).
-struct MenuStubLayout {
-    int titleX = 0, titleY = 0;
-    MenuButton back;
-    MenuButton rows[5];
-};
-
-inline MenuStubLayout menuStubLayout(int w, int h) {
-    MenuStubLayout l;
-    // The page title (2 CJK glyphs at scale 2.0 = 2 x 34 - 2 = 66 px).
-    const int titleW = 2 * static_cast<int>(17.0 * kMenuTitleScale) -
-                       static_cast<int>(kMenuTitleScale);
-    l.titleX = (w - titleW + 1) / 2;
-    l.titleY = menuRoundDiv(10 * h, 100); // lround(0.10 h)
-    l.back = MenuButton {(w - kMenuBackWidth + 1) / 2,
-                         menuRoundDiv(85 * h, 100), // lround(0.85 h)
-                         kMenuBackWidth, kMenuItemHeight};
-    const int rowY0 = menuRoundDiv(30 * h, 100); // lround(0.30 h)
-    for (int i = 0; i < 5; ++i) {
-        l.rows[i] = MenuButton {0, rowY0 + i * 30, w, 24};
-    }
-    return l;
-}
-
 // A menu step's outcome (the page's transition + the raised action).
 struct MenuStep {
     MenuPage page = MenuPage::Title;
@@ -160,17 +137,6 @@ inline MenuStep menuStepTitle(bool click, bool enter, bool esc,
                 s.action = MenuAction::Quit;
                 return s;
         }
-    }
-    return s;
-}
-
-// Pure: a stub page's step (ESC or the back button's click/Enter =
-// the title). The stub's content is display-only in 17a.
-inline MenuStep menuStepStub(bool click, bool enter, bool esc,
-                             bool backHovered) {
-    MenuStep s;
-    if (esc || (backHovered && (click || enter))) {
-        s.action = MenuAction::Back;
     }
     return s;
 }
@@ -422,6 +388,155 @@ inline std::string menuDemoLengthText(int frames) {
     char buf[16];
     std::snprintf(buf, sizeof(buf), "%02d:%02d", mm, ss);
     return std::string(buf);
+}
+
+// ---------------------------------------------------------------------------
+// V3-17d: the multiplayer page (the name's field + the host/join's actions)
+// + the join's sub-page (the host:port's field).
+// ---------------------------------------------------------------------------
+
+// The multiplayer page's geometry: the name's field (the login's twin —
+// m_menuName's carrier, the 12-Latin's cap) + the 创建游戏/加入游戏/
+// 返回's buttons. The host's action starts the fresh world on the
+// kNetDefaultPort; the join's action opens the Join sub-page.
+struct MenuMultiplayerLayout {
+    int titleX = 0, titleY = 0;
+    MenuButton nameField; // the name's input (300x40, the login's twin)
+    int nameHintX = 0, nameHintY = 0; // the （可选）
+    MenuButton host;      // 创建游戏
+    MenuButton join;      // 加入游戏
+    MenuButton back;      // 返回
+};
+
+inline MenuMultiplayerLayout menuMultiplayerLayout(int w, int h) {
+    MenuMultiplayerLayout l;
+    const int titleW = 2 * static_cast<int>(17.0 * kMenuTitleScale) -
+                       static_cast<int>(kMenuTitleScale);
+    l.titleX = (w - titleW + 1) / 2;
+    l.titleY = menuRoundDiv(10 * h, 100);
+    constexpr int kFieldW = 300;
+    constexpr int kFieldH = 40;
+    l.nameField = MenuButton {(w - kFieldW + 1) / 2, menuRoundDiv(30 * h, 100),
+                              kFieldW, kFieldH};
+    const int hintW = 5 * 17 - 1;
+    l.nameHintX = (w - hintW + 1) / 2;
+    l.nameHintY = l.nameField.y + l.nameField.h + 8;
+    // The host/join's buttons (4 CJK glyphs @ 1.5 = 96 px + the padding).
+    constexpr int kWideBtn = 150;
+    l.host = MenuButton {(w - kWideBtn + 1) / 2, menuRoundDiv(55 * h, 100),
+                         kWideBtn, 28};
+    l.join = MenuButton {(w - kWideBtn + 1) / 2, menuRoundDiv(68 * h, 100),
+                         kWideBtn, 28};
+    l.back = MenuButton {(w - 70 + 1) / 2, menuRoundDiv(85 * h, 100), 70, 28};
+    return l;
+}
+
+// Pure: the multiplayer page's step. The name's field is the text-input's
+// face (the loop's, not a step); the buttons raise their actions.
+inline MenuStep menuMultiplayerStep(bool click, bool esc,
+                                    bool hostHovered, bool joinHovered,
+                                    bool backHovered) {
+    MenuStep s;
+    if (esc) {
+        s.action = MenuAction::Back;
+        return s;
+    }
+    if (click) {
+        if (hostHovered) {
+            s.action = MenuAction::HostGame;
+            return s;
+        }
+        if (joinHovered) {
+            s.action = MenuAction::JoinGame;
+            return s;
+        }
+        if (backHovered) {
+            s.action = MenuAction::Back;
+            return s;
+        }
+    }
+    return s;
+}
+
+// The join's sub-page's geometry: the host:port's field + the 开始/返回.
+struct MenuJoinLayout {
+    int titleX = 0, titleY = 0;
+    MenuButton serverField; // the host:port's input (300x40)
+    int hintX = 0, hintY = 0; // the "host:port"'s hint
+    MenuButton start;  // 开始
+    MenuButton back;   // 返回
+};
+
+inline MenuJoinLayout menuJoinLayout(int w, int h) {
+    MenuJoinLayout l;
+    const int titleW = 2 * static_cast<int>(17.0 * kMenuTitleScale) -
+                       static_cast<int>(kMenuTitleScale);
+    l.titleX = (w - titleW + 1) / 2;
+    l.titleY = menuRoundDiv(10 * h, 100);
+    constexpr int kFieldW = 300;
+    constexpr int kFieldH = 40;
+    l.serverField = MenuButton {(w - kFieldW + 1) / 2,
+                                menuRoundDiv(32 * h, 100), kFieldW, kFieldH};
+    const int hintW = 9 * 17 - 1; // "host:port" 9 ASCII @ 1.0
+    l.hintX = (w - hintW + 1) / 2;
+    l.hintY = l.serverField.y + l.serverField.h + 8;
+    l.start = MenuButton {(w - 70 + 1) / 2, menuRoundDiv(60 * h, 100), 70, 28};
+    l.back = MenuButton {(w - 70 + 1) / 2, menuRoundDiv(75 * h, 100), 70, 28};
+    return l;
+}
+
+// Pure: the join's sub-page's step. The server's field is the text-input's
+// face; the 开始 raises JoinGame (the caller parses host:port — a bad
+// value is the named reject's, the back's no-op), 返回/ESC = the back.
+inline MenuStep menuJoinStep(bool click, bool esc, bool startHovered,
+                             bool backHovered) {
+    MenuStep s;
+    if (esc) {
+        s.action = MenuAction::Back;
+        return s;
+    }
+    if (click) {
+        if (startHovered) {
+            s.action = MenuAction::JoinGame;
+            return s;
+        }
+        if (backHovered) {
+            s.action = MenuAction::Back;
+            return s;
+        }
+    }
+    return s;
+}
+
+// The host:port's parse (the Join sub-page's 开始's face): "host" + ':' +
+// "port". host = the dotted-quad / hostname (dots + alnum + hyphen, the
+// LAN's loopback's 127.0.0.1's belt); port = 1..65535. Returns -1 on any
+// violation (the caller's named reject). Pure.
+inline int menuParseHostPort(const std::string& host, const std::string& port) {
+    if (host.empty() || host.size() > 255) {
+        return -1;
+    }
+    for (unsigned char c : host) {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                        (c >= '0' && c <= '9') || c == '.' || c == '-';
+        if (!ok) {
+            return -1;
+        }
+    }
+    if (port.empty() || port.size() > 5) {
+        return -1;
+    }
+    int value = 0;
+    for (char c : port) {
+        if (c < '0' || c > '9') {
+            return -1;
+        }
+        value = value * 10 + (c - '0');
+    }
+    if (value < 1 || value > 65535) {
+        return -1;
+    }
+    return value;
 }
 
 } // namespace mc

@@ -230,6 +230,57 @@ Result<void> Game::applyDemoArgs() {
     return {};
 }
 
+Result<void> Game::netClientStart() {
+    // V3-17d: the net CLIENT's session start (the init's --connect's
+    // block extracted VERBATIM — the WELCOME's handshake BEFORE the
+    // world (the seed's authority) + the config's override; the CLI's
+    // init and the menu's join's commit share this face).
+    MC_TRY(netClientHandshake());
+    if (m_netSeedOverride >= 0) {
+        m_config.set("world.seed", static_cast<long long>(m_netSeedOverride));
+        MC_LOG_INFO("net: the WELCOME's seed " +
+                    std::to_string(m_netSeedOverride) +
+                    " is the world spec's authority (the host's "
+                    "world, the zero-transfer's shape)");
+    }
+    return {};
+}
+
+Result<void> Game::netPostScene() {
+    // V3-17d: the net's session setup AFTER the world (the init's
+    // --listen block + the client's snapshot/bodies extracted VERBATIM
+    // — the CLI's init and the menu's commits share this face): the
+    // host's handshake (the HELLO's comparison needs the world's seed
+    // + the creative's gate; the accept's 10-s timeout is the gate's
+    // named-error face) + the client's REJOIN's snapshot's apply
+    // (the save-form WELCOME's document over the worldgen'd world —
+    // the parse/apply path's full reuse, the file-load's twin) + the
+    // client's EVERY other player's bodies (the c1's N-generalization:
+    // the lockstep simulates every player on every machine; the
+    // 12c2's skip-face creates only the missing ones) + V3-17d's the
+    // MOTD's first chat line (the presentation's pending, consumed
+    // once the world's built — the hash's exclusion by construction).
+    if (m_args.listenPort != 0) {
+        MC_TRY(netHostHandshake());
+    }
+    if (m_netActive && !m_netIsHost && !m_netSnapshotPayload.empty()) {
+        MC_TRY(applyNetSnapshot());
+    }
+    if (m_netActive && !m_netIsHost) {
+        for (std::size_t slot = 1; slot < m_frameRings.size(); ++slot) {
+            if (slot < m_players.size() && m_players[slot] != nullptr) {
+                continue;
+            }
+            netAddPlayer(slot);
+        }
+    }
+    if (m_netActive && !m_netIsHost && !m_motdPending.empty()) {
+        displayChat(0, m_motdPending);
+        m_motdPending.clear();
+    }
+    return {};
+}
+
 Result<void> Game::buildScene() {
     // PIPE-2: the save journal's observer, installed at the TOP of
     // buildScene — before ANY cell-level write: the demo-area generation
@@ -2906,19 +2957,11 @@ Result<void> Game::init(const GameArgs& args) {
     const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
     MC_LOG_INFO(std::string("GL ") + glVersion + " | " + vendor + " | " + renderer);
 
-    // --- V3-12b: the net CLIENT's handshake (before the world — the
-    // WELCOME's seed is the world spec's authority; the fingerprint's
-    // four faces need the config + the assets + the window, all
-    // ready here) ---
+    // --- V3-12b: the net CLIENT's handshake (before the world — see
+    // netClientStart: the WELCOME's seed is the world spec's authority;
+    // the menu's join's commit calls the same face from run()) ---
     if (!m_args.connectHost.empty()) {
-        MC_TRY(netClientHandshake());
-        if (m_netSeedOverride >= 0) {
-            m_config.set("world.seed", static_cast<long long>(m_netSeedOverride));
-            MC_LOG_INFO("net: the WELCOME's seed " +
-                        std::to_string(m_netSeedOverride) +
-                        " is the world spec's authority (the host's "
-                        "world, the zero-transfer's shape)");
-        }
+        MC_TRY(netClientStart());
     }
 
     // --- renderer + scene ---------------------------------------------------
@@ -2954,41 +2997,10 @@ Result<void> Game::init(const GameArgs& args) {
         m_args.saveSlot.reset();
     }
 
-    // --- V3-12b: the net HOST's handshake (after the world + the
-    // player — the HELLO's comparison needs the world's seed + the
-    // creative's gate; the accept's 10-s timeout is the gate's
-    // named-error face) + the --script's injection kernel ---
-    if (m_args.listenPort != 0) {
-        MC_TRY(netHostHandshake());
-    }
-    if (m_netActive && !m_netIsHost && !m_netSnapshotPayload.empty()) {
-        // V3-12c2: the REJOIN's snapshot's apply (the save-form
-        // WELCOME's document over the worldgen'd world — the
-        // parse/apply path's full reuse, the file-load's twin; the
-        // frame's adoption aligns the pacing to the host's).
-        MC_TRY(applyNetSnapshot());
-    }
-    if (m_netActive && !m_netIsHost) {
-        // The c1's N-generalization: the client creates EVERY other
-        // player's body (slots 1..n-1 — the lockstep simulates every
-        // player on every machine; player 0, the host's body, is the
-        // init's normal construction). The 12b's single netAddPlayer(1)
-        // breaks at N>2 (the local slot 2's body missing = the
-        // out-of-range read's segfault, and the client's hash feeding
-        // its own 2-player count against the host's 3 = the f0
-        // desync's twin — the gate-catch pair). V3-12c2: the
-        // rejoin's snapshot already built the EXISTING players'
-        // bodies (applySave's ghosts — the document's entries
-        // 1..n-2); the loop's skip-face creates only the missing
-        // ones (the joining slot's fresh body — the starter gift,
-        // the host's netAddPlayer's twin).
-        for (std::size_t slot = 1; slot < m_frameRings.size(); ++slot) {
-            if (slot < m_players.size() && m_players[slot] != nullptr) {
-                continue;
-            }
-            netAddPlayer(slot);
-        }
-    }
+    // --- V3-12b: the net's session setup AFTER the world (the host's
+    // handshake + the client's snapshot/bodies + the MOTD — see
+    // netPostScene; the CLI's init and the menu's commits share it) ---
+    MC_TRY(netPostScene());
     if (m_args.scriptFile.has_value()) {
         m_scriptPlayer.emplace(*m_args.scriptFile);
         m_scriptActive = true;
@@ -3041,6 +3053,57 @@ int Game::run() {
                 return 1;
             }
             worldReady = true;
+        } else if (menuExit == 3) {
+            // V3-17d: the menu's HOST (the fresh world's shape + the
+            // kNetDefaultPort's listen — the CLI's --listen <port>
+            // keeps the explicit face, the existing-slot's host is
+            // CLI-only, the D16's fresh-only precedent): the world's
+            // build, then the shared netPostScene (the accept's
+            // 10-s window blocks here — the loop hasn't started, the
+            // named-error's exit on no client).
+            m_args.newWorld = true;
+            m_args.listenPort = kNetDefaultPort;
+            MC_LOG_INFO("menu: multiplayer — the host game's start "
+                        "(port " + std::to_string(kNetDefaultPort) +
+                        ", name '" + m_menuName + "', the fresh world's "
+                        "shape)");
+            auto scene = buildScene();
+            if (!scene.ok()) {
+                MC_LOG_ERROR("Scene build failed: " + scene.error().describe());
+                return 1;
+            }
+            auto post = netPostScene();
+            if (!post.ok()) {
+                MC_LOG_ERROR("Net host setup failed: " + post.error().describe());
+                return 1;
+            }
+            worldReady = true;
+        } else if (menuExit == 4) {
+            // V3-17d: the menu's CLIENT (the --connect's shape — the
+            // netClientStart BEFORE the world: the WELCOME's seed is
+            // the authority; then the shared netPostScene: the
+            // snapshot's apply + the bodies + the MOTD's chat line).
+            MC_LOG_INFO("menu: multiplayer — the join's start ('" +
+                        m_args.connectHost + ":" +
+                        std::to_string(m_args.connectPort) + "', name '" +
+                        m_menuName + "')");
+            auto cstart = netClientStart();
+            if (!cstart.ok()) {
+                MC_LOG_ERROR("Net join failed: " + cstart.error().describe());
+                return 1;
+            }
+            auto scene = buildScene();
+            if (!scene.ok()) {
+                MC_LOG_ERROR("Scene build failed: " + scene.error().describe());
+                return 1;
+            }
+            auto post = netPostScene();
+            if (!post.ok()) {
+                MC_LOG_ERROR("Net client setup failed: " +
+                             post.error().describe());
+                return 1;
+            }
+            worldReady = true;
         } else {
             MC_LOG_INFO("menu: quit (no world built — the save's write "
                         "is skipped)");
@@ -3078,8 +3141,15 @@ int Game::run() {
     // --save, after the final frame — and after any screenshot, which is
     // taken inside the loop). A failed save is logged, not fatal: the
     // session itself ran cleanly. V3-17: the menu's quit face skipped
-    // the world's build entirely — the slot stays untouched.
-    if (worldReady && m_args.saveSlot.has_value()) {
+    // the world's build entirely — the slot stays untouched. V3-17d:
+    // the R7's menu face — the net's CLIENT never writes a save (the
+    // argv's --connect×--save's reject covers the CLI's boot; the
+    // menu's join sets m_args.connectHost at RUNTIME, so the guard
+    // rides the write's choke point: the world's document is the
+    // host's state, the client's exit is a disconnect — a client's
+    // write could clobber the host's slot).
+    if (worldReady && m_args.saveSlot.has_value() &&
+        m_args.connectHost.empty()) {
         auto saved = writeSave();
         if (!saved.ok()) {
             MC_LOG_ERROR("Save failed: " + saved.error().describe());

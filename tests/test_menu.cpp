@@ -66,24 +66,6 @@ TEST(MenuLayoutTest, TitleGeometryAtGateSpace) {
               2);
 }
 
-TEST(MenuLayoutTest, StubGeometryAtGateSpace) {
-    const MenuStubLayout l = menuStubLayout(kW, kH);
-    // The page title (2 CJK glyphs @ 2.0 = 66 px wide).
-    EXPECT_EQ(l.titleX, (kW - 66 + 1) / 2);  // 194
-    EXPECT_EQ(l.titleY, 50);                 // lround(0.10 * 496)
-    // The back button (the 120-px centered, at 0.85h).
-    EXPECT_EQ(l.back.x, (kW - kMenuBackWidth + 1) / 2); // 167
-    EXPECT_EQ(l.back.y, 422);                           // lround(0.85h)
-    EXPECT_EQ(l.back.w, kMenuBackWidth);
-    EXPECT_EQ(l.back.h, kMenuItemHeight);
-    EXPECT_TRUE(l.back.contains(l.back.x + l.back.w / 2, l.back.y + 16));
-    // The tutorial's chapter rows (the display rects, the 0.30h start,
-    // the 30-px pitch).
-    EXPECT_EQ(l.rows[0].y, 149);  // lround(0.30 * 496)
-    EXPECT_EQ(l.rows[4].y, 269);
-    EXPECT_EQ(l.rows[0].w, kW);
-}
-
 TEST(MenuStepTest, TitleActions) {
     // ESC quits at any hover.
     EXPECT_EQ(menuStepTitle(false, false, true, 0).action, MenuAction::Quit);
@@ -107,19 +89,6 @@ TEST(MenuStepTest, TitleActions) {
     // The transitions' page + the action are mutually exclusive (a
     // navigated step raises no action).
     EXPECT_EQ(menuStepTitle(true, false, false, 1).action, MenuAction::None);
-}
-
-TEST(MenuStepTest, StubBack) {
-    // ESC = the title's back.
-    EXPECT_EQ(menuStepStub(false, false, true, false).action,
-              MenuAction::Back);
-    // The back button's click / Enter (hovered).
-    EXPECT_EQ(menuStepStub(true, false, false, true).action, MenuAction::Back);
-    EXPECT_EQ(menuStepStub(false, true, false, true).action, MenuAction::Back);
-    // A click off the back button is a no-op (17a's stub's display-only
-    // content).
-    EXPECT_EQ(menuStepStub(true, false, false, false).action,
-              MenuAction::None);
 }
 
 TEST(MenuSettingsTest, LayoutGeometryAtGateSpace) {
@@ -318,4 +287,117 @@ TEST(MenuTutorialTest, DemoLengthText) {
     EXPECT_EQ(menuDemoLengthText(0), "00:00");
     EXPECT_EQ(menuDemoLengthText(59), "00:00");
     EXPECT_EQ(menuDemoLengthText(60), "00:01");
+}
+// ---------------------------------------------------------------------------
+// V3-17d: the multiplayer page (name + host/join) + the join sub-page
+// (host:port) — the pure face (renderMenu's twin).
+// ---------------------------------------------------------------------------
+
+TEST(MenuMultiplayerTest, LayoutGeometryAtGateSpace) {
+    const MenuMultiplayerLayout l = menuMultiplayerLayout(kW, kH);
+    EXPECT_EQ(l.titleX, 194);  // 多人 (66 px @ 2.0)
+    EXPECT_EQ(l.titleY, 50);   // lround(0.10 * 496)
+    // The name's field (the login's twin: 300x40 centered, at 0.30h).
+    EXPECT_EQ(l.nameField.x, 77);
+    EXPECT_EQ(l.nameField.y, 149);
+    EXPECT_EQ(l.nameField.w, 300);
+    EXPECT_EQ(l.nameField.h, 40);
+    EXPECT_EQ(l.nameHintX, 185);  // （可选） 84 px @ 1.0
+    EXPECT_EQ(l.nameHintY, 149 + 40 + 8);
+    // The 创建游戏/加入游戏's buttons (150 px, at 0.55h / 0.68h).
+    EXPECT_EQ(l.host.x, 152);
+    EXPECT_EQ(l.host.y, 273);
+    EXPECT_EQ(l.host.w, 150);
+    EXPECT_EQ(l.host.h, 28);
+    EXPECT_EQ(l.join.x, 152);
+    EXPECT_EQ(l.join.y, 337);
+    // The 返回 (70 px, at 0.85h).
+    EXPECT_EQ(l.back.x, 192);
+    EXPECT_EQ(l.back.y, 422);
+    // The hit test (the gate's xdotool clicks the same centers).
+    EXPECT_TRUE(l.host.contains(l.host.x + 75, l.host.y + 14));
+    EXPECT_TRUE(l.join.contains(l.join.x + 75, l.join.y + 14));
+    EXPECT_TRUE(l.back.contains(l.back.x + 35, l.back.y + 14));
+    EXPECT_FALSE(l.host.contains(10, 10));
+    EXPECT_FALSE(l.join.contains(l.host.x + 75, l.host.y + 50));
+}
+
+TEST(MenuMultiplayerTest, StepActions) {
+    // ESC = the title's back.
+    EXPECT_EQ(menuMultiplayerStep(false, true, false, false, false).action,
+              MenuAction::Back);
+    // The 创建游戏's click = the host's start.
+    EXPECT_EQ(menuMultiplayerStep(true, false, true, false, false).action,
+              MenuAction::HostGame);
+    // The 加入游戏's click = the join's sub-page.
+    EXPECT_EQ(menuMultiplayerStep(true, false, false, true, false).action,
+              MenuAction::JoinGame);
+    // The 返回's click = the back.
+    EXPECT_EQ(menuMultiplayerStep(true, false, false, false, true).action,
+              MenuAction::Back);
+    // A click in the air / nothing pressed = nothing.
+    EXPECT_EQ(menuMultiplayerStep(true, false, false, false, false).action,
+              MenuAction::None);
+    EXPECT_EQ(menuMultiplayerStep(false, false, false, false, false).action,
+              MenuAction::None);
+}
+
+TEST(MenuJoinTest, LayoutGeometryAtGateSpace) {
+    const MenuJoinLayout l = menuJoinLayout(kW, kH);
+    EXPECT_EQ(l.titleX, 194);
+    EXPECT_EQ(l.titleY, 50);
+    // The host:port's field (300x40 centered, at 0.32h).
+    EXPECT_EQ(l.serverField.x, 77);
+    EXPECT_EQ(l.serverField.y, 159);
+    EXPECT_EQ(l.serverField.w, 300);
+    EXPECT_EQ(l.serverField.h, 40);
+    // The "host:port"'s hint (9 ASCII @ 1.0 = 152 px).
+    EXPECT_EQ(l.hintX, 151);
+    EXPECT_EQ(l.hintY, 159 + 40 + 8);
+    // The 开始/返回's buttons (70 px, at 0.60h / 0.75h).
+    EXPECT_EQ(l.start.x, 192);
+    EXPECT_EQ(l.start.y, 298);
+    EXPECT_EQ(l.back.x, 192);
+    EXPECT_EQ(l.back.y, 372);
+    EXPECT_TRUE(l.start.contains(l.start.x + 35, l.start.y + 14));
+    EXPECT_TRUE(l.back.contains(l.back.x + 35, l.back.y + 14));
+    EXPECT_FALSE(l.start.contains(10, 10));
+}
+
+TEST(MenuJoinTest, StepActions) {
+    // ESC = the multiplayer's back.
+    EXPECT_EQ(menuJoinStep(false, true, false, false).action,
+              MenuAction::Back);
+    // The 开始's click = the join's connect (the parse is the loop's).
+    EXPECT_EQ(menuJoinStep(true, false, true, false).action,
+              MenuAction::JoinGame);
+    // The 返回's click = the back.
+    EXPECT_EQ(menuJoinStep(true, false, false, true).action,
+              MenuAction::Back);
+    // A click in the air / nothing pressed = nothing.
+    EXPECT_EQ(menuJoinStep(true, false, false, false).action,
+              MenuAction::None);
+    EXPECT_EQ(menuJoinStep(false, false, false, false).action,
+              MenuAction::None);
+}
+
+TEST(MenuJoinTest, ParseHostPort) {
+    // The valid's faces (the LAN's loopback's + the hostname's belts).
+    EXPECT_EQ(menuParseHostPort("127.0.0.1", "5555"), 5555);
+    EXPECT_EQ(menuParseHostPort("localhost", "6000"), 6000);
+    EXPECT_EQ(menuParseHostPort("a-b.c", "100"), 100);
+    EXPECT_EQ(menuParseHostPort("h", "1"), 1);
+    EXPECT_EQ(menuParseHostPort("h", "65535"), 65535);
+    EXPECT_EQ(menuParseHostPort("HOSTNAME", "8080"), 8080); // case's belt
+    // The reject's faces (the named -1's).
+    EXPECT_EQ(menuParseHostPort("", "5555"), -1);          // no host
+    EXPECT_EQ(menuParseHostPort("h", ""), -1);             // no port
+    EXPECT_EQ(menuParseHostPort("h", "0"), -1);            // port 0
+    EXPECT_EQ(menuParseHostPort("h", "65536"), -1);        // port > 65535
+    EXPECT_EQ(menuParseHostPort("h", "99999"), -1);        // 5-digit's over
+    EXPECT_EQ(menuParseHostPort("h ", "5555"), -1);        // the space's
+    EXPECT_EQ(menuParseHostPort("主 机", "5555"), -1);     // the non-Latin's
+    EXPECT_EQ(menuParseHostPort("h:x", "5555"), -1);       // the colon's
+    EXPECT_EQ(menuParseHostPort("h", "1a"), -1);           // the digit's belt
+    EXPECT_EQ(menuParseHostPort(std::string(256, 'a'), "5555"), -1); // > 255
 }

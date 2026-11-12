@@ -348,6 +348,17 @@ public:
     // V3-17c: the tier-2's row label (the file + the length's mm:ss +
     // the coop's 需联机 badge).
     std::string tutorialRowLabel(int chapter, int i) const;
+    // V3-17d: the net's session setup's extracted faces (the init's
+    // --connect/--listen blocks' single source — the CLI's init calls
+    // them verbatim, the menu's multiplayer's commit calls them from
+    // run(): netClientStart = the WELCOME's seed's authority BEFORE
+    // the world, netPostScene = the host's handshake AFTER the world
+    // + the client's bodies + the MOTD's first chat line).
+    Result<void> netClientStart();
+    Result<void> netPostScene();
+    // V3-17d: the lobby's MOTD (the config net.motd's read, the
+    // Latin-only sanitize + the kNetMotdMax's cap).
+    std::string netMotdFromConfig();
     // The per-frame camera sync (the pre-V3-9 update()'s camera block,
     // extracted VERBATIM — the player's state + the session's camera
     // mode / zoom; update() calls it at the same point, the bit-
@@ -1742,6 +1753,18 @@ std::optional<MobHit> targetMob() const;
     int m_menuTutorialChapter = -1;
     bool m_menuCoopMessage = false;
     bool m_textInputOn = false; // the SDL text input's state (the login's face)
+    // V3-17d: the multiplayer page's faces — the join's host:port's
+    // field + the parse's reject's message + the menu-driven net's
+    // marker (the handshake's name/MOTD's consumption gate: the CLI's
+    // --listen/--connect keeps the legacy "host"/"client" names = the
+    // bit-identical's red line).
+    std::string m_menuServer;
+    bool m_menuJoinError = false;
+    bool m_menuNetActive = false;
+    // V3-17d: the client's WELCOME's MOTD (the presentation's pending —
+    // displayed as the first chat line after the world's build, the
+    // hash's exclusion by construction).
+    std::string m_motdPending;
     // V3-17c: the init's demo-index cross-check's result (cached — the
     // tutorial page's data source, zero extra IO).
     std::optional<DemoIndex> m_demoIndex;

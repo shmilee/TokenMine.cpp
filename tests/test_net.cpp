@@ -189,6 +189,62 @@ TEST(NetProto, HelloWelcomeRejectCtrlRoundTrip) {
 
 // The decoders' corrupt-stream tolerance (the R16's bound check — a
 // truncated payload is a false, not a crash / a hang).
+TEST(NetProto, WelcomeHostNameAndMotd) {
+    // V3-17d: the WELCOME's host's display name + the lobby's MOTD
+    // (the 12c1's deferred concept's carrier — the mixed versions are
+    // the HELLO's TM_VERSION's reject, BEFORE the WELCOME's schema).
+    NetWelcome w;
+    w.fresh = true;
+    w.seed = 1234;
+    w.players = 2;
+    w.slot = 1;
+    w.hostName = "hgate";
+    w.motd = "TokenMine.cpp";
+    const auto wp = mc::packWelcome(w);
+    NetWelcome w2;
+    ASSERT_TRUE(mc::unpackWelcome(wp.data(), wp.size(), w2));
+    EXPECT_EQ(w2, w);
+
+    // The empty's hostName (the CLI's --listen's legacy shape — the
+    // client's "host" read) round-trips too.
+    NetWelcome wl;
+    wl.players = 3;
+    wl.slot = 2;
+    const auto wlp = mc::packWelcome(wl);
+    NetWelcome wl2;
+    ASSERT_TRUE(mc::unpackWelcome(wlp.data(), wlp.size(), wl2));
+    EXPECT_EQ(wl2, wl);
+    EXPECT_TRUE(wl2.hostName.empty());
+    EXPECT_TRUE(wl2.motd.empty());
+
+    // The caps' reject's faces (the unpack's strictness — a
+    // hand-crafted over-cap's payload is the named fail).
+    NetWelcome wbig;
+    wbig.players = 2;
+    wbig.slot = 1;
+    wbig.hostName = std::string(13, 'a'); // > 12 Latin
+    const auto wb = mc::packWelcome(wbig);
+    NetWelcome wb2;
+    EXPECT_FALSE(mc::unpackWelcome(wb.data(), wb.size(), wb2));
+    NetWelcome wlong;
+    wlong.players = 2;
+    wlong.slot = 1;
+    wlong.motd = std::string(mc::kNetMotdMax + 1, 'm'); // > 64
+    const auto wl3 = mc::packWelcome(wlong);
+    NetWelcome wl4;
+    EXPECT_FALSE(mc::unpackWelcome(wl3.data(), wl3.size(), wl4));
+    // The exact cap's boundary (the belt's inclusivity).
+    NetWelcome wmax;
+    wmax.players = 2;
+    wmax.slot = 1;
+    wmax.hostName = std::string(12, 'a');
+    wmax.motd = std::string(mc::kNetMotdMax, 'm');
+    const auto wm = mc::packWelcome(wmax);
+    NetWelcome wm2;
+    ASSERT_TRUE(mc::unpackWelcome(wm.data(), wm.size(), wm2));
+    EXPECT_EQ(wm2, wmax);
+}
+
 TEST(NetProto, DecodersRejectTruncated) {
     const auto full = mc::packInput(1u, fullFrameState(), 0u);
     for (std::size_t n = 0; n < full.size(); ++n) {

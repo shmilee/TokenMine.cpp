@@ -400,23 +400,105 @@ int Game::runMenuLoop() {
                 case MenuTutorialStep::Kind::None:
                     break;
             }
-        } else {
-            // The multiplayer's stub (17d's host + join + the MOTD land
-            // here).
-            const MenuStubLayout layout = menuStubLayout(space.width,
-                                                         space.height);
+        } else if (m_menuPage == MenuPage::Multiplayer) {
+            // V3-17d: the multiplayer page (the name's field — the
+            // login's twin's m_menuName carrier — + the host/join's
+            // actions). The host starts the fresh world on the
+            // kNetDefaultPort; the join opens the host:port's sub-page.
+            const MenuMultiplayerLayout layout = menuMultiplayerLayout(
+                space.width, space.height);
+            for (const char c : m_input.frameText()) {
+                if (m_menuName.size() < 12) {
+                    m_menuName.push_back(c);
+                }
+            }
+            if (m_input.frameBackspace() && !m_menuName.empty()) {
+                m_menuName.pop_back();
+            }
+            m_menuName = latinOnly(m_menuName);
+            const bool hostHovered = layout.host.contains(mx, my);
+            const bool joinHovered = layout.join.contains(mx, my);
             const bool backHovered = layout.back.contains(mx, my);
-            const MenuStep step = menuStepStub(click, enter, esc,
-                                               backHovered);
+            const MenuStep step = menuMultiplayerStep(click, esc,
+                                                      hostHovered,
+                                                      joinHovered,
+                                                      backHovered);
             if (step.action == MenuAction::Back) {
                 m_menuPage = MenuPage::Title;
+            } else if (step.action == MenuAction::HostGame) {
+                if (m_menuName.empty()) {
+                    m_menuName = "player";
+                }
+                m_menuNetActive = true;
+                m_args.newWorld = true;
+                m_args.listenPort = kNetDefaultPort;
+                MC_LOG_INFO("menu: multiplayer — the host game's name '" +
+                            m_menuName + "'");
+                return 3;
+            } else if (step.action == MenuAction::JoinGame) {
+                m_menuServer.clear();
+                m_menuJoinError = false;
+                m_menuPage = MenuPage::Join;
+            }
+        } else if (m_menuPage == MenuPage::Join) {
+            // V3-17d: the join's sub-page (the host:port's field — the
+            // text-input's face; the 开始's parse is the named reject's
+            // belt, the bad value keeps the field + the error's line).
+            const MenuJoinLayout layout = menuJoinLayout(space.width,
+                                                         space.height);
+            for (const char c : m_input.frameText()) {
+                if (m_menuServer.size() < 64) {
+                    m_menuServer.push_back(c);
+                }
+            }
+            if (m_input.frameBackspace() && !m_menuServer.empty()) {
+                m_menuServer.pop_back();
+            }
+            m_menuServer = latinOnly(m_menuServer);
+            const bool startHovered = layout.start.contains(mx, my);
+            const bool backHovered = layout.back.contains(mx, my);
+            const MenuStep step =
+                menuJoinStep(click, esc, startHovered, backHovered);
+            if (step.action == MenuAction::Back) {
+                m_menuPage = MenuPage::Multiplayer;
+            } else if (step.action == MenuAction::JoinGame) {
+                // The host:port's split (the single ':' — the field's
+                // text is "host:port", the parse's twin's belt).
+                const auto pos = m_menuServer.find(':');
+                const bool parsed =
+                    pos != std::string::npos &&
+                    pos + 1 < m_menuServer.size() &&
+                    menuParseHostPort(m_menuServer.substr(0, pos),
+                                      m_menuServer.substr(pos + 1)) > 0;
+                if (!parsed) {
+                    m_menuJoinError = true;
+                    MC_LOG_INFO("menu: multiplayer — the join's target is "
+                                "invalid ('" + m_menuServer +
+                                "', the host:port's shape)");
+                } else {
+                    if (m_menuName.empty()) {
+                        m_menuName = "player";
+                    }
+                    m_menuNetActive = true;
+                    m_args.connectHost = m_menuServer.substr(0, pos);
+                    m_args.connectPort = static_cast<std::uint16_t>(
+                        menuParseHostPort(m_menuServer.substr(0, pos),
+                                          m_menuServer.substr(pos + 1)));
+                    MC_LOG_INFO("menu: multiplayer — the join's name '" +
+                                m_menuName + "'");
+                    return 4;
+                }
             }
         }
 
-        // The SDL text input's lifecycle (V3-17c: the login's name — the
+        // The SDL text input's lifecycle (V3-17c's login's name — the
         // creative search's / the chat's precedent: opened only while
-        // the page that types is active, closed the frame it leaves).
-        const bool wantText = (m_menuPage == MenuPage::Login);
+        // the page that types is active, closed the frame it leaves;
+        // V3-17d: the multiplayer's name + the join's target join the
+        // face — each page has ONE field, the implicit focus's form).
+        const bool wantText = (m_menuPage == MenuPage::Login ||
+                               m_menuPage == MenuPage::Multiplayer ||
+                               m_menuPage == MenuPage::Join);
         if (wantText != m_textInputOn) {
             m_window.setTextInputEnabled(wantText);
             m_textInputOn = wantText;
@@ -700,24 +782,107 @@ void Game::renderMenu() {
                 centerX(kMenuBackLabel, kMenuItemScale, back.x, back.w),
                 back.y + (back.h - static_cast<int>(16.0 * fScale(kMenuItemScale))) / 2,
                 kMenuItemScale, hov ? kHover : kText);
-    } else {
-        // The multiplayer's stub (17d's host + join + the MOTD land
-        // here).
-        const MenuStubLayout layout = menuStubLayout(w, h);
-        addText("多人", layout.titleX, layout.titleY, kMenuTitleScale,
-                kText);
-        const std::string later = kMenuLaterFace;
-        addText(later, centerX(later, 1.0, 0, w), layout.rows[0].y + 4,
-                1.0, kTextDim);
-        const MenuButton& back = layout.back;
-        const bool hov = back.contains(mx, my);
-        if (hov) {
-            addHoverBar(back);
+    } else if (m_menuPage == MenuPage::Multiplayer) {
+        // V3-17d: the multiplayer page (the name's field — the login's
+        // twin's render — + the 创建游戏/加入游戏's actions + the 返回).
+        const MenuMultiplayerLayout layout = menuMultiplayerLayout(w, h);
+        addText("多人", layout.titleX, layout.titleY, kMenuTitleScale, kText);
+        {
+            UiBatch fieldBox;
+            fieldBox.color = kPanel;
+            addQuad(fieldBox, layout.nameField.x, layout.nameField.y,
+                    layout.nameField.w, layout.nameField.h);
+            drawUiBatch(fieldBox.vertices, ortho, m_fontTexture, false,
+                        fieldBox.color);
+        }
+        addText(m_menuName, layout.nameField.x + 8,
+                layout.nameField.y +
+                    (layout.nameField.h -
+                         static_cast<int>(16.0 * fScale(1.0))) /
+                        2,
+                1.0, kText);
+        if (m_menuFrame % 30 < 15) {
+            const int cx = layout.nameField.x + 8 +
+                           static_cast<int>(
+                               textWidth(m_menuName, fScale(1.0)));
+            addText("|", cx,
+                    layout.nameField.y +
+                        (layout.nameField.h -
+                             static_cast<int>(16.0 * fScale(1.0))) /
+                            2,
+                    1.0, kHover);
+        }
+        addText("（可选）", layout.nameHintX, layout.nameHintY, 1.0, kTextDim);
+        const bool hostHov = layout.host.contains(mx, my);
+        if (hostHov) {
+            addHoverBar(layout.host);
+        }
+        addText("创建游戏",
+                centerX("创建游戏", 1.5, layout.host.x, layout.host.w),
+                layout.host.y, 1.5, hostHov ? kHover : kText);
+        const bool joinHov = layout.join.contains(mx, my);
+        if (joinHov) {
+            addHoverBar(layout.join);
+        }
+        addText("加入游戏",
+                centerX("加入游戏", 1.5, layout.join.x, layout.join.w),
+                layout.join.y, 1.5, joinHov ? kHover : kText);
+        const bool backHov = layout.back.contains(mx, my);
+        if (backHov) {
+            addHoverBar(layout.back);
         }
         addText(kMenuBackLabel,
-                centerX(kMenuBackLabel, kMenuItemScale, back.x, back.w),
-                back.y + (back.h - static_cast<int>(16.0 * fScale(kMenuItemScale))) / 2,
-                kMenuItemScale, hov ? kHover : kText);
+                centerX(kMenuBackLabel, 1.5, layout.back.x, layout.back.w),
+                layout.back.y, 1.5, backHov ? kHover : kText);
+    } else if (m_menuPage == MenuPage::Join) {
+        // V3-17d: the join's sub-page (the host:port's field + the
+        // 开始/返回 + the parse's reject's line, the kSelected's red).
+        const MenuJoinLayout layout = menuJoinLayout(w, h);
+        addText("加入", layout.titleX, layout.titleY, kMenuTitleScale, kText);
+        {
+            UiBatch fieldBox;
+            fieldBox.color = kPanel;
+            addQuad(fieldBox, layout.serverField.x, layout.serverField.y,
+                    layout.serverField.w, layout.serverField.h);
+            drawUiBatch(fieldBox.vertices, ortho, m_fontTexture, false,
+                        fieldBox.color);
+        }
+        addText(m_menuServer, layout.serverField.x + 8,
+                layout.serverField.y +
+                    (layout.serverField.h -
+                         static_cast<int>(16.0 * fScale(1.0))) /
+                        2,
+                1.0, kText);
+        if (m_menuFrame % 30 < 15) {
+            const int cx = layout.serverField.x + 8 +
+                           static_cast<int>(
+                               textWidth(m_menuServer, fScale(1.0)));
+            addText("|", cx,
+                    layout.serverField.y +
+                        (layout.serverField.h -
+                             static_cast<int>(16.0 * fScale(1.0))) /
+                            2,
+                    1.0, kHover);
+        }
+        addText("host:port", layout.hintX, layout.hintY, 1.0, kTextDim);
+        const bool startHov = layout.start.contains(mx, my);
+        if (startHov) {
+            addHoverBar(layout.start);
+        }
+        addText("开始", centerX("开始", 1.5, layout.start.x,
+                                layout.start.w),
+                layout.start.y, 1.5, startHov ? kHover : kText);
+        const bool backHov = layout.back.contains(mx, my);
+        if (backHov) {
+            addHoverBar(layout.back);
+        }
+        addText(kMenuBackLabel, centerX(kMenuBackLabel, 1.5, layout.back.x,
+                                        layout.back.w),
+                layout.back.y, 1.5, backHov ? kHover : kText);
+        if (m_menuJoinError) {
+            addText("invalid host:port", layout.hintX, layout.hintY + 20,
+                    1.0, kSelected);
+        }
     }
 
     // The text's batches' flush (one mesh upload per color — the
