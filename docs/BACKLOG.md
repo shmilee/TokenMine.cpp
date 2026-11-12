@@ -549,9 +549,10 @@
    11-13：v3.12.0–v3.46.0 只留 **v3.31.0（1f36bf2）/ v3.40.0（0575203）**
    两节点 tag（用户字面定案；33 tag 删除全无 release，SHA 清单见
    变更记录 + /tmp/opencode/v3x_del33_shas.txt 留底）；**两节点 tag 各发
-   节点 release**（v3.31.0 = 多人联机收官 / v3.40.0 = notes 覆盖
-   v3.12.0–v3.40.0 29 版，v3.40.0 = GitHub Latest——同日用户修正：
-   v3.31.0 补 release）。v3.x 终态 = 5 tag（v3.0.0 / v3.9.0 /
+   节点 release，按顺序切分**（v3.31.0 = v3.12.0–v3.31.0 20 版 /
+   v3.40.0 = v3.32.0–v3.40.0 9 版，v3.40.0 = GitHub
+   Latest——同日用户修正 ×2：v3.31.0 补 release + notes 顺序切分）。
+   v3.x 终态 = 5 tag（v3.0.0 / v3.9.0 /
    v3.11.0 / v3.31.0 / v3.40.0）4 release（v3.0.0 / v3.11.0 / v3.31.0 /
    v3.40.0）。
    2.x 历史 = v2.0.0 / v2.10.0 release + v2.19.0 收官 tag（无 release，
@@ -577,10 +578,10 @@
   7e4a1a2 / 00cb62a / 4139b4e / 0b45caf / 5f9e1d4 / 001f696 / b65f32b /
   f4b7aab / 2409b26 / 1b8ebc0 / 3cdb7b9 / aac5fa7，完整 tag→SHA 表
   /tmp/opencode/v3x_del33_shas.txt）；**v3.40.0 新增单一代表 release**
-  （title "TokenMine.cpp v3.40.0"，notes 覆盖 v3.12.0–v3.40.0 29 版 =
-  末地维度 / 多人联机 / 教学 demo 族 10 主题 / 下界战斗链 / 创造模式 /
-  打磨）；**同日用户修正：v3.31.0 亦发节点 release**（多人联机收官：
-  REJOIN + format 33 players[]，title "TokenMine.cpp v3.31.0"）→
+  （title "TokenMine.cpp v3.40.0"）；**同日用户修正 ×2：v3.31.0 亦发
+  节点 release**（title "TokenMine.cpp v3.31.0"）+ **notes 按顺序切分**
+  （v3.31.0 = v3.12.0–v3.31.0 20 版：打磨/创造模式/下界战斗链/末地
+  维度/多人联机；v3.40.0 = v3.32.0–v3.40.0 9 版：教学 demo 族 10 主题）→
   **GitHub Latest = v3.40.0**（`gh release edit --latest` 显式定标，
   v3.11.0 摘 Latest）。v3.x 终态 = 5 tag 4 release（v3.0.0 / v3.11.0 /
   v3.31.0 / v3.40.0）+ 孤儿 tag v2.19.0 / v3.9.0（历史遗留无 release，

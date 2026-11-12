@@ -1989,8 +1989,9 @@ v3.36.0 + OW 900f 无输入邻窗复跑定档 upd med f300/f600 0.407/
    release 政策 11-05 用户定案撤销逐版 release【v3.1.0–v3.10.0 只留
    v3.9.0 代表，9 release + 9 tag 删除】；11-13 用户定案二次精简
    tag【v3.12.0–v3.46.0 只留 v3.31.0 / v3.40.0 两节点 tag，33 tag
-   删除；两节点 tag 各发节点 release，v3.40.0 = GitHub Latest，
-   notes 覆盖 v3.12.0–v3.40.0 29 版】）；2.x 全
+   删除；两节点 tag 各发节点 release 按顺序切分
+   （v3.31.0 = v3.12.0–v3.31.0 / v3.40.0 = v3.32.0–v3.40.0），
+   v3.40.0 = GitHub Latest】）；2.x 全
   任务表 = `docs/archive/v2x/BACKLOG.md`；1.x = `docs/archive/v1x/`；
   会话交接：`opencode-sessions/SESSION_CONTEXT.md`。
 ## 命令
