@@ -3,9 +3,19 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–425，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–426，新条目继续前插于尾部块首。
 
-- **主菜单 17a 实施三坑（PITS 425，门 233 v3.43.0 V3-17a）**——①
+- **主菜单 17b 设置页两坑（PITS 426，门 234 v3.44.0）**——① **表单
+  value 列中心 = 标签右缘与按钮左缘的中点**：初版 (w-150)/2 = 151
+  （453 UI 空间）→ 4 字符值文本（@1.5 ≈ 100 px）左缘 101 与标签右缘
+  140 重叠（截图冒烟「视图距离80」叠字）——修 = w/2 + test 钉（表单
+  三列布局【标签/值/按钮】的列界须先算再放文本）。② **菜单标题含版本
+  串 = S1 锚逐版重锚**：标题版本行随 TM_VERSION 变 = 有意的像素变化
+  ——S1 断言形 = ×2 逐字节【无输入可复现不变式】+ 与旧锚 diff 有界
+  断言【95 px 单行 = 版本行】+ 重锚（base20 逐版跟进）；17c/17d 同
+  款（菜单期的 S1 ≠ 游戏期 base19 的「结构免疫免重锚」——标题是像素
+  活面）。
+- - **主菜单 17a 实施三坑（PITS 425，门 233 v3.43.0 V3-17a）**——①
   **beginFrame viewport = DRAWABLE（render() 的双坐标系）**：renderMenu
   初版用 UI 空间（uiSize = 逻辑/ui.scale 的 453×496）调 beginFrame（=
   glViewport）→ 菜单内容压缩到左上角 453×496 区；纪律 = beginFrame

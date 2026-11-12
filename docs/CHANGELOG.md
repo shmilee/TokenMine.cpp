@@ -11,6 +11,37 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.44.0（2026-11-12）— V3-17b 主菜单：设置页（门 234 全 PASS）
+
+**V3-17 相位 B/4**（BACKLOG 规格 = config 表单化编辑 + 严格读 + 写回
+config.json，config 纪律不变）：设置页 = 8 行表单（视图距离 4..64
+±4 / 白天长度 60..86400s ±60 / 天气 toggle / 声音 0..10/10 ±1 / 界面
+缩放 1.0..4.0x ±0.5 / 全屏 toggle / 窗口宽 640..2560 ±64 / 窗口高
+480..1440 ±64）+ 保存钮 + 「部分项重启后生效」hint——**零文本输入**
+（数值全 stepper/toggle，SDL 文本面不碰）+ ESC 返回 / Enter 保存
+便利；纯布局 + 状态机 = menu_layout.hpp test 孪生（gate xdotool 点击
+同源公式）；**唯一运行时生效面 = ui.scale**（m_uiScale 每帧 uiSize()
+读——菜单布局实时 reflow = 活体证明；世界启动 buildScene 重读 config
+同值；其余行 = 世界启动/下次启动生效——streamRadius/帧锁定步长/
+Window::init only）；**写回 = 既存未用的 Config::save**（保存钮
+confirm 后整档 dump——Json::Object = std::map → 键序字母归一 + 2-
+space 缩进 = 记录偏离，值全保：未动键原样存活；整值出整数 80 非
+80.0）；**字体 +3**（屏宽项——设置页词表核证缺口）= 代码点序插入 +
+后缀 +1..+3 重格，**atlas 2208 不增长**（69 行 headroom 承接，max
+cell 551 = row 68）= 归一化 v-UV 不变 → 门 233 的跨树文本边缘白名单
+**不复发**（canary 跨树 RAW 恢复 EXACT ×4 实证，PITS 425④ 一次性门
+面验证）；FNV re-pin 6b4fde4b271b467e。门 234：3012/3012（+2
+MenuSettingsTest）+ S1 base20 重锚【×2 逐字节 + 旧锚 diff 95 px 单行
+= 版本行 v3.43.0→v3.44.0 有界断言——PITS 426②：菜单期 S1 逐版重锚】+
+**设置臂**【xdotool 设置→天气关→缩放 2.0（LIVE reflow，点击序 = 布局
+稳定形）→保存 @2.0 几何：写回断言 PASS（2 键落盘 + view_distance/
+day_length/seed/window/player 全存活）+ a3 臂修改后 config 标题 ×2
+RAW EXACT】+ canary 4×2 新≡旧（tm_v343）树内 RAW + savenorm + **跨树
+RAW EXACT**×4 + 性能 A/B 同档【median 交错 + changesApplied 9/3/1
+逐位 + 终档跨树 savenorm EXACT】；门内捕获 PITS 426 两坑【value 列
+中心叠字 / 标题版本串 = S1 逐版重锚】；详见
+`docs/archive/phase-3.44.0.md`
+
 ## v3.43.0（2026-11-12）— V3-17a 主菜单系统：标题页 + 教学入口 + 字体 +21（门 233 全 PASS）
 
 **11-07 用户实机诉求首相位**（「demo 要分组展示；游戏打开后有设置/

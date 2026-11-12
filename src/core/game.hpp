@@ -327,6 +327,15 @@ public:
     // texture + the two ui scales — buildScene's extracted head,
     // idempotent).
     Result<void> buildUiAssets();
+    // V3-17b: the settings form's codec (the row -> the config's face:
+    // the integer value / the value's text / the dec-inc-toggle adjust
+    // with the clamps + the ui.scale's live apply / the save button's
+    // write-back — the P32 discipline: the dump writes the WHOLE
+    // in-memory config, the untouched keys survive).
+    int settingsRowValue(int row) const;
+    std::string settingsRowValueText(int row) const;
+    void settingsRowAdjust(int row, int delta);
+    void saveSettingsFromMenu();
     // The per-frame camera sync (the pre-V3-9 update()'s camera block,
     // extracted VERBATIM — the player's state + the session's camera
     // mode / zoom; update() calls it at the same point, the bit-

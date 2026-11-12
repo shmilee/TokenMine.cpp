@@ -121,6 +121,81 @@ TEST(MenuStepTest, StubBack) {
               MenuAction::None);
 }
 
+TEST(MenuSettingsTest, LayoutGeometryAtGateSpace) {
+    // The gate's UI space (679x744 @ ui.scale 1.5 = 453x496).
+    const MenuSettingsLayout l = menuSettingsLayout(kW, kH);
+    EXPECT_EQ(l.titleX, (kW - 66 + 1) / 2);  // 194
+    EXPECT_EQ(l.titleY, 50);                  // lround(0.10 * 496)
+    // The 8 rows (0.18h start, the 36-px pitch).
+    EXPECT_EQ(l.rows[0].label.x, 40);
+    EXPECT_EQ(l.rows[0].label.y, 89);         // lround(0.18 * 496)
+    EXPECT_EQ(l.rows[7].label.y, 89 + 7 * 36); // 341
+    EXPECT_EQ(l.rows[0].minus.x, kW - 140);    // 313
+    EXPECT_EQ(l.rows[0].plus.x, kW - 104);     // 349
+    EXPECT_EQ(l.rows[0].valueX, kW / 2);       // 226
+    EXPECT_EQ(l.rows[0].minus.w, 24);
+    EXPECT_EQ(l.rows[0].minus.h, 24);
+    // The save button (70 px wide = 保存 50 + the padding, at 0.85h).
+    EXPECT_EQ(l.save.w, 70);
+    EXPECT_EQ(l.save.x, (kW - 70 + 1) / 2);   // 192
+    EXPECT_EQ(l.save.y, 422);
+    // The hint (8 glyphs @ 1.0 = 135 px, at 0.75h).
+    EXPECT_EQ(l.noteX, (kW - 135 + 1) / 2);   // 159
+    EXPECT_EQ(l.noteY, 372);
+    // The control's hit test (the gate's xdotool clicks the same
+    // centers).
+    EXPECT_EQ(menuSettingsControl(l, l.rows[0].minus.x + 12,
+                                  l.rows[0].minus.y + 12),
+              0); // row 0's minus
+    EXPECT_EQ(menuSettingsControl(l, l.rows[0].plus.x + 12,
+                                  l.rows[0].plus.y + 12),
+              1); // row 0's plus
+    EXPECT_EQ(menuSettingsControl(l, l.rows[2].minus.x + 12,
+                                  l.rows[2].minus.y + 12),
+              4); // the toggle row's button
+    EXPECT_EQ(menuSettingsControl(l, l.rows[2].plus.x + 12,
+                                  l.rows[2].plus.y + 12),
+              -1); // the toggle's plus = dead
+    EXPECT_EQ(menuSettingsControl(l, l.rows[6].minus.x + 12,
+                                  l.rows[6].minus.y + 12),
+              12);
+    EXPECT_EQ(menuSettingsControl(l, l.save.x + 35, l.save.y + 14),
+              kMenuSettingsSave);
+    EXPECT_EQ(menuSettingsControl(l, 10, 400), -1);
+}
+
+TEST(MenuSettingsTest, StepActions) {
+    // ESC = back.
+    EXPECT_EQ(menuSettingsStep(false, false, true, 0).kind,
+              MenuSettingsStep::Kind::Back);
+    // The stepper's dec / inc (the control id's row*2 encoding).
+    EXPECT_EQ(menuSettingsStep(true, false, false, 0).kind,
+              MenuSettingsStep::Kind::Dec);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 0).row, 0);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 1).kind,
+              MenuSettingsStep::Kind::Inc);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 13).kind,
+              MenuSettingsStep::Kind::Inc);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 13).row, 6);
+    // The toggle rows (2 天气 / 5 全屏): the minus's button = the flip.
+    EXPECT_EQ(menuSettingsStep(true, false, false, 4).kind,
+              MenuSettingsStep::Kind::Toggle);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 4).row, 2);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 10).kind,
+              MenuSettingsStep::Kind::Toggle);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 10).row, 5);
+    // The save (the button OR the Enter's convenience).
+    EXPECT_EQ(menuSettingsStep(true, false, false, kMenuSettingsSave).kind,
+              MenuSettingsStep::Kind::Save);
+    EXPECT_EQ(menuSettingsStep(false, true, false, -1).kind,
+              MenuSettingsStep::Kind::Save);
+    // A click in the air = nothing.
+    EXPECT_EQ(menuSettingsStep(true, false, false, -1).kind,
+              MenuSettingsStep::Kind::None);
+    EXPECT_EQ(menuSettingsStep(false, false, false, 0).kind,
+              MenuSettingsStep::Kind::None);
+}
+
 TEST(MenuStepTest, TitleLabelsAndChaptersAreFontSafe) {
     // The label's vocabulary is pinned (a typo renders '?' — the
     // glyph's presence itself is the font's test's face; here: the

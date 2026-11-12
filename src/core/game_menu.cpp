@@ -12,6 +12,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 
 #include "core/demo.hpp" // kDemoCategories (the tutorial stub's chapters)
@@ -38,6 +40,122 @@ bool Game::menuEnabled() const {
     return m_demoMode == DemoMode::Off && m_args.listenPort == 0 &&
            m_args.connectHost.empty() && !m_args.scriptFile.has_value() &&
            !m_args.newWorld;
+}
+
+// ---------------------------------------------------------------------------
+// V3-17b: the settings form's codec (the row -> the config's face).
+// ---------------------------------------------------------------------------
+
+int Game::settingsRowValue(int row) const {
+    switch (row) {
+        case 0:
+            return m_config.getInt("world.view_distance", 8);
+        case 1:
+            return m_config.getInt("world.day_length_seconds", 240);
+        case 2:
+            return m_config.getBool("render.weather", true) ? 1 : 0;
+        case 3:
+            return static_cast<int>(std::lround(
+                m_config.getDouble("audio.volume", 0.7) * 10.0));
+        case 4:
+            return static_cast<int>(std::lround(
+                m_config.getDouble("ui.scale", 1.0) * 2.0));
+        case 5:
+            return m_config.getBool("window.fullscreen", false) ? 1 : 0;
+        case 6:
+            return m_config.getInt("window.width", 1280);
+        case 7:
+            return m_config.getInt("window.height", 720);
+    }
+    return 0;
+}
+
+std::string Game::settingsRowValueText(int row) const {
+    switch (row) {
+        case 0:
+            return std::to_string(settingsRowValue(0));
+        case 1:
+            return std::to_string(settingsRowValue(1)) + "s";
+        case 2:
+            return settingsRowValue(2) ? "开" : "关";
+        case 3:
+            return std::to_string(settingsRowValue(3)) + "/10";
+        case 4: {
+            const int v = settingsRowValue(4); // x2
+            return std::to_string(v / 2) + (v % 2 ? ".5" : ".0") + "x";
+        }
+        case 5:
+            return settingsRowValue(5) ? "开" : "关";
+        case 6:
+            return std::to_string(settingsRowValue(6));
+        case 7:
+            return std::to_string(settingsRowValue(7));
+    }
+    return {};
+}
+
+void Game::settingsRowAdjust(int row, int delta) {
+    // delta -1 / +1 = the stepper's step; 0 = the toggle's flip. The
+    // clamps' domains are the pure vocabulary's (menu_layout.hpp).
+    switch (row) {
+        case 0:
+            m_config.set("world.view_distance",
+                         Json(std::clamp(settingsRowValue(0) + 4 * delta,
+                                         4, 64)));
+            break;
+        case 1:
+            m_config.set("world.day_length_seconds",
+                         Json(std::clamp(settingsRowValue(1) + 60 * delta,
+                                         60, 86400)));
+            break;
+        case 2:
+            m_config.set("render.weather",
+                         Json(!m_config.getBool("render.weather", true)));
+            break;
+        case 3:
+            m_config.set("audio.volume", Json(static_cast<double>(
+                std::clamp(settingsRowValue(3) + delta, 0, 10)) / 10.0));
+            break;
+        case 4: {
+            const int v =
+                std::clamp(settingsRowValue(4) + delta, 2, 8); // x2
+            const double s = static_cast<double>(v) / 2.0;
+            m_config.set("ui.scale", Json(s));
+            // The runtime's LIVE apply (uiSize() reads m_uiScale every
+            // frame — the menu's layout re-flows on the spot, the
+            // live face's proof; the game's buildScene re-reads the
+            // config at the world's start = the same value).
+            m_uiScale = static_cast<float>(s);
+            break;
+        }
+        case 5:
+            m_config.set("window.fullscreen",
+                         Json(!m_config.getBool("window.fullscreen", false)));
+            break;
+        case 6:
+            m_config.set("window.width",
+                         Json(std::clamp(settingsRowValue(6) + 64 * delta,
+                                         640, 2560)));
+            break;
+        case 7:
+            m_config.set("window.height",
+                         Json(std::clamp(settingsRowValue(7) + 64 * delta,
+                                         480, 1440)));
+            break;
+    }
+}
+
+void Game::saveSettingsFromMenu() {
+    // The write-back (the P32 discipline: the dump writes the WHOLE
+    // in-memory config — the untouched keys, including the user's
+    // tuned values, survive; only the form's edits change the file).
+    auto saved = m_config.save(m_config.path());
+    if (!saved.ok()) {
+        MC_LOG_ERROR("Settings save failed: " + saved.error().describe());
+    } else {
+        MC_LOG_INFO("settings saved to '" + m_config.path().string() +
+                    "' (the form's write-back)");
+    }
 }
 
 int Game::runMenuLoop() {
@@ -87,6 +205,35 @@ int Game::runMenuLoop() {
             if (step.page != MenuPage::Title) {
                 m_menuPage = step.page;
                 m_menuHovered = -1;
+            }
+        } else if (m_menuPage == MenuPage::Settings) {
+            // V3-17b: the settings form (the pure layout + step — the
+            // test's twin; the codec's face above).
+            const MenuSettingsLayout layout =
+                menuSettingsLayout(space.width, space.height);
+            const int controlId = menuSettingsControl(layout, mx, my);
+            m_menuHovered = controlId;
+            const MenuSettingsStep step =
+                menuSettingsStep(click, enter, esc, controlId);
+            switch (step.kind) {
+                case MenuSettingsStep::Kind::Back:
+                    m_menuPage = MenuPage::Title;
+                    m_menuHovered = -1;
+                    break;
+                case MenuSettingsStep::Kind::Dec:
+                    settingsRowAdjust(step.row, -1);
+                    break;
+                case MenuSettingsStep::Kind::Inc:
+                    settingsRowAdjust(step.row, 1);
+                    break;
+                case MenuSettingsStep::Kind::Toggle:
+                    settingsRowAdjust(step.row, 0);
+                    break;
+                case MenuSettingsStep::Kind::Save:
+                    saveSettingsFromMenu();
+                    break;
+                case MenuSettingsStep::Kind::None:
+                    break;
             }
         } else {
             const MenuStubLayout layout = menuStubLayout(space.width,
@@ -242,13 +389,53 @@ void Game::renderMenu() {
                     r.y + (r.h - static_cast<int>(16.0 * fScale(kMenuItemScale))) / 2,
                     kMenuItemScale, hov ? kHover : kTextDim);
         }
+    } else if (m_menuPage == MenuPage::Settings) {
+        // V3-17b: the settings form (the pure layout — the test's
+        // twin; the codec's face: the value's text / the adjust / the
+        // save's write-back).
+        const MenuSettingsLayout layout = menuSettingsLayout(w, h);
+        addText("设置", layout.titleX, layout.titleY, kMenuTitleScale,
+                kText);
+        addText("部分项重启后生效", layout.noteX, layout.noteY, 1.0, kTextDim);
+        for (int i = 0; i < kMenuSettingsRowCount; ++i) {
+            const MenuSettingsLayout::Row& r = layout.rows[i];
+            const bool hovM = (m_menuHovered == i * 2);
+            const bool hovP = (m_menuHovered == i * 2 + 1);
+            if (hovM) {
+                addHoverBar(r.minus);
+            }
+            if (hovP) {
+                addHoverBar(r.plus);
+            }
+            addText(kMenuSettingsLabels[i], r.label.x, r.label.y, 1.5, kText);
+            if (isToggleRow(i)) {
+                // The toggle: the 开/关's state text INSIDE the minus's
+                // button (the plus is dead on a toggle row).
+                addText(settingsRowValueText(i), r.minus.x, r.minus.y, 1.5,
+                        hovM ? kHover : kTextDim);
+            } else {
+                const std::string value = settingsRowValueText(i);
+                addText(value,
+                        r.valueX -
+                            static_cast<int>(textWidth(value, fScale(1.5))) / 2,
+                        r.label.y, 1.5, kText);
+                addText("-", r.minus.x, r.minus.y, 1.5,
+                        hovM ? kHover : kTextDim);
+                addText("+", r.plus.x, r.plus.y, 1.5,
+                        hovP ? kHover : kTextDim);
+            }
+        }
+        const bool hovS = (m_menuHovered == kMenuSettingsSave);
+        if (hovS) {
+            addHoverBar(layout.save);
+        }
+        addText("保存", centerX("保存", 1.5, layout.save.x, layout.save.w),
+                layout.save.y, 1.5, hovS ? kHover : kText);
     } else {
         const MenuStubLayout layout = menuStubLayout(w, h);
         const char* pageTitle = "教学";
         if (m_menuPage == MenuPage::Multiplayer) {
             pageTitle = "多人";
-        } else if (m_menuPage == MenuPage::Settings) {
-            pageTitle = "设置";
         }
         addText(pageTitle, layout.titleX, layout.titleY, kMenuTitleScale,
                 kText);
@@ -264,8 +451,8 @@ void Game::renderMenu() {
                         kTextDim);
             }
         } else {
-            // The later face's placeholder (17b's settings form / 17d's
-            // host + join + the MOTD land on this page).
+            // The later face's placeholder (17d's host + join + the
+            // MOTD land on this page).
             const std::string later = kMenuLaterFace;
             addText(later, centerX(later, 1.0, 0, w), layout.rows[0].y + 4,
                     1.0, kTextDim);

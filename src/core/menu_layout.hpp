@@ -170,4 +170,131 @@ inline MenuStep menuStepStub(bool click, bool enter, bool esc,
     return s;
 }
 
+// ---------------------------------------------------------------------------
+// V3-17b: the settings page's form (the 8 rows + the save button).
+// ---------------------------------------------------------------------------
+
+// The form's rows (the pure vocabulary — the config's keys + the
+// value's codec live on the Game's side, the row index selects them).
+// The integer domains: view distance 4..64 step 4 (the kStreamCapRadius
+// 64's belt), the day length 60..86400 step 60 (seconds), the volume
+// 0..10 (x10), the ui scale 2..8 (x2 = 1.0..4.0, the runtime's live
+// apply), the window's width 640..2560 / height 480..1440 step 64
+// (the restart's face — Window::init only).
+enum class MenuSettingsRow {
+    ViewDistance = 0,
+    DayLength = 1,
+    Weather = 2, // toggle (the minus's button = the 开/关)
+    Volume = 3,
+    UiScale = 4,
+    Fullscreen = 5, // toggle
+    WinWidth = 6,
+    WinHeight = 7,
+};
+inline constexpr int kMenuSettingsRowCount = 8;
+inline constexpr const char* kMenuSettingsLabels[kMenuSettingsRowCount] = {
+    "视图距离", "白天长度", "天气", "声音",
+    "界面缩放", "全屏", "窗口宽", "窗口高",
+};
+inline constexpr int kMenuSettingsSave = 32; // the 保存 button's control id
+// The control id's encoding: row*2 = the minus / toggle button,
+// row*2+1 = the plus (the toggle row's plus = dead).
+inline constexpr bool isToggleRow(int row) {
+    return row == 2 || row == 5;
+}
+
+struct MenuSettingsLayout {
+    int titleX = 0, titleY = 0;
+    struct Row {
+        MenuButton label; // the 4-CJK label's rect (x 40, the left's face)
+        MenuButton minus;
+        MenuButton plus;
+        int valueX = 0;   // the value text's CENTER x
+    };
+    Row rows[kMenuSettingsRowCount];
+    MenuButton save;
+    int noteX = 0, noteY = 0; // the 「部分项重启后生效」 hint
+};
+
+inline MenuSettingsLayout menuSettingsLayout(int w, int h) {
+    MenuSettingsLayout l;
+    // The title 设置 (2 CJK glyphs @ 2.0 = 66 px, the stub's twin).
+    const int titleW = 2 * static_cast<int>(17.0 * kMenuTitleScale) -
+                       static_cast<int>(kMenuTitleScale);
+    l.titleX = (w - titleW + 1) / 2;
+    l.titleY = menuRoundDiv(10 * h, 100);
+    const int rowY0 = menuRoundDiv(18 * h, 100);
+    constexpr int kRowPitch = 36;
+    constexpr int kRowH = 24;
+    for (int i = 0; i < kMenuSettingsRowCount; ++i) {
+        const int ry = rowY0 + i * kRowPitch;
+        l.rows[i].label = MenuButton {40, ry, 100, kRowH};
+        l.rows[i].valueX = w / 2; // the label's right..button's left's center
+        l.rows[i].minus = MenuButton {w - 140, ry, 24, kRowH};
+        l.rows[i].plus = MenuButton {w - 104, ry, 24, kRowH};
+    }
+    // The 保存 button (70 px = the 49-px text + the padding, at 0.85h).
+    constexpr int kMenuSaveWidth = 70;
+    l.save = MenuButton {(w - kMenuSaveWidth + 1) / 2,
+                         menuRoundDiv(85 * h, 100), kMenuSaveWidth, 28};
+    // The hint (8 glyphs @ 1.0 = 135 px).
+    const int noteW = 8 * 17 - 1;
+    l.noteX = (w - noteW + 1) / 2;
+    l.noteY = menuRoundDiv(75 * h, 100);
+    return l;
+}
+
+// Pure: the control under (mx, my) — the id (the row*2 encoding) or -1.
+inline int menuSettingsControl(const MenuSettingsLayout& l, int mx, int my) {
+    for (int i = 0; i < kMenuSettingsRowCount; ++i) {
+        if (l.rows[i].minus.contains(mx, my)) {
+            return i * 2;
+        }
+        if (l.rows[i].plus.contains(mx, my) && !isToggleRow(i)) {
+            return i * 2 + 1;
+        }
+    }
+    if (l.save.contains(mx, my)) {
+        return kMenuSettingsSave;
+    }
+    return -1;
+}
+
+struct MenuSettingsStep {
+    enum class Kind { None, Back, Dec, Inc, Toggle, Save };
+    Kind kind = Kind::None;
+    int row = -1;
+};
+
+// Pure: the settings page's step. ESC = back, the Enter = the save's
+// convenience, the click = the hovered control's action.
+inline MenuSettingsStep menuSettingsStep(bool click, bool enter, bool esc,
+                                         int controlId) {
+    MenuSettingsStep s;
+    if (esc) {
+        s.kind = MenuSettingsStep::Kind::Back;
+        return s;
+    }
+    if (enter) {
+        s.kind = MenuSettingsStep::Kind::Save;
+        return s;
+    }
+    if (!click) {
+        return s;
+    }
+    if (controlId == kMenuSettingsSave) {
+        s.kind = MenuSettingsStep::Kind::Save;
+        return s;
+    }
+    if (controlId >= 0 && controlId < kMenuSettingsRowCount * 2) {
+        s.row = controlId / 2;
+        s.kind = (controlId % 2 == 0 && isToggleRow(s.row))
+                     ? MenuSettingsStep::Kind::Toggle
+                     : (controlId % 2 == 0 ? MenuSettingsStep::Kind::Dec
+                                           : MenuSettingsStep::Kind::Inc);
+        return s;
+    }
+    return s;
+}
+
 } // namespace mc
