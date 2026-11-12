@@ -48,6 +48,14 @@ constexpr int kStreamCapRadius = 64;
 
 constexpr int kCrackStages = 5;
 
+// V3-20: the menu's panorama strip's shape (the --panorama generator's
+// window's override + the stitch's belt — the game_init / the
+// game_render's two TUs' single source: the strip = 8 views of
+// 640x360 = 5120x360, the menu's background's slow pan's asset).
+constexpr int kPanoramaViews = 8;
+constexpr int kPanoramaViewWidth = 640;
+constexpr int kPanoramaViewHeight = 360;
+
 inline double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /
            SDL_GetPerformanceFrequency();

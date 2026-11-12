@@ -2949,6 +2949,14 @@ Result<void> Game::init(const GameArgs& args) {
     }
 
     // --- window + GL context ----------------------------------------------
+    // V3-20: the panorama's generator's window's shape (the committed
+    // strip's tile geometry — the config's window's override in-memory
+    // only: the file's untouched, the user's geometry's next boot's
+    // authority).
+    if (!m_args.panoramaOut.empty()) {
+        m_config.set("window.width", kPanoramaViewWidth);
+        m_config.set("window.height", kPanoramaViewHeight);
+    }
     auto window = m_window.init(m_config);
     MC_TRY(window);
 
@@ -3016,6 +3024,19 @@ Result<void> Game::init(const GameArgs& args) {
 }
 
 int Game::run() {
+    // V3-20: the panorama's generator (the management's one-shot: the
+    // strip's render + the stitch + the write, then the clean exit —
+    // no loop, no save's write, no net's face).
+    if (!m_args.panoramaOut.empty()) {
+        auto pano = renderPanorama();
+        if (!pano.ok()) {
+            MC_LOG_ERROR("Panorama generation failed: " +
+                         pano.error().describe());
+            return 1;
+        }
+        return 0;
+    }
+
     double lastFrame = nowSeconds();
     m_lastTitleUpdate = lastFrame;
 

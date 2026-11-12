@@ -48,6 +48,7 @@
 #include "core/end_portal.hpp"
 #include "core/logger.hpp"
 #include "core/portal.hpp"
+#include "core/png.hpp" // V3-20: the panorama's stitch's image face
 #include "core/save.hpp"
 #include "core/sound.hpp"
 #include "core/status_effect.hpp"
@@ -201,6 +202,11 @@ struct GameArgs {
     std::filesystem::path demoAuthor;
     bool demoRecord = false;
     std::filesystem::path demoRecordOut;
+    // V3-20: the --panorama <out.png> — the menu's background strip's
+    // GENERATOR (the management's standalone face: the fresh world's
+    // 360-degree view from the spawn's eye, stitched, then exit — no
+    // loop, no save, no net, no demo).
+    std::filesystem::path panoramaOut;
 };
 
 // V3-12b: the state hash FNV primitive (net/net_proto.hpp).
@@ -454,7 +460,9 @@ private:
     Result<void> fillStarterInventory(PlayerSession& s);
     Result<void> buildScene();
     void update(double dt);
-    void render();
+    // V3-20: the withUi's gate (the panorama's seam's world-only's
+    // render; the gameplay's default true = the bit-identical's line).
+    void render(bool withUi = true);
     // Rebuilds the GPU mesh of every column whose merged GL mesh is stale
     // (ctx.columnRebuildPending). PIPE-1: the mesher's COMPUTE no longer runs
     // here — worker mesh jobs (postMeshJobs / integrateMeshJobs) refresh
@@ -564,6 +572,13 @@ private:
     // set entries.
     void unloadFarColumns(const DimCtx& ctx);
     Result<void> takeScreenshot(const std::filesystem::path& path);
+    // V3-20: takeScreenshot's buffer face extracted (the glReadPixels'
+    // flip + the opaque's normalize) — the panorama's stitch re-uses
+    // it without the file's write.
+    Result<void> readFrontBuffer(PngImage& out);
+    // V3-20: the menu's panorama strip's generator (the --panorama's
+    // seam — see GameArgs::panoramaOut).
+    Result<void> renderPanorama();
 
     // Draw the sun, moon and starfield (unlit billboarded quads, blended).
     // Called between the opaque and transparent chunk passes.
@@ -1744,6 +1759,10 @@ std::optional<MobHit> targetMob() const;
     bool m_menuActive = false;
     int m_menuFrame = 0;
     MenuPage m_menuPage = MenuPage::Title;
+    // V3-20: the menu's panorama background (the committed strip's
+    // lazy load — the menu's path only: the demo/net/--new's boots
+    // never render the menu = the asset's zero cost there).
+    Texture m_menuPanorama;
     // V3-17c: the login's name (the net HELLO's carrier — the 17d's
     // consumption; the solo's display-only face) + the tutorial's
     // two-level's state (-1 = the chapters, >= 0 = the chapter's demos)

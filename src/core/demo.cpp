@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <map>
 #include <set>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include "ui/font.hpp" // V3-20: the title's font-safety's face
 #include <iterator>
 #include <sstream>
 
@@ -1533,10 +1535,11 @@ Result<DemoIndex> parseDemoIndex(const Json& root) {
         for (const auto& p : e.members()) {
             if (p.first != "category" && p.first != "seq" &&
                 p.first != "mode" && p.first != "tags" &&
-                p.first != "file" && p.first != "length_frames") {
+                p.first != "file" && p.first != "length_frames" &&
+                p.first != "title") {
                 return MC_FAIL(ctx + ": unexpected key '" + p.first +
                                "' (category/seq/mode/tags/file/"
-                               "length_frames)");
+                               "length_frames/title)");
             }
         }
         const Json* jc = e.find("category");
@@ -1624,6 +1627,41 @@ Result<DemoIndex> parseDemoIndex(const Json& root) {
             return MC_FAIL(ctx + ": duplicate file '" + fn + "'");
         }
         en.file = fn;
+        // V3-20: the optional display's title (the menu's tier-2's +
+        // the --list-demos's name face; absent = the file's name's
+        // fallback). The FONT SAFETY's fail-fast (the 17d's 戏's
+        // on-machine's '?' catch: a missing glyph would render the
+        // menu's silent '?' — the init's named reject instead).
+        const Json* jti = e.find("title");
+        if (jti != nullptr) {
+            if (!jti->isString()) {
+                return MC_FAIL(ctx + ": 'title' must be a string");
+            }
+            en.title = jti->asString();
+            if (en.title.empty()) {
+                return MC_FAIL(ctx + ": 'title' must be non-empty");
+            }
+            std::size_t pos = 0;
+            while (pos < en.title.size()) {
+                const auto cp = utf8NextCodepoint(en.title, pos);
+                if (!cp.has_value()) {
+                    return MC_FAIL(ctx + ": 'title' has invalid UTF-8");
+                }
+                const uint32_t c = *cp;
+                const bool ascii = c >= 0x20 && c <= 0x7E;
+                const auto it = std::lower_bound(
+                    std::begin(kCjkGlyphs), std::end(kCjkGlyphs), c,
+                    [](const CjkGlyph& g, uint32_t v) { return g.cp < v; });
+                const bool cjk = it != std::end(kCjkGlyphs) && it->cp == c;
+                if (!ascii && !cjk) {
+                    char hexbuf[16];
+                    std::snprintf(hexbuf, sizeof(hexbuf), "U+%04X", c);
+                    return MC_FAIL(ctx + ": 'title' has the font's "
+                                   "missing glyph '" + std::string(hexbuf) +
+                                   "' (the menu's '?' would render)");
+                }
+            }
+        }
         const Json* jl = e.find("length_frames");
         if (jl == nullptr) {
             return MC_FAIL(ctx + " is missing the 'length_frames' key");

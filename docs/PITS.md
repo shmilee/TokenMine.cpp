@@ -3,9 +3,32 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–428，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–429，新条目继续前插于尾部块首。
 
-- **主菜单 17d 多人/MOTD 门 236 前置四坑（PITS 428）**——①
+- **主菜单 17d 门盲点 + 全景/等待实施五坑（PITS 429，门 237
+  v3.47.0 V3-20）**——① **新菜单页须截图断言（门盲点族首案）**：
+  「创建游？」缺字（戏 U+620F 不在 457 表）在 v3.46.0 发布后才被
+  用户实机发现——门 236 的 S1 锚 = 标题页、canary = solo demo（绕菜
+  单）、网络臂 = 日志断言，**无一覆盖多人页像素**；而 v3.46.0 文档
+  误记「创建/游戏/加入全在 457 表」（侦察输出 戏 MISSING 被误读
+  OK）——纪律 = 每个新菜单页进门至少一张 ×2 RAW 截图断言 + 词表核
+  证输出须逐字回读（勿凭记忆转述）。② **全景/一次性渲染的两预热**：
+  地形网格在 update() 的流送集成（buildScene 后 render-only = 纯
+  天空——固定 dt 1/60 × 40 帧 update 预热解）+ Mesa 首次交换黑帧
+  （首帧 render discard——tile-0 全黑捕获）；两预热缺一 = 背景缺
+  地形/黑块。③ **全景 cover-fit 非 stretch**：5120×360 环带拉伸到
+  竖窗 = 树木拉尖 + 云带噪化（截图捕获）——等比填充 UV（uSpan =
+  (w/h)×(stripH/stripW) 裁宽满高）+ 闭环环带 GL_REPEAT 无缝平移；
+  环带须 360° 闭合（view N-1 → view 0 连续）wrap 才无缝。④
+  --list-demos 的 CJK 列宽 = %-20s 字节 padding（3 字节/字 = 列略
+  偏）——终端 cosmetic 记录，非修。⑤ **net 臂的存档对跑须过火的
+  real-dt 稳态帧**（PITS 385 族再确认）：等待臂 300f（≈5s 模拟）
+  的宿主档 ×2 savenorm 差 = 1 簇火恰在燃尽边界（7 vs 8 fires +
+  air/fire 块差）——火的 countdown = real dt，live lockstep 的
+  两跑各 300 帧的实墙略异 → 边界翻面；700f（≈11.7s）火簇全燃尽
+  稳态 = ×2 EXACT。纪律 = live net 臂的存档断言 ≥700f（demo 帧
+  锁定臂豁免——dt 文件定 = 火亦确定）。
+- - **主菜单 17d 多人/MOTD 门 236 前置四坑（PITS 428）**——①
   **WM 二窗互杀（OpenChamber 环境实证）**：第二个游戏进程的窗
   口映射时，**第一个**游戏窗口从 X 树消失（进程存活、SDL 正常
   渲染，xdotool search --pid 恒空）——双窗 xdotool 臂只有单向可

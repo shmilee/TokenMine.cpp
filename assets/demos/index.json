@@ -10,7 +10,8 @@
                 "furnace"
             ],
             "file": "guide_mining.dmo",
-            "length_frames": 11387
+            "length_frames": 11387,
+            "title": "挖矿打造工具"
         },
         {
             "category": "day1",
@@ -23,7 +24,8 @@
                 "hunger"
             ],
             "file": "guide_food.dmo",
-            "length_frames": 18262
+            "length_frames": 18262,
+            "title": "种植与进食"
         },
         {
             "category": "day1",
@@ -35,7 +37,8 @@
                 "regeneration"
             ],
             "file": "guide_regen.dmo",
-            "length_frames": 18344
+            "length_frames": 18344,
+            "title": "受伤与回血"
         },
         {
             "category": "day1",
@@ -48,7 +51,8 @@
                 "night"
             ],
             "file": "guide_house.dmo",
-            "length_frames": 18875
+            "length_frames": 18875,
+            "title": "房子与床"
         },
         {
             "category": "build",
@@ -61,7 +65,8 @@
                 "fly"
             ],
             "file": "guide_palace.dmo",
-            "length_frames": 19536
+            "length_frames": 19536,
+            "title": "建造皇宫"
         },
         {
             "category": "build",
@@ -74,7 +79,8 @@
                 "mining"
             ],
             "file": "guide_materials.dmo",
-            "length_frames": 25383
+            "length_frames": 25383,
+            "title": "材料收集"
         },
         {
             "category": "build",
@@ -87,7 +93,8 @@
                 "swim"
             ],
             "file": "guide_river.dmo",
-            "length_frames": 19841
+            "length_frames": 19841,
+            "title": "引水成河"
         },
         {
             "category": "survival",
@@ -100,7 +107,8 @@
                 "torch"
             ],
             "file": "guide_night.dmo",
-            "length_frames": 18301
+            "length_frames": 18301,
+            "title": "黑夜历险"
         },
         {
             "category": "dimension",
@@ -112,7 +120,8 @@
                 "travel"
             ],
             "file": "guide_nether.dmo",
-            "length_frames": 10865
+            "length_frames": 10865,
+            "title": "下界传送门"
         },
         {
             "category": "dimension",
@@ -125,7 +134,8 @@
                 "pearl"
             ],
             "file": "guide_dragon.dmo",
-            "length_frames": 15214
+            "length_frames": 15214,
+            "title": "末影龙讨伐"
         }
     ]
 }

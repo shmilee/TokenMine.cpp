@@ -319,6 +319,13 @@ struct DemoIndexEntry {
     std::vector<std::string> tags;  // [a-z0-9_]+, unique
     std::string file;               // "<name>.dmo" (assets/demos/)
     int lengthFrames = 0;           // the dts' count (>= 1)
+    // V3-20: the display's Chinese title (the menu's tier-2's + the
+    // --list-demos's name face; ABSENT = the file's name fallback. The
+    // init's cross-check's FONT SAFETY: every codepoint must be the
+    // printable ASCII or a kCjkGlyphs' member — a missing glyph would
+    // render the menu's '?' (the 17d's 戏's on-machine catch's
+    // fail-fast's face).
+    std::string title;
 };
 
 struct DemoIndex {

@@ -255,18 +255,62 @@ Result<void> Game::netHostHandshake() {
             pending.push_back({std::move(session), hello});
             continue;
         }
-        // The first client (the long blocking accept — the gate's
-        // shape: the host waits for a player to join).
-        auto session = std::make_unique<NetSession>();
-        NetHello hello;
-        err = session->acceptFromListener(
-            m_listenFd, hello,
-            static_cast<int>(kNetStallTimeoutSec * 1000.0));
-        if (!err.empty()) {
-            m_nets.clear();
-            return MC_FAIL(err);
+        // V3-20: the first client's INDEFINITE wait (the user's 11-12
+        // on-machine request — the 10-s hard timeout's error-exit made
+        // "waiting for a friend" a failure). The wait's faces: the
+        // input's pump (the ESC / the window's close = the named
+        // cancel — the sim is FROZEN: no update() runs, the world's
+        // static, the fresh WELCOME's zero-byte's authority holds) +
+        // the short accept's poll (the kNetWindowAttemptMs's twin) +
+        // the 1-s re-render's cadence + the 10-s heartbeat's log (the
+        // host's window shows the sky + the HUD while the door's open
+        // — the black window's on-machine catch).
+        {
+            const double waitStart = nowSeconds();
+            double lastHeart = waitStart;
+            double lastRender = 0.0;
+            // The GL's first render's discard (the first swap's black's
+            // gate-catch — the panorama's twin), then the wait's
+            // re-render cadence (every 1 s: the host sees its sky +
+            // HUD while the door's open — the terrain's mesh integrates
+            // with the first client's loop start, the black window's
+            // on-machine catch).
+            render();
+            m_window.swapBuffers();
+            for (;;) {
+                m_input.frameBegin();
+                m_input.pump();
+                if (m_input.quitRequested() ||
+                    m_input.wasPressed(GameKey::Escape)) {
+                    m_nets.clear();
+                    return MC_FAIL("net: the host's wait was cancelled "
+                                   "(ESC / the window's close — no "
+                                   "client arrived)");
+                }
+                auto session = std::make_unique<NetSession>();
+                NetHello hello;
+                err = session->acceptFromListener(m_listenFd, hello,
+                                                  kNetWindowAttemptMs);
+                if (err.empty()) {
+                    pending.push_back({std::move(session), hello});
+                    break;
+                }
+                const double now = nowSeconds();
+                if (now - lastRender >= 1.0) {
+                    render();
+                    m_window.swapBuffers();
+                    lastRender = now;
+                }
+                if (now - lastHeart >= 10.0) {
+                    MC_LOG_INFO("net: still waiting for the first client (" +
+                                std::to_string(
+                                    static_cast<int>(now - waitStart)) +
+                                " s — the world's ready, the door's open; "
+                                "ESC or the window's close cancels)");
+                    lastHeart = now;
+                }
+            }
         }
-        pending.push_back({std::move(session), hello});
     }
     if (pending.empty()) {
         return MC_FAIL("net: no client joined the accept window (the "

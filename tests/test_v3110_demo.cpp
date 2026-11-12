@@ -1468,6 +1468,72 @@ TEST(V316aDemo, IndexParseValid) {
     EXPECT_TRUE(parseDemoIndex(*js2).ok());
 }
 
+TEST(V316aDemo, IndexTitleParse) {
+    // V3-20: the display's title (the menu's tier-2's + the --list-
+    // demos's name face; absent = the file's name's fallback).
+    auto one = [](const std::string& entry) -> Result<DemoIndex> {
+        const std::string text = std::string("{\"demos\":[") +
+                                 entry + "]}";
+        auto js = Json::parse(text);
+        EXPECT_TRUE(js.ok());
+        if (!js.ok()) {
+            return MC_FAIL("the test's json is broken");
+        }
+        return parseDemoIndex(*js);
+    };
+    // Absent = empty (the fallback's face).
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":[],"file":"x.dmo","length_frames":10})");
+        ASSERT_TRUE(r.ok()) << r.error().describe();
+        EXPECT_TRUE(r->demos[0].title.empty());
+    }
+    // Present = the round-trip (the CJK's + the ASCII's mixed).
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":[],"file":"x.dmo","length_frames":10,"title":"挖矿 v2"})");
+        ASSERT_TRUE(r.ok()) << r.error().describe();
+        EXPECT_EQ(r->demos[0].title, "挖矿 v2");
+    }
+    // The non-string's reject.
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":[],"file":"x.dmo","length_frames":10,"title":7})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("'title' must be a string"),
+                  std::string::npos);
+    }
+    // The empty's reject.
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":[],"file":"x.dmo","length_frames":10,"title":""})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("non-empty"), std::string::npos);
+    }
+    // The FONT SAFETY's reject (the 17d's 戏's on-machine catch's
+    // fail-fast: a missing glyph would render the menu's '?'). 龘
+    // U+9F98 is not in the charset.
+    {
+        auto r = one(R"({"category":"day1","seq":1,"mode":"solo","tags":[],"file":"x.dmo","length_frames":10,"title":"于龘"})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("missing glyph"),
+                  std::string::npos);
+        EXPECT_NE(r.error().message.find("U+9F98"), std::string::npos);
+    }
+    // The invalid UTF-8's reject (the title's raw bytes — the decoder's
+    // named reject).
+    {
+        const std::string title = std::string("\xE4\x80"); // truncated's 3-byte
+        const std::string text =
+            std::string("{\"demos\":[{\"category\":\"day1\",\"seq\":1,"
+                        "\"mode\":\"solo\",\"tags\":[],\"file\":\"x.dmo\","
+                        "\"length_frames\":10,\"title\":\"") +
+            title + "\"}]}";
+        auto js = Json::parse(text);
+        ASSERT_TRUE(js.ok());
+        auto r = parseDemoIndex(*js);
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("invalid UTF-8"),
+                  std::string::npos);
+    }
+}
+
 TEST(V316aDemo, IndexParseRejects) {
     const std::string good = R"({"category":"day1","seq":1,"mode":"solo","tags":["a"],"file":"x.dmo","length_frames":10})";
     auto one = [](const std::string& entry) -> Result<DemoIndex> {

@@ -39,7 +39,7 @@ bool Game::menuEnabled() const {
     // actions fire at the game phase's first frame).
     return m_demoMode == DemoMode::Off && m_args.listenPort == 0 &&
            m_args.connectHost.empty() && !m_args.scriptFile.has_value() &&
-           !m_args.newWorld;
+           !m_args.newWorld && m_args.panoramaOut.empty();
 }
 
 // ---------------------------------------------------------------------------
@@ -190,12 +190,19 @@ std::string Game::tutorialRowLabel(int chapter, int i) const {
             continue;
         }
         if (n == i) {
-            std::string name = e.file;
-            const std::string ext = ".dmo";
-            if (name.size() > ext.size() &&
-                name.compare(name.size() - ext.size(), ext.size(),
-                             ext) == 0) {
-                name.resize(name.size() - ext.size());
+            // V3-20: the display's title (the index's Chinese face;
+            // absent = the file's name with the .dmo's stripped).
+            std::string name;
+            if (!e.title.empty()) {
+                name = e.title;
+            } else {
+                name = e.file;
+                const std::string ext = ".dmo";
+                if (name.size() > ext.size() &&
+                    name.compare(name.size() - ext.size(), ext.size(),
+                                 ext) == 0) {
+                    name.resize(name.size() - ext.size());
+                }
             }
             std::string label = name + " · " +
                                 menuDemoLengthText(e.lengthFrames);
@@ -553,15 +560,73 @@ void Game::renderMenu() {
     // space (the layout's + the projection's) is the logical size /
     // ui.scale (render()'s beginFrame's twin, uiProjection's stretch).
     m_renderer.beginFrame(m_window.width(), m_window.height());
-    // The menu's clear = the deep blue-black (the named constant —
-    // the day-cycle is absent before the world; the nether's / the
-    // end's clear colors are the world's faces, unreachable here).
-    constexpr Vec4 kMenuClear {0.04f, 0.05f, 0.08f, 1.0f};
-    m_renderer.clear(kMenuClear);
     // The UI pass's GL state (render()'s Phase-15 block, verbatim).
     m_renderer.setDepthTest(false);
     m_renderer.setCulling(false);
     m_renderer.enableBlending();
+
+    // V3-20: the background — the panorama strip's slow pan (the
+    // black screen's user request: the committed world view from the
+    // config's seed, the MC panorama's face). Frame-locked (the
+    // m_menuFrame's pure function — the ×2 RAW's determinism). The
+    // lazy load (the menu's path only: the demo/net/--new's boots
+    // never render the menu = the asset's zero cost there); the
+    // missing/failed asset = the named warn + the old solid clear's
+    // fallback (the menu never fails on a decoration's absence).
+    if (!m_menuPanorama.valid()) {
+        const auto p = m_assets.resolve("textures/panorama.png");
+        if (!p.ok()) {
+            MC_LOG_WARN("menu: the panorama's asset is missing — the "
+                        "solid clear's fallback");
+        } else {
+            auto tex = Texture::loadPng(*p);
+            if (!tex.ok()) {
+                MC_LOG_WARN("menu: the panorama's load failed (" +
+                            tex.error().describe() + ") — the solid "
+                            "clear's fallback");
+            } else {
+                m_menuPanorama = std::move(*tex);
+                m_menuPanorama.setRepeat(true); // the pan's wrap
+            }
+        }
+    }
+    if (m_menuPanorama.valid()) {
+        // The veil's tint (the dark cool multiply — the text's
+        // readability over the world view, the MC panorama's dim).
+        constexpr Vec4 kMenuPanoramaTint {0.55f, 0.55f, 0.62f, 1.0f};
+        // The cover-fit (aspect-preserving fill — the stretch's tree-
+        // spike gate-catch: the strip's 5120x360 landscape onto the
+        // window's portrait = the u-span's crop, the full height). The
+        // strip is a CLOSED loop (view 7's yaw 315 -> view 0's 360/0
+        // is continuous), so the GL_REPEAT's wrap is seamless at any
+        // offset.
+        const double uSpan =
+            (static_cast<double>(w) / static_cast<double>(h)) *
+            (static_cast<double>(m_menuPanorama.height()) /
+             static_cast<double>(m_menuPanorama.width()));
+        const float off = static_cast<float>(
+            (m_menuFrame % m_menuPanorama.width()) /
+            static_cast<double>(m_menuPanorama.width()));
+        std::vector<MeshVertex> panoVerts;
+        auto put = [&](float px, float py, float u, float v) {
+            MeshVertex vert;
+            vert.position = {px, py, 0.0f};
+            vert.uv = {u, v};
+            panoVerts.push_back(vert);
+        };
+        const float us = static_cast<float>(uSpan);
+        put(0.0f, 0.0f, off, 0.0f);
+        put(static_cast<float>(w), 0.0f, off + us, 0.0f);
+        put(static_cast<float>(w), static_cast<float>(h), off + us, 1.0f);
+        put(0.0f, 0.0f, off, 0.0f);
+        put(static_cast<float>(w), static_cast<float>(h), off + us, 1.0f);
+        put(0.0f, static_cast<float>(h), off, 1.0f);
+        drawUiBatch(panoVerts, ortho, m_menuPanorama, true, kMenuPanoramaTint);
+    } else {
+        // The solid's clear (the pre-V3-20 face — the asset's absence).
+        constexpr Vec4 kMenuClear {0.04f, 0.05f, 0.08f, 1.0f};
+        m_renderer.clear(kMenuClear);
+    }
 
     const Vec4 kText {1.0f, 1.0f, 1.0f, 0.92f};
     const Vec4 kTextDim {1.0f, 1.0f, 1.0f, 0.55f};

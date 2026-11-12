@@ -792,7 +792,7 @@ void Game::drawParticles(const Mat4& view, const Mat4& projection,
 // Phase 15: the screen-space UI pass
 // ---------------------------------------------------------------------------
 
-void Game::render() {
+void Game::render(bool withUi) {
     const int w = m_window.width();
     const int h = m_window.height();
 
@@ -1189,13 +1189,18 @@ void Game::render() {
     // Phase 15 UI pass: screen space (y-down ortho), depth test + culling
     // off. Every element is gated on a pointer/key state, so a no-input
     // run renders exactly the Phase 14 image (byte-identical baseline).
-    m_renderer.setDepthTest(false);
-    m_renderer.setCulling(false);
-    m_renderer.enableBlending();
-    renderUi();
-    m_renderer.disableBlending();
-    m_renderer.setDepthTest(true);
-    m_renderer.setCulling(true);
+    // V3-20: the withUi's gate (the panorama's seam renders the WORLD
+    // only — the HUD's clock/XP/hotbar would mar the menu's background;
+    // the gameplay's default true is the bit-identical's red line).
+    if (withUi) {
+        m_renderer.setDepthTest(false);
+        m_renderer.setCulling(false);
+        m_renderer.enableBlending();
+        renderUi();
+        m_renderer.disableBlending();
+        m_renderer.setDepthTest(true);
+        m_renderer.setCulling(true);
+    }
 
     m_renderer.endFrame();
 }
@@ -1323,7 +1328,7 @@ void Game::drawSkyObjects(const Mat4& view, const Mat4& projection,
 
 // Capture the front buffer (valid right after swapBuffers) into a PNG.
 // Called on the game thread with the GL context current.
-Result<void> Game::takeScreenshot(const std::filesystem::path& path) {
+Result<void> Game::readFrontBuffer(PngImage& out) {
     const int w = m_window.width();
     const int h = m_window.height();
     std::vector<std::uint8_t> pixels(static_cast<std::size_t>(w) * h * 4);
@@ -1335,21 +1340,26 @@ Result<void> Game::takeScreenshot(const std::filesystem::path& path) {
     }
 
     // glReadPixels delivers rows bottom-to-top; PNG needs top-to-bottom.
-    PngImage image;
-    image.width = w;
-    image.height = h;
-    image.rgba.resize(pixels.size());
+    out.width = w;
+    out.height = h;
+    out.rgba.resize(pixels.size());
     for (int y = 0; y < h; ++y) {
-        std::memcpy(image.rgba.data() + static_cast<std::size_t>(y) * w * 4,
+        std::memcpy(out.rgba.data() + static_cast<std::size_t>(y) * w * 4,
                     pixels.data() + static_cast<std::size_t>(h - 1 - y) * w * 4,
                     static_cast<std::size_t>(w) * 4);
     }
 
     // The framebuffer alpha is a blend-state byproduct (e.g. water's texture
     // alpha), not part of the displayed image: screenshots are opaque.
-    for (std::size_t i = 3; i < image.rgba.size(); i += 4) {
-        image.rgba[i] = 255;
+    for (std::size_t i = 3; i < out.rgba.size(); i += 4) {
+        out.rgba[i] = 255;
     }
+    return {};
+}
+
+Result<void> Game::takeScreenshot(const std::filesystem::path& path) {
+    PngImage image;
+    MC_TRY(readFrontBuffer(image));
 
     auto png = Png::encode(image);
     MC_TRY(png);
@@ -1359,7 +1369,108 @@ Result<void> Game::takeScreenshot(const std::filesystem::path& path) {
     }
     out.write(png->data(), static_cast<std::streamsize>(png->size()));
     MC_LOG_INFO("Screenshot saved: " + path.string() + " (" +
-                std::to_string(w) + "x" + std::to_string(h) + ")");
+                std::to_string(image.width) + "x" +
+                std::to_string(image.height) + ")");
+    return {};
+}
+
+Result<void> Game::renderPanorama() {
+    // V3-20: the menu's panorama strip's generator (the --panorama's
+    // seam): the fresh world's (the config's seed's) 360-degree view,
+    // kPanoramaViews views stitched horizontally (5120x360 — the
+    // menu's background asset, the MC panorama's face). The vantage is
+    // a BIRD'S-EYE overlook: the spawn's column lifted kPanoramaAltitude
+    // blocks with a down-look (kPanoramaPitch), so a ring of terrain is
+    // visible all around instead of the dirt directly below. The
+    // frame-0's render (no update has run: no mobs, the CLEAR's
+    // weather's first segment, the static world — a pure function of
+    // the seed; the Mesa's deterministic render = the byte-stable
+    // asset, the gate's ×2 arm's face).
+    if (m_window.width() != kPanoramaViewWidth ||
+        m_window.height() != kPanoramaViewHeight) {
+        return MC_FAIL("the panorama's window's shape is off (got " +
+                       std::to_string(m_window.width()) + "x" +
+                       std::to_string(m_window.height()) + ", expect " +
+                       std::to_string(kPanoramaViewWidth) + "x" +
+                       std::to_string(kPanoramaViewHeight) + ")");
+    }
+    constexpr float kPanoramaAltitude = 18.0f; // the overlook's lift
+    constexpr float kPanoramaPitch = -0.30f;   // the down-look (radians)
+    // The warm-up (the f30's discipline: the terrain's mesh integrates in
+    // update()'s streaming, not buildScene's — the render-only warm-up
+    // showed the sky's-only face, the gate-catch). A FIXED dt = the
+    // frame-locked 1/60 makes the N-frame advance a deterministic pure
+    // function of the seed (the no-input's belt): no mobs have spawned
+    // yet (the f150's first-spawn's belt, well past N), the CLEAR's
+    // first segment holds (>= kClearMin), no particles — the static
+    // landscape.
+    constexpr int kPanoramaWarmup = 40;
+    constexpr double kPanoramaDt = 1.0 / 60.0;
+    for (int f = 0; f < kPanoramaWarmup; ++f) {
+        m_input.frameBegin();
+        m_input.pump();
+        update(kPanoramaDt);
+        ++m_frameCount;
+    }
+    const Vec3 basePos = m_camera.position;
+    const float baseYaw = m_camera.yaw;
+    const float basePitch = m_camera.pitch;
+    m_camera.position = basePos + Vec3 {0.0f, kPanoramaAltitude, 0.0f};
+    m_camera.pitch = kPanoramaPitch;
+    // The warm-up render (the first swap's capture races the GL's first
+    // exchange on Mesa — the view-0's black gate-catch): render one
+    // frame into the void, then the views.
+    render(false);
+    m_window.swapBuffers();
+    std::vector<PngImage> tiles;
+    tiles.reserve(kPanoramaViews);
+    for (int i = 0; i < kPanoramaViews; ++i) {
+        m_camera.yaw = baseYaw +
+                       static_cast<float>(M_PI * 2.0 * i / kPanoramaViews);
+        render(false);
+        m_window.swapBuffers();
+        PngImage tile;
+        MC_TRY(readFrontBuffer(tile));
+        tiles.push_back(std::move(tile));
+    }
+    m_camera.position = basePos;
+    m_camera.yaw = baseYaw;
+    m_camera.pitch = basePitch;
+    // The stitch (view i's columns at [i*w, (i+1)*w) — the pan's wrap
+    // point falls between views, never inside one).
+    PngImage strip;
+    strip.width = kPanoramaViewWidth * kPanoramaViews;
+    strip.height = kPanoramaViewHeight;
+    strip.rgba.resize(static_cast<std::size_t>(strip.width) * strip.height *
+                      4);
+    for (int i = 0; i < kPanoramaViews; ++i) {
+        const PngImage& tile = tiles[static_cast<std::size_t>(i)];
+        for (int y = 0; y < tile.height; ++y) {
+            std::memcpy(strip.rgba.data() +
+                            (static_cast<std::size_t>(y) * strip.width +
+                             static_cast<std::size_t>(i) * tile.width) * 4,
+                        tile.rgba.data() + static_cast<std::size_t>(y) *
+                                               tile.width * 4,
+                        static_cast<std::size_t>(tile.width) * 4);
+        }
+    }
+    auto png = Png::encode(strip);
+    MC_TRY(png);
+    std::error_code ec;
+    std::filesystem::create_directories(
+        m_args.panoramaOut.parent_path(), ec);
+    std::ofstream out(m_args.panoramaOut, std::ios::binary);
+    if (!out) {
+        return MC_FAIL("cannot write the panorama's file: '" +
+                       m_args.panoramaOut.string() + "'");
+    }
+    out.write(png->data(), static_cast<std::streamsize>(png->size()));
+    MC_LOG_INFO("Panorama saved: " + m_args.panoramaOut.string() + " (" +
+                std::to_string(strip.width) + "x" +
+                std::to_string(strip.height) + ", " +
+                std::to_string(kPanoramaViews) +
+                " views from the spawn's overlook, seed " +
+                std::to_string(m_config.getInt64("world.seed", 0)) + ")");
     return {};
 }
 

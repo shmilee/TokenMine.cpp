@@ -77,9 +77,14 @@ void printUsage() {
         "                    path, default data/demos/rec_<ts>.dmo) and save\n"
         "                    it on exit (the window close / the ESC exit)\n"
         "  --list-demos      V3-16a: list the guide demo's index (the\n"
-        "                    category/seq/mode/tags/file/length) + run the\n"
-        "                    shipped content's cross-check — STANDALONE\n"
-        "                    headless (the save management's twin)\n"
+        "                    category/seq/mode/tags/file/title/length) +\n"
+        "                    run the shipped content's cross-check —\n"
+        "                    STANDALONE headless (the save management's\n"
+        "                    twin)\n"
+        "  --panorama <out>  V3-20: generate the menu's background strip\n"
+        "                    (the config's seed's 360-degree view from the\n"
+        "                    spawn's eye, 8 views stitched — the one-shot,\n"
+        "                    no loop / no save)\n"
         "  --log-level <l>   trace|debug|info|warn|error\n"
         "  -h, --help        Show this help\n");
 }
@@ -262,6 +267,13 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
                 argv[i + 1][0] != '-') {
                 args.demoRecordOut = argv[++i];
             }
+        } else if (arg == "--panorama") {
+            // V3-20: the menu's background strip's generator (the
+            // management's one-shot: the fresh world's 360-degree view,
+            // the stitch, the write, the exit — no loop / no save).
+            const char* v = nextValue(i, "--panorama");
+            if (!v) return false;
+            args.panoramaOut = v;
         } else if (arg == "--listen") {
             // V3-12b: the net HOST (the --port's fixed shape:
             // --listen <port>, the 12b's LAN loopback gate's form).
@@ -421,6 +433,23 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
          args.listenPort != 0 || !args.connectHost.empty() ||
          !args.script.empty())) {
         err = "--list-demos runs headless: drop the game-run flags";
+        return false;
+    }
+    // V3-20: --panorama runs the world ONCE (the strip's render from
+    // the config's seed — the menu's background generator). It is the
+    // game's boot (window + renderer + scene) minus the loop, so every
+    // game-run flag is rejected (the config is the world's authority).
+    if (!args.panoramaOut.empty() &&
+        (args.frames != 0 || args.saveSlot.has_value() ||
+         !args.screenshotPath.empty() || args.newWorld ||
+         args.time >= 0.0 || args.seed >= 0 ||
+         args.weather.has_value() || args.explode.has_value() ||
+         args.saveFullDiff || !args.demoAuthor.empty() ||
+         !args.demo.empty() || args.demoRecord ||
+         args.listenPort != 0 || !args.connectHost.empty() ||
+         !args.script.empty() || args.listDemos)) {
+        err = "--panorama runs the world once (the strip's render): "
+              "drop the game-run flags";
         return false;
     }
     // V3-9: --demo-author is STANDALONE headless (the timeline expands
@@ -610,8 +639,10 @@ int main(int argc, char** argv) {
                     }
                     tags += t;
                 }
-                std::printf("    #%-2d %-24s %6df (%s)  %-4s  tags: %s\n",
-                            e->seq, e->file.c_str(), e->lengthFrames,
+                std::printf("    #%-2d %-24s %-20s %6df (%s)  %-4s  tags: %s\n",
+                            e->seq, e->file.c_str(),
+                            e->title.empty() ? "-" : e->title.c_str(),
+                            e->lengthFrames,
                             timebuf, e->mode.c_str(),
                             tags.empty() ? "-" : tags.c_str());
             }
