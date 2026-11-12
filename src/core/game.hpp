@@ -2534,6 +2534,13 @@ std::optional<MobHit> targetMob() const;
         int tutorialToastFrames = 0;
         double lastSpacePressTime = -1.0;
         bool inputLocked = false; // the R18 mirror (see above)
+        // V3-19: the alive->dead transition's frame (the death screen's
+        // "存活" line's snapshot — the live m_frameCount read's fix: the
+        // world sim keeps ticking after death, the snapshot does not).
+        // -1 = never died in this session (the fallback's live read).
+        // Session state (NOT saved — the death screen is a session face,
+        // the V3-13 session-only stats' twin).
+        int deathFrame = -1;
         // The member order = the original declaration order of the
         // family it absorbed (the construction-order red line, the
         // InteractionState comment's discipline): inventory first

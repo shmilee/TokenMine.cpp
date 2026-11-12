@@ -3,9 +3,21 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–422，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–423，新条目继续前插于尾部块首。
 
-- **末影龙 guide authoring 珍珠/嵌眼/出口门八坑（PITS 422，门 230
+- **死亡屏两帧臂裁剪坑（PITS 423，门 231 v3.41.0 V3-19 死亡屏计时）**
+  ——① **死亡屏行 y 名义位 ≠ 渲染 bbox**：存活行名义 = h/2+74
+  （line 表 offset），实际文本 top ≈ h/2+108（标题「你死了！」scale
+  2.0 的 32-px 行步把后续行整体下推）——按名义位 crop（y428-456）
+  裁到的是上一行「行走」= 恒 0 假 EXACT（新旧树全同文，修复不可见）；
+  纪律 = crop 带先截图目测定 bbox 再裁（PITS 384⑤ 门窗口 HUD bbox
+  先例的死亡屏续篇）。② **两帧臂 = 日冻结配置**：死亡后世界照跑
+  （太阳动）= 0.55 黑罩后的天空背景帧间微差污染 crop 严格比对——
+  day_length 1e7 冻日（300-f 差 = 太阳 <0.001° = 背景 0-diff）使
+  存活行 crop 可 AE=0 严格 EXACT；对照臂（旧树活读）= AE 43/42 px
+  （秒位字形差「4 秒→7 秒→10 秒」= 修复前爬升实证，既有 ×2 RAW 同
+  帧协议抓不到跨帧漂移）。
+- - **末影龙 guide authoring 珍珠/嵌眼/出口门八坑（PITS 422，门 230
   v3.40.0 V3-16h② ② 末影龙）**——① **传送后视图 re-anchor = yaw +
   位置（pitch 已同步勿覆写）**：travelEnd 强制 yaw +π/2（朝西）+ 保
   pitch（= 12 嵌眼 aim −20.96°），pearl 保视图——author re-anchor 只

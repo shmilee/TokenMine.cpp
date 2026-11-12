@@ -290,6 +290,16 @@ public:
     // The death screen's cause line (the pure font-safe string — the
     // unit test pins it; the CJK glyphs are all in the 418-char set).
     static std::string deathCauseLine(const DamageInfo& info);
+    // V3-19: the death screen's "存活" line as a PURE function of the
+    // death-frame snapshot + the current frame (the 11-08 field report:
+    // the live m_frameCount read kept ticking after death — the world
+    // sim runs on — and the line crawled upward forever). deathFrame
+    // >= 0 (the alive->dead transition's frame) FREEZES the line;
+    // deathFrame == -1 (never died in this session) falls back to the
+    // live read (the legacy behavior — the fallback's bit-identity is
+    // the documented red line). The deathCauseLine's twin (the cause
+    // line reads the death's DAMAGE INFO; this reads the death's FRAME).
+    static std::string survivalStatsLine(int deathFrame, int frameCount);
     // V3-13: the session's horizontal distance (the death screen's
     // "行走 N 格" — frame-locked, the teleport/respawn jumps skip).
     float statsDistance() const { return m_statsDistance; }

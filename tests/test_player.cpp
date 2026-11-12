@@ -2767,6 +2767,27 @@ TEST(PlayerTest, DeathCauseLineFontSafe) {
         "被 ghast 的爆炸杀死");
 }
 
+TEST(PlayerTest, SurvivalLineIsDeathFrameSnapshot) {
+    // V3-19 (the 11-08 field report: the death screen's "存活" line read
+    // the LIVE m_frameCount — the world sim keeps ticking after death
+    // and the line crawled upward forever). The snapshot (the
+    // alive->dead transition's frame) freezes the line: frame-
+    // independent at any later frame.
+    EXPECT_EQ(Player::survivalStatsLine(1234, 1234),
+              Player::survivalStatsLine(1234, 999999));
+    // 1234f = 20.57s = the 0 分 20 秒 (the 60-fps frame->second read).
+    EXPECT_EQ(Player::survivalStatsLine(1234, 1234), "存活 0 分 20 秒");
+    // The -1 fallback (never died in this session) = the legacy live
+    // read, bit-identical (the frame-dependent crawl is the pre-fix
+    // behavior — pinned so the fallback cannot silently change).
+    EXPECT_EQ(Player::survivalStatsLine(-1, 1234), "存活 0 分 20 秒");
+    EXPECT_NE(Player::survivalStatsLine(-1, 1234),
+              Player::survivalStatsLine(-1, 1294));
+    // The minute/second split at the boundary (3600f = 60s = the 1 分
+    // 0 秒 rollover — the integer math's verbatim pin).
+    EXPECT_EQ(Player::survivalStatsLine(3600, 999999), "存活 1 分 0 秒");
+}
+
 TEST(PlayerTest, RespawnClearsDeathCause) {
     BlockRegistry blocks = makeBlocks();
     World world;

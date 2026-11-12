@@ -1269,6 +1269,11 @@ void Game::updateSurvival(double dt) {
             // one increment per life lost, whatever the cause;
             // frame-locked).
             s.stats["deathCount"]++;
+            // V3-19: the survival line's SNAPSHOT (the transition's
+            // frame — the death screen reads it instead of the live
+            // m_frameCount, which keeps ticking while the world sim
+            // runs on after death).
+            s.deathFrame = m_frameCount;
             s.effects.clearAll();
             syncAbsorptionFor(p, s); // Phase 72: the pool dies
             // SURV-2: the air refills with the death (the respawn
@@ -2039,7 +2044,17 @@ void Game::renderUi() {
         const std::string died = "你死了！";
         const std::string cause = lplayer->deathCauseLine(
             lplayer->deathInfo());
-        const double totalSeconds = static_cast<double>(m_frameCount) / 60.0;
+        // V3-19: the survival line reads the DEATH-FRAME snapshot (the
+        // alive->dead transition's m_frameCount — the session's, the
+        // local player's), not the live m_frameCount: after death the
+        // world sim keeps ticking and the live read crawled upward
+        // forever (the 11-08 field report). The -1 fallback (never
+        // died in this session) = the legacy live read, unreachable
+        // here (the screen only draws while dead) but kept for the
+        // helper's bit-identity contract.
+        const PlayerSession& lsession = *m_sessions[m_localSlot];
+        const std::string survived =
+            Player::survivalStatsLine(lsession.deathFrame, m_frameCount);
         const std::string mined =
             "采挖 " + std::to_string(m_sessionStats.blocksMined) + " 块";
         const std::string placed =
@@ -2049,10 +2064,6 @@ void Game::renderUi() {
         const std::string walked =
             "行走 " + std::to_string(static_cast<int>(lplayer->
                                      statsDistance())) + " 格";
-        const std::string survived =
-            "存活 " + std::to_string(static_cast<int>(totalSeconds / 60)) +
-            " 分 " +
-            std::to_string(static_cast<int>(totalSeconds) % 60) + " 秒";
         const std::string hint = "按 R 重生";
         // Fixed physical offsets (the demo panel's precedent — fScale
         // carries the font_scale only; the glyph's ui.scale growth is

@@ -855,6 +855,19 @@ std::string Player::deathCauseLine(const DamageInfo& info) {
     }
 }
 
+std::string Player::survivalStatsLine(int deathFrame, int frameCount) {
+    // V3-19: the snapshot (the alive->dead transition's frame) freezes
+    // the line; the live frameCount keeps ticking after death (the
+    // world sim runs on) — the 11-08 field report's crawl. -1 (never
+    // died in this session) = the legacy live read, bit-identical. The
+    // minute/second split = the pre-V3-19 integer math, verbatim.
+    const int f = deathFrame >= 0 ? deathFrame : frameCount;
+    const double totalSeconds = static_cast<double>(f) / 60.0;
+    return "存活 " + std::to_string(static_cast<int>(totalSeconds / 60)) +
+           " 分 " +
+           std::to_string(static_cast<int>(totalSeconds) % 60) + " 秒";
+}
+
 void Player::respawn() {
     m_dead = false;
     m_deathInfo = {}; // V3-13: the cause dies with the corpse

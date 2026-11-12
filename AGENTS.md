@@ -179,7 +179,19 @@ track 手动 re-anchor；门内捕获 PITS 420 四坑【点火 aim 底行顶面/
 后 track 失效/返程乒乓 = 下 frame 规避/frame 悬空 2-m】；2998/2998
 【banner re-pin 1】+ S1 第 110 次【f60 ×2 ≡ base19】+ canary 4×2 新≡旧
 二进制 RAW+savenorm EXACT + guide_nether ×2 RAW/savenorm EXACT + 性能
-A/B 同档【终档跨树 savenorm EXACT = 结构性零成本】）**；**v3.40.0 = V3-16h② 扩展指导 demo 族 ②打末影龙（门 230，11-12：guide_dragon 15214f 04:13 = dimension 章第二支 = **V3-16 10 主题全完成**，16h 拆两版收官；12×12 平台正午 SURVIVAL mobs ON + 预置 ender_eye 12 + ender_pearl 1 + netherite 甲 4【RMB 即穿 80% 减伤 6→1.2/击】+ end_portal_frame 环 12 格【survival 不可得预置】；tour = 装备 → 嵌 12 眼【GOOD cell (6,4) 末位 PITS 421】→ 传送【Traveled to end (40,53,0)】→ dragon --dragon-damage 200 同帧杀 + 仪式【egg (0,54,0) + 23 orb + ascension】→ **珍珠 28° 弧 40-m 一掷**【flat 仅 12-m，pearl teleport (1.89,54.69,-4.30)】→ 入 center【出口门环 = 1-block 实心墙 step-up/down】→ 破 2 出口水晶【f1960/f2019 explode r3 爆坑 28 格；tower 晶 off-route CUT】→ 观蛋【egg 完好 = 站位眼位离 egg box ≥1-m】→ 等 900-f 冷却 → 返程 exit portal【落 (0.5,54,0.5)】→ 观点亮门；终态钉 hp20 / xp 92【12 早落 orb 穿未载 chunk 沉基岩洋 y5 持久 = streaming 时序偏离】/ 甲 4 件各 6.5 损 / inv 空 / lit 9/9 + eyed 12/12；**--dragon-damage 200 必带**；零内核【V3-10a-d + V3-10b + SURV-1 基建全复用】+ pearl 轨迹探针族；门内捕获 PITS 422 八坑【视图 re-anchor yaw+位置 / 珍珠仰角 40-m / 珍珠穿晶 shatter 吞 / egg t0 挖 / chunk 载竞 / step 漂移 0.5-m / rim 大 yaw miss / 环 1-block 墙】；2998/2998【banner re-pin 1】+ S1 第 111 次【f60 ×2 ≡ base19】+ canary 4×2 新≡旧二进制（tm_v339 v3.39.0）RAW+savenorm EXACT + guide_dragon ×2 RAW/savenorm EXACT + 性能 A/B 同档【upd med 0.523/0.576/0.565 vs 0.527/0.583/0.557，终档跨树 savenorm EXACT = 结构性零成本】）**
+A/B 同档【终档跨树 savenorm EXACT = 结构性零成本】）**；**v3.40.0 = V3-16h② 扩展指导 demo 族 ②打末影龙（门 230，11-12：guide_dragon 15214f 04:13 = dimension 章第二支 = **V3-16 10 主题全完成**，16h 拆两版收官；12×12 平台正午 SURVIVAL mobs ON + 预置 ender_eye 12 + ender_pearl 1 + netherite 甲 4【RMB 即穿 80% 减伤 6→1.2/击】+ end_portal_frame 环 12 格【survival 不可得预置】；tour = 装备 → 嵌 12 眼【GOOD cell (6,4) 末位 PITS 421】→ 传送【Traveled to end (40,53,0)】→ dragon --dragon-damage 200 同帧杀 + 仪式【egg (0,54,0) + 23 orb + ascension】→ **珍珠 28° 弧 40-m 一掷**【flat 仅 12-m，pearl teleport (1.89,54.69,-4.30)】→ 入 center【出口门环 = 1-block 实心墙 step-up/down】→ 破 2 出口水晶【f1960/f2019 explode r3 爆坑 28 格；tower 晶 off-route CUT】→ 观蛋【egg 完好 = 站位眼位离 egg box ≥1-m】→ 等 900-f 冷却 → 返程 exit portal【落 (0.5,54,0.5)】→ 观点亮门；终态钉 hp20 / xp 92【12 早落 orb 穿未载 chunk 沉基岩洋 y5 持久 = streaming 时序偏离】/ 甲 4 件各 6.5 损 / inv 空 / lit 9/9 + eyed 12/12；**--dragon-damage 200 必带**；零内核【V3-10a-d + V3-10b + SURV-1 基建全复用】+ pearl 轨迹探针族；门内捕获 PITS 422 八坑【视图 re-anchor yaw+位置 / 珍珠仰角 40-m / 珍珠穿晶 shatter 吞 / egg t0 挖 / chunk 载竞 / step 漂移 0.5-m / rim 大 yaw miss / 环 1-block 墙】；2998/2998【banner re-pin 1】+ S1 第 111 次【f60 ×2 ≡ base19】+ canary 4×2 新≡旧二进制（tm_v339 v3.39.0）RAW+savenorm EXACT + guide_dragon ×2 RAW/savenorm EXACT + 性能 A/B 同档【upd med 0.523/0.576/0.565 vs 0.527/0.583/0.557，终档跨树 savenorm EXACT = 结构性零成本】）**；**v3.41.0 = V3-19
+死亡屏计时（门 231，11-12：11-08 用户报障「死亡界面存活时间不停增加」
+= 表现层 3 点修零 format——根因 存活行活读 m_frameCount（死亡后世界
+模拟照跑）；修 = PlayerSession + deathFrame 快照【-1 回落 = 旧活读位
+级】+ 转移块 deathCount++ 旁钉帧 + 死亡屏读改快照
+Player::survivalStatsLine 纯函数【deathCauseLine 孪生——cause 行读
+DAMAGE INFO 此行读 FRAME】；**死亡屏两帧臂**【8×8 平台 y84 坠死 f≈97
+无输入确定性 + day_length 1e7 冻日：新树 f254 vs f434 存活行 crop
+AE=0 冻结 vs 旧树 tm_v340 同臂 AE 43/42 px 爬升复现【「4 秒→7 秒→
+10 秒」秒位字形差 = TDD 前置】】；2999/2999（+1）+ S1 第 112 次【f60
+×2 ≡ base19——死亡屏只在死时画锚零像素】+ canary 4×2 新≡旧 RAW+
+savenorm EXACT + 性能 A/B 同档 + PITS 423 两坑【行 y 名义位 ≠ 渲染
+bbox scale-2.0 标题行步下推 / 两帧臂日冻结 day_length 1e7】）**
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
 （门 202）/ v3.13.0（门 203）/ v3.14.0（门 204）/ v3.15.0（门 205）
@@ -200,7 +212,7 @@ pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
 + 16e ✅ v3.36.0 = ⑧材料（门 226，build 章第二支，7 biome 床
 33 标本）+ 16f ✅ v3.37.0 = ⑨河流（门 227，build 章第三支，19841f）
 + 16g ✅ v3.38.0 = ⑩黑夜历险（门 228，survival 章首支，18301f，弓箭
- combat + 火把环 + 活到天亮，PITS 419 八坑）+ 16h① ✅ v3.39.0 = ①下界门（门 229，dimension 章首支，10865f，obsidian 帧预置 + flint_and_steel 点火 + 站入传送 8:1 落生成帧 + 下 frame 观下界，返程不做，PITS 420 四坑）+ 16h② ✅ v3.40.0 = ②末影龙（门 230，15214f，嵌 12 眼【GOOD cell 末位】+ --dragon-damage 200 仪式 + 珍珠 28° 40-m 一掷 + 破 2 出口水晶 + netherite 甲 enderman 对策，PITS 422 八坑）** = V3-16 10 主题全完成】+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
+ combat + 火把环 + 活到天亮，PITS 419 八坑）+ 16h① ✅ v3.39.0 = ①下界门（门 229，dimension 章首支，10865f，obsidian 帧预置 + flint_and_steel 点火 + 站入传送 8:1 落生成帧 + 下 frame 观下界，返程不做，PITS 420 四坑）+ 16h② ✅ v3.40.0 = ②末影龙（门 230，15214f，嵌 12 眼【GOOD cell 末位】+ --dragon-damage 200 仪式 + 珍珠 28° 40-m 一掷 + 破 2 出口水晶 + netherite 甲 enderman 对策，PITS 422 八坑）** = V3-16 10 主题全完成】+ V3-19 死亡屏计时 ✅ v3.41.0（门 231，存活行快照 3 点修，两帧臂 AE 0 vs 旧树 43px 复现）+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
 MOTD 并入】】**【大项已相位拆分 V3-10a~d /
 V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
 
@@ -261,7 +273,7 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **2998/2998**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **2999/2999**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】+ v3.41.0 V3-19 死亡屏计时族 1【survivalStatsLine 纯函数】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -426,6 +438,35 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 231（**V3-19 死亡屏计时 v3.41.0** 门 231 全 PASS【11-08 用户报
+  障「死亡界面存活时间不停增加」；**表现层 3 点修**——零 format / 零
+  config / 零新资产】：根因 = 死亡屏「存活」行活读 m_frameCount
+  （game_ui.cpp:2042）——死亡后世界模拟照跑帧继续推进数字一直涨，其余
+  四行（采挖/放置/击杀 = 会话计数器、行走 = 物理冻结）天然静止唯此行
+  脱缰；修 = ① PlayerSession + `int deathFrame = -1`【会话态不存档
+  = 死亡屏会话面 V3-13 同款偏离】② alive→dead 转移块（SURV-7
+  deathCount++ 旁）`s.deathFrame = m_frameCount` ③ 死亡屏读改快照
+  `Player::survivalStatsLine(deathFrame, frameCount)`【**纯函数** =
+  deathCauseLine 的孪生——cause 行读死亡的 DAMAGE INFO，此行读死亡的
+  FRAME；**-1 回落 = 旧活读位级红线**】；**死亡屏两帧臂（新断言，
+  BACKLOG 规格）**：8×8 平台 + 玩家 y84 悬空（fall 30 → dmg 27 > 20
+  无输入无 mob 确定性坠死 @ f≈97，base 30-f 场景）+ day_length 1e7
+  冻日——**新树** --frames 254 vs 434 存活行 crop（y468-498 实测
+  bbox）**AE=0 逐像素冻结**（两帧同文「存活 0 分 1 秒」）vs **旧树
+  对照（TDD 前置复现）** tm_v340 同臂 **AE 43/42 px**（活读爬升
+  「4 秒→7 秒→10 秒」秒位字形差 = 修复前行为实证——既有 ×2 RAW 同
+  帧协议抓不到跨帧漂移，本臂专治）；2999/2999（+1
+  SurvivalLineIsDeathFrameSnapshot：快照帧独立 + 回落活读 + 整式边界
+  3600f = 1 分 0 秒）；结构免疫第 112 次【S1 ≡ base19 逐字节 ×2 +
+  savenorm EXACT——死亡屏只在死时画锚场景无死亡零像素】+ canary 4×2
+  新≡旧二进制（tm_v340 v3.40.0）RAW+savenorm EXACT【无死亡 = 存活行
+  冷路径】+ 性能 A/B 同档【表现层零自成本】；**门内捕获 PITS 423 两
+  坑**【①死亡屏行 y 名义位（h/2+74）≠ 渲染 bbox（实际 top ≈ h/2+108
+  = 标题 scale-2.0 的 32-px 行步下推——按名义位 crop 裁到「行走」恒
+  0 行 = 假 EXACT 新旧全同文修复不可见；crop 带先截图目测定 bbox
+  再裁，PITS 384⑤ 续篇）②两帧臂 = 日冻结配置 day_length 1e7（太阳
+  <0.001° 位移 = 0.55 黑罩后背景 0-diff，crop 可严格 EXACT）】；详见
+  `docs/archive/phase-3.41.0.md`）；
   门计数 230（**V3-16h② 扩展指导 demo 族 ②打末影龙 v3.40.0** 门 230 全
   PASS【V3-16 相位 H/7 收官支 = **10 主题全完成**，16h 拆两版①下界门
   /②末影龙；**零内核**——末地嵌眼/travelEnd/龙 boss/水晶/珍珠/爆炸/
@@ -1748,7 +1789,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（422 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（423 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |
