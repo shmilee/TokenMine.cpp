@@ -548,10 +548,12 @@
    正文归档 /tmp/opencode/v3x_releases_archive/ 留底）；v3.0.0 开启版保留。
    11-13：v3.12.0–v3.46.0 只留 **v3.31.0（1f36bf2）/ v3.40.0（0575203）**
    两节点 tag（用户字面定案；33 tag 删除全无 release，SHA 清单见
-   变更记录 + /tmp/opencode/v3x_del33_shas.txt 留底）；**v3.40.0 发单一
-   代表 release**（= GitHub Latest，notes 覆盖 v3.12.0–v3.40.0 29 版）；
-   v3.31.0 = tag-only 无 release。v3.x 终态 = 5 tag（v3.0.0 / v3.9.0 /
-   v3.11.0 / v3.31.0 / v3.40.0）3 release（v3.0.0 / v3.11.0 / v3.40.0）。
+   变更记录 + /tmp/opencode/v3x_del33_shas.txt 留底）；**两节点 tag 各发
+   节点 release**（v3.31.0 = 多人联机收官 / v3.40.0 = notes 覆盖
+   v3.12.0–v3.40.0 29 版，v3.40.0 = GitHub Latest——同日用户修正：
+   v3.31.0 补 release）。v3.x 终态 = 5 tag（v3.0.0 / v3.9.0 /
+   v3.11.0 / v3.31.0 / v3.40.0）4 release（v3.0.0 / v3.11.0 / v3.31.0 /
+   v3.40.0）。
    2.x 历史 = v2.0.0 / v2.10.0 release + v2.19.0 收官 tag（无 release，
    历史遗留）。
 6. **11-06 矩阵扩容 + 大项相位拆分**：6 个 ⬜ 项（V3-10 / V3-11 /
@@ -577,9 +579,12 @@
   /tmp/opencode/v3x_del33_shas.txt）；**v3.40.0 新增单一代表 release**
   （title "TokenMine.cpp v3.40.0"，notes 覆盖 v3.12.0–v3.40.0 29 版 =
   末地维度 / 多人联机 / 教学 demo 族 10 主题 / 下界战斗链 / 创造模式 /
-  打磨）→ **GitHub Latest = v3.40.0**（v3.11.0 摘 Latest）；v3.31.0 =
-  tag-only。v3.x 终态 = 5 tag 3 release + 孤儿 tag v2.19.0 / v3.9.0
-  （历史遗留无 release，留待用户定夺）。执行顺序 #5 已刷新。
+  打磨）；**同日用户修正：v3.31.0 亦发节点 release**（多人联机收官：
+  REJOIN + format 33 players[]，title "TokenMine.cpp v3.31.0"）→
+  **GitHub Latest = v3.40.0**（`gh release edit --latest` 显式定标，
+  v3.11.0 摘 Latest）。v3.x 终态 = 5 tag 4 release（v3.0.0 / v3.11.0 /
+  v3.31.0 / v3.40.0）+ 孤儿 tag v2.19.0 / v3.9.0（历史遗留无 release，
+  留待用户定夺）。执行顺序 #5 已刷新。
 - **11-06（V3-15 生存/表现小批完成）**：**v3.16.0 已提交**（门 206 全
   PASS：结构免疫第 86 次【S1 ≡ base19】+ S2a portal 场景【存档 ×2 RAW
   + 动画关控制臂 ×2 RAW + 单跑目检漩涡流动/蒸汽 + f400/f460 diff 3560
