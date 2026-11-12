@@ -42,6 +42,7 @@
 #include "core/fly.hpp"
 #include "core/food.hpp"
 #include "core/input.hpp"
+#include "core/menu_layout.hpp" // V3-17: the main menu's pure face
 #include "net/net_proto.hpp"
 #include "net/net_session.hpp"
 #include "core/end_portal.hpp"
@@ -309,6 +310,23 @@ public:
     // m_frameCount); the audience's whitelist (orbit / speed / pause /
     // view mode / quit-from-panel) never touches the simulation.
     void runDemoReplay();
+    // V3-17: the main menu's loop (the 4th loop — the presentation
+    // layer before the world's build; the demo/net/script's flags
+    // bypass it = the structural immunity's root). Returns 0 = quit,
+    // 1 = the singleplayer's start (the caller builds the fresh
+    // world, the --new's shape).
+    int runMenuLoop();
+    // V3-17: the menu's render (the clear + the UiBatch's only —
+    // render/renderUi are forbidden here: they read the world's
+    // state, unbuilt).
+    void renderMenu();
+    // V3-17: the menu's gate (the interactive boot's face — every
+    // headless-shaped flag bypasses it).
+    bool menuEnabled() const;
+    // V3-17: the menu's minimum GL face (the ui shader + the font
+    // texture + the two ui scales — buildScene's extracted head,
+    // idempotent).
+    Result<void> buildUiAssets();
     // The per-frame camera sync (the pre-V3-9 update()'s camera block,
     // extracted VERBATIM — the player's state + the session's camera
     // mode / zoom; update() calls it at the same point, the bit-
@@ -1683,6 +1701,18 @@ std::optional<MobHit> targetMob() const;
     // An init-time constant like m_uiScale (never a frame state, so it
     // carries no save-format field).
     double m_fontScale = kFontScaleDefault;
+    // V3-17: buildUiAssets's idempotence (the ui shader + the font
+    // texture + the two ui scales — the menu's path builds them at
+    // init, buildScene's re-entry after the singleplayer's start
+    // skips).
+    bool m_uiAssetsBuilt = false;
+    // V3-17: the menu's loop state (presentation-only — m_frameCount
+    // is NOT advanced while the menu runs: the simulated frame count
+    // starts at the world's first frame, the --new's twin).
+    bool m_menuActive = false;
+    int m_menuFrame = 0;
+    MenuPage m_menuPage = MenuPage::Title;
+    int m_menuHovered = -1; // the hovered item (render face, frame state)
     AssetManager m_assets;
     Window m_window;
     Input m_input;

@@ -3,9 +3,36 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–424，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–425，新条目继续前插于尾部块首。
 
-- **存档扩展名重命名坑（PITS 424，门 232 v3.42.0 V3-18 存档扩展名）**
+- **主菜单 17a 实施三坑（PITS 425，门 233 v3.43.0 V3-17a）**——①
+  **beginFrame viewport = DRAWABLE（render() 的双坐标系）**：renderMenu
+  初版用 UI 空间（uiSize = 逻辑/ui.scale 的 453×496）调 beginFrame（=
+  glViewport）→ 菜单内容压缩到左上角 453×496 区；纪律 = beginFrame
+  (m_window.width(), m_window.height())【drawable】+ uiProjection
+  (uiSize)【布局空间】（render() 的双尺寸分工——代码评审捕获，截图
+  冒烟前未入门）。② **菜单 hover = 鼠标位置依赖面（S1 锚须 mouse-
+  warp 纪律）**：无输入 f60 锚画面 = 标题菜单，hover 条按物理鼠标位置
+  画（鼠标停在按钮上 = ×2 RAW 锚破）——门纪律 = S1 两跑各在窗口出现
+  后 xdotool mousemove --window 到 (10,10)【全按钮外 = no-hover】=
+  base20 锚的 defined mouse face（游戏期 S1 无此面——十字线固定中心、
+  面板全关；菜单是首个鼠标位置入像素的无输入锚）。③ **字体增字 =
+  代码点序插入 + 后缀重格（尾部追加否决）**：glyphUv = 有序表
+  lower_bound（font.cpp）——尾部追加破排序不变量（热路径改线性扫 /
+  两段表杂交）；项目机制（v3.15.0 于 / v3.14b 九 glyph 重格先例）=
+  代码点序插入 + 其后扩展字形 +1..+N 重格 + atlas 增长（本例 2112→
+  2208，region V3-10d 起 528/528 满）——top-512 红线平凡保 + 屏上像
+  素恒等（同 bitmap 新 cell）；侦察「尾部 cell 433..453」建议 = 字符
+  数与 cell 号混淆（扩展区实际 128..527）。④ **atlas 长度变 =
+  归一化 v-UV 重缩放 = 跨二进制文本边缘差**（门 233 实证）：
+  glyphUv 的 v = y / kFontAtlasHeight——atlas 2112→2208 后全部
+  字形的 v 值变（内容同位但归一化坐标移 ~2%）→ GPU 线性过滤的
+  亚 texel 采样偏移 → 文本抗锯齿边缘 92-118 px（0.01%）跨树差
+  （canary 4 全中：finished 面板/toast/clock/badge 边缘；世界/
+  图标/心行 0 差）——门面 = 字体增长相的 canary 跨树 RAW 首版
+  带文本边缘白名单（逐 px 邻域 text-like 审计 + diffmap 留证），
+  次版起两树同字体恢复 EXACT。
+- - **存档扩展名重命名坑（PITS 424，门 232 v3.42.0 V3-18 存档扩展名）**
   ——① **路径族 = 参数化探测单源**：scene 交叉检初版沿用
   `scenesDir / (slot + ".json")` 硬编码后缀 + demoScenePath 硬编码
   committed 目录 → 11 个 scene 资产重命名后**全索引假拒**（"the

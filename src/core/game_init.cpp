@@ -152,6 +152,43 @@ Result<void> Game::fillStarterInventory(PlayerSession& s) {
     return {};
 }
 
+Result<void> Game::buildUiAssets() {
+    // V3-17: the menu's minimum GL face — the ui shader + the font
+    // texture + the two ui scales (buildScene's extracted head).
+    // Idempotent: the menu's path builds it at init (before the
+    // world), and buildScene's re-entry after the singleplayer's
+    // start skips it (the GL resources load once).
+    if (m_uiAssetsBuilt) {
+        return {};
+    }
+    auto uiVert = m_assets.loadText("shaders/ui.vert");
+    MC_TRY(uiVert);
+    auto uiFrag = m_assets.loadText("shaders/ui.frag");
+    MC_TRY(uiFrag);
+    auto uiShader = ShaderProgram::create(*uiVert, *uiFrag);
+    MC_TRY(uiShader);
+    m_uiShader = std::move(*uiShader);
+
+    auto fontPath = m_assets.resolve("textures/font.png");
+    MC_TRY(fontPath);
+    auto fontTex = Texture::loadPng(*fontPath);
+    MC_TRY(fontTex);
+    m_fontTexture = std::move(*fontTex);
+
+    // UI scale (Phase 34): same missing-key / validated-value contract.
+    const auto uiScale = uiScaleFromConfig(m_config);
+    MC_TRY(uiScale);
+    m_uiScale = *uiScale;
+    // Font-only scale (UX-8e): text-only zoom in renderUi (icons and
+    // panel geometry stay put); the same strict-read contract.
+    const auto fontScale = uiFontScaleFromConfig(m_config);
+    MC_TRY(fontScale);
+    m_fontScale = *fontScale;
+
+    m_uiAssetsBuilt = true;
+    return {};
+}
+
 Result<void> Game::buildScene() {
     // PIPE-2: the save journal's observer, installed at the TOP of
     // buildScene — before ANY cell-level write: the demo-area generation
@@ -196,13 +233,10 @@ Result<void> Game::buildScene() {
     m_skyShader = std::move(*skyShader);
 
     // -- Phase 15 UI: unlit screen-space shader + generated textures --------
-    auto uiVert = m_assets.loadText("shaders/ui.vert");
-    MC_TRY(uiVert);
-    auto uiFrag = m_assets.loadText("shaders/ui.frag");
-    MC_TRY(uiFrag);
-    auto uiShader = ShaderProgram::create(*uiVert, *uiFrag);
-    MC_TRY(uiShader);
-    m_uiShader = std::move(*uiShader);
+    // V3-17: the UI's assets (the ui shader + the font texture + the
+    // two ui scales) moved to buildUiAssets (the menu's minimum GL
+    // face) — the idempotent call loads them once.
+    MC_TRY(buildUiAssets());
 
     // -- UX-9a clouds: dedicated per-pixel shader + ONE-TIME quad -------
     // The pattern (cloudMask ∧ cloudSubMask, the exact GLSL port of
@@ -236,12 +270,6 @@ Result<void> Game::buildScene() {
     }
     auto cloudUpload = m_cloudMesh.upload(cloudVerts, {0, 1, 2, 0, 2, 3});
     MC_TRY(cloudUpload);
-
-    auto fontPath = m_assets.resolve("textures/font.png");
-    MC_TRY(fontPath);
-    auto fontTex = Texture::loadPng(*fontPath);
-    MC_TRY(fontTex);
-    m_fontTexture = std::move(*fontTex);
 
     auto crackPath = m_assets.resolve("textures/cracks.png");
     MC_TRY(crackPath);
@@ -1850,15 +1878,8 @@ Result<void> Game::buildScene() {
     // silently falling back).
     const auto playerParams = Player::Params::fromConfig(m_config);
     MC_TRY(playerParams);
-    // UI scale (Phase 34): same missing-key / validated-value contract.
-    const auto uiScale = uiScaleFromConfig(m_config);
-    MC_TRY(uiScale);
-    m_uiScale = *uiScale;
-    // Font-only scale (UX-8e): text-only zoom in renderUi (icons and
-    // panel geometry stay put); the same strict-read contract.
-    const auto fontScale = uiFontScaleFromConfig(m_config);
-    MC_TRY(fontScale);
-    m_fontScale = *fontScale;
+    // V3-17: the ui scales moved to buildUiAssets (the menu's minimum
+    // GL face — the idempotent call above loaded them).
     const Player::Params& playerDims = *playerParams; // room check
     // V3-12b (R9): the per-INDEX spawn (the i-th valid kSpawnCandidates
     // entry — the two players never share a cell; the world spawn / the
@@ -2887,6 +2908,21 @@ Result<void> Game::init(const GameArgs& args) {
     auto rendererInit = m_renderer.init();
     MC_TRY(rendererInit);
 
+    // V3-17: the main menu's branch (the interactive boot's
+    // presentation layer — the demo/net/script's flags bypass it: the
+    // canary's 4 demos, the net's arms, the script's arm and the
+    // --frames's no-input gate keep the pre-V3-17's bit-identical
+    // shape = the structural immunity's root). The menu needs only
+    // the window + the renderer + the UI's assets — the world is
+    // built when the player commits (the singleplayer's start, the
+    // --new's shape).
+    if (menuEnabled()) {
+        MC_TRY(buildUiAssets());
+        m_menuActive = true;
+        m_initialized = true;
+        return {};
+    }
+
     auto scene = buildScene();
     MC_TRY(scene);
 
@@ -2959,15 +2995,42 @@ int Game::run() {
                                    : std::string("unlimited")) +
                 ")");
 
-    // V3-9: the loop BRANCHES on the demo mode — Off / Record = the
-    // pre-V3-9 loop verbatim (runGameplayLoop; the three flags absent
-    // = the bit-identical normal run, the structural immunity root);
-    // Replay = the demo-fed loop (runDemoReplay: the audience owns the
-    // SDL queue, the demo's dts are the only time source).
-    if (m_demoMode == DemoMode::Replay) {
-        runDemoReplay();
-    } else {
-        runGameplayLoop(lastFrame);
+    // V3-17: the menu's branch (the interactive boot — m_menuActive
+    // is set only when menuEnabled() passed; the demo/net/script's
+    // runs skip it, the loop below is their pre-V3-17's shape
+    // verbatim = the structural immunity's root).
+    bool worldReady = !m_menuActive;
+    if (m_menuActive) {
+        const int menuExit = runMenuLoop();
+        m_menuActive = false;
+        if (menuExit == 1) {
+            // The singleplayer's start = the fresh world's shape
+            // (the --new's twin: the config's seed, the save's load
+            // skipped — the menu never touches a slot).
+            m_args.newWorld = true;
+            auto scene = buildScene();
+            if (!scene.ok()) {
+                MC_LOG_ERROR("Scene build failed: " + scene.error().describe());
+                return 1;
+            }
+            worldReady = true;
+        } else {
+            MC_LOG_INFO("menu: quit (no world built — the save's write "
+                        "is skipped)");
+        }
+    }
+
+    if (worldReady) {
+        // V3-9: the loop BRANCHES on the demo mode — Off / Record = the
+        // pre-V3-9 loop verbatim (runGameplayLoop; the three flags absent
+        // = the bit-identical normal run, the structural immunity root);
+        // Replay = the demo-fed loop (runDemoReplay: the audience owns the
+        // SDL queue, the demo's dts are the only time source).
+        if (m_demoMode == DemoMode::Replay) {
+            runDemoReplay();
+        } else {
+            runGameplayLoop(lastFrame);
+        }
     }
 
     // Chunk streaming (Phase 14): drain the worker pool before the save
@@ -2987,8 +3050,9 @@ int Game::run() {
     // Save (Phase 13): persist the world state for the slot (opt-in via
     // --save, after the final frame — and after any screenshot, which is
     // taken inside the loop). A failed save is logged, not fatal: the
-    // session itself ran cleanly.
-    if (m_args.saveSlot.has_value()) {
+    // session itself ran cleanly. V3-17: the menu's quit face skipped
+    // the world's build entirely — the slot stays untouched.
+    if (worldReady && m_args.saveSlot.has_value()) {
         auto saved = writeSave();
         if (!saved.ok()) {
             MC_LOG_ERROR("Save failed: " + saved.error().describe());

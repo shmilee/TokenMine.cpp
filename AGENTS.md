@@ -191,7 +191,29 @@ AE=0 冻结 vs 旧树 tm_v340 同臂 AE 43/42 px 爬升复现【「4 秒→7 秒
 10 秒」秒位字形差 = TDD 前置】】；2999/2999（+1）+ S1 第 112 次【f60
 ×2 ≡ base19——死亡屏只在死时画锚零像素】+ canary 4×2 新≡旧 RAW+
 savenorm EXACT + 性能 A/B 同档 + PITS 423 两坑【行 y 名义位 ≠ 渲染
-bbox scale-2.0 标题行步下推 / 两帧臂日冻结 day_length 1e7】）**；**v3.42.0 = V3-18 存档扩展名（门 232，11-12：11-08 用户诉求「.json 扩展名体现不出压缩后的 json」——零 format / 零像素：slotWritePath/slotReadPath 路径族【.json.gz 新写 + 两级探测零迁移】+ 管理面双扩展名 + scene 资产 11 个随改 .json.gz + demoSceneReadPath 参数化单源；3005/3005（+6）+ S1 第 113 次【WM 平铺漂移 = config 请求锚几何 679×744 钉死 PITS 424④】+ canary 4×2 新≡旧 RAW+savenorm EXACT + 迁移臂 + scene 臂 + 性能 A/B 同档；PITS 424 四坑）**
+bbox scale-2.0 标题行步下推 / 两帧臂日冻结 day_length 1e7】）**；**v3.42.0 = V3-18 存档扩展名（门 232，11-12：11-08 用户诉求「.json 扩展名体现不出压缩后的 json」——零 format / 零像素：slotWritePath/slotReadPath 路径族【.json.gz 新写 + 两级探测零迁移】+ 管理面双扩展名 + scene 资产 11 个随改 .json.gz + demoSceneReadPath 参数化单源；3005/3005（+6）+ S1 第 113 次【WM 平铺漂移 = config 请求锚几何 679×744 钉死 PITS 424④】+ canary 4×2 新≡旧 RAW+savenorm EXACT + 迁移臂 + scene 臂 + 性能 A/B 同档；PITS 424 四坑）**；**v3.43.0 = V3-17a 主菜单系统：标题页 + 教学入口
+（门 233，11-12：11-07 用户实机诉求首相位——交互 boot 进主菜单 = 第 4 循环
+runMenuLoop【window+renderer+UI 资产后 buildScene 前】+ renderMenu【clear +
+UiBatch only 禁 render/renderUi 世界未建；原语 = renderUi 拷贝原文零触碰】；
+标题页 = logo + 版本行 + 单人/多人/设置/教学/退出【hover + click/Enter +
+ESC；零新 GameKey】；**单人 = 直接 fresh world-start（--new 形）——click
+臂 单人≡--new savenorm EXACT = 菜单零模拟贡献最强形**；多人/设置 = stub
+17b/17d；**教学 stub = kDemoCategories 5 章标题**（两级 = 17c）；
+menuEnabled 五形绕开【demo/net/script/--new/管理旗 = 结构免疫根】；
+buildUiAssets 幂等提取【buildScene 头：ui shader+font+双 scale】；菜单
+退出 save 写跳过【槽不创建断言】；**字体 +21**【人设教学返主距气声缩
+窗联创继第大维远征历协】= 代码点序插入 + 后缀 +1..+21 重格【侦察
+「尾部追加」否决 = lower_bound 有序不变量 PITS 425③】+ atlas 2112→
+2208【region 528/528 满 V3-10d 起】+ top-512 红线 131072 px 恒等 +
+font.png FNV re-pin 9d0c9e32976679ff；**S1 重锚 base20**【f60 无输入 =
+标题 21900 B——菜单无输入纯函数 ×2 逐字节 + defined mouse face
+(10,10) no-hover warp 纪律 PITS 425②】；3010/3010（+5 菜单族）+ canary
+4×2 新≡旧（tm_v342 v3.42.0）树内 RAW + savenorm EXACT + 跨树 RAW =
+字体 v-UV 重缩放文本边缘白名单【92-118 px 0.01% 逐 px 审计 100% 文本
+边缘 + 零世界像素 PITS 425④，17b 起恢复 EXACT】+ 性能 A/B 同档
+【changesApplied 9/3/1 逐位 ×2 + 终档跨树 savenorm EXACT】；PITS 425
+四坑【beginFrame drawable 双坐标系 / hover 鼠标位置依赖 / 字体尾部追加
+否决 / atlas v-UV 重缩放】）**
 
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
@@ -213,8 +235,9 @@ pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
 + 16e ✅ v3.36.0 = ⑧材料（门 226，build 章第二支，7 biome 床
 33 标本）+ 16f ✅ v3.37.0 = ⑨河流（门 227，build 章第三支，19841f）
 + 16g ✅ v3.38.0 = ⑩黑夜历险（门 228，survival 章首支，18301f，弓箭
- combat + 火把环 + 活到天亮，PITS 419 八坑）+ 16h① ✅ v3.39.0 = ①下界门（门 229，dimension 章首支，10865f，obsidian 帧预置 + flint_and_steel 点火 + 站入传送 8:1 落生成帧 + 下 frame 观下界，返程不做，PITS 420 四坑）+ 16h② ✅ v3.40.0 = ②末影龙（门 230，15214f，嵌 12 眼【GOOD cell 末位】+ --dragon-damage 200 仪式 + 珍珠 28° 40-m 一掷 + 破 2 出口水晶 + netherite 甲 enderman 对策，PITS 422 八坑）** = V3-16 10 主题全完成】+ V3-19 死亡屏计时 ✅ v3.41.0（门 231，存活行快照 3 点修，两帧臂 AE 0 vs 旧树 43px 复现）+ V3-18 存档扩展名 ✅ v3.42.0（门 232，.json.gz 新写 + 两级探测零迁移 + scene 资产随改，PITS 424 四坑）+ V3-17 主菜单系统【标题/设置/登陆/教学/多人五页 +
-MOTD 并入】】**【大项已相位拆分 V3-10a~d /
+ combat + 火把环 + 活到天亮，PITS 419 八坑）+ 16h① ✅ v3.39.0 = ①下界门（门 229，dimension 章首支，10865f，obsidian 帧预置 + flint_and_steel 点火 + 站入传送 8:1 落生成帧 + 下 frame 观下界，返程不做，PITS 420 四坑）+ 16h② ✅ v3.40.0 = ②末影龙（门 230，15214f，嵌 12 眼【GOOD cell 末位】+ --dragon-damage 200 仪式 + 珍珠 28° 40-m 一掷 + 破 2 出口水晶 + netherite 甲 enderman 对策，PITS 422 八坑）** = V3-16 10 主题全完成】+ V3-19 死亡屏计时 ✅ v3.41.0（门 231，存活行快照 3 点修，两帧臂 AE 0 vs 旧树 43px 复现）+ V3-18 存档扩展名 ✅ v3.42.0（门 232，.json.gz 新写 + 两级探测零迁移 + scene 资产随改，PITS 424 四坑）+ V3-17 主菜单系统【17a ✅ v3.43.0 = 标题页 + 教学入口 + 字体 +21
+（门 233，S1 重锚 base20，PITS 425 四坑）/ 17b-d ⬜；标题/设置/登陆/教学/
+多人五页 + MOTD 并入】】**【大项已相位拆分 V3-10a~d /
 V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
@@ -274,7 +297,8 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **3005/3005**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】+ v3.41.0 V3-19 死亡屏计时族 1【survivalStatsLine 纯函数】+ v3.42.0 V3-18 存档扩展名族 6【slot 路径族/双形枚举去重/复制重命名迁移/删除全槽/scene 两级探测】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+- 测试 **3010/3010**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】+ v3.41.0 V3-19 死亡屏计时族 1【survivalStatsLine 纯函数】+ v3.42.0 V3-18 存档扩展名族 6【slot 路径族/双形枚举去重/复制重命名迁移/删除全槽/scene 两级探测】+ v3.43.0 V3-17a 主菜单族 5【布局门几何/状态机 11+4 面/词表章表 +
+banner re-pin 1】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -439,6 +463,62 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 233（**V3-17a 主菜单系统：标题页 + 教学入口 + 字体 +21 v3.43.0**
+  门 233 全 PASS【11-07 用户实机诉求首相位；V3-17 拆 4 相位 17a-d，本相 =
+  菜单架构 + 标题页 + 3 stub，**表现层零模拟**】：**第 4 循环** =
+  runMenuLoop（window+renderer+buildUiAssets 后、buildScene 前——
+  menuEnabled 五形绕开【demo/net/script/--new/管理旗 = 结构免疫根】）+
+  renderMenu【clear kMenuClear 0.04/0.05/0.08 + UiBatch only——禁
+  render/renderUi 世界未建；调色板/原语 = renderUi 文件局部 lambda 的
+  拷贝，renderUi 原文零触碰 = 游戏面位级根】；**标题页** = logo
+  「TokenMine.cpp」scale 2.0 + 版本行 + 5 项单人/多人/设置/教学/退出
+  【hover 白条 + click/Enter 激活 + ESC 返回/退出；零新 GameKey】；
+  **单人 = 直接 fresh world-start**【--new 形：config 种子、存档不触
+  碰、m_args.newWorld = true + buildScene——m_frameCount 自世界首帧 0
+  起 = 直接 --new 位级孪生】；多人/设置 = stub「the later face」
+  （17b/17d）；**教学 stub = kDemoCategories 5 章标题渲染**（两级
+  demo 列表 + mode 过滤 + 需联机 badge = 17c）；**buildUiAssets =
+  buildScene 头提取幂等**【ui shader + font 纹理 + m_uiScale/m_fontScale
+  ——菜单 init 建一次，单人启动 buildScene 重入跳过 = GL 资源单加载】
+  + run() 分支【菜单退出 = save 写跳过 + 无 loop；单人 = buildScene +
+  runGameplayLoop】；**字体 +21**【人设教学返主距气声缩窗联创继第大
+  维远征历协——菜单五页 + 5 章标题全字核证】= 代码点序插入 + 后缀
+  +1..+21 重格【侦察「尾部追加」否决：glyphUv = lower_bound 有序表——
+  v3.15.0 于 / v3.14b 九重格机制先例】+ atlas 2112→2208【region
+  V3-10d 起 528/528 满——font.hpp 预定「next addition must grow」形】
+  + **top-512 红线 131072 px 逐字节恒等**【生成器自检 + 区哈希
+  74b5d1418347dab6 不变】+ font.png FNV re-pin 9d0c9e32976679ff +
+  test_font 全 re-pin 32/32【锚 10 + 向量 56 + 新增 3 成员钉 主147/
+  学256/远498 + 尺寸 2208】；assetFNV 变 = 混版 net 互拒（预期记档）；
+  **S1 重锚 base20**【f60 无输入 = 标题菜单 21900 B @ 679×744 锚几何
+  ——论证 = 菜单无输入渲染纯函数【17a 全静态无墙钟入像素，fps_cap 只
+  pacing】×2 RAW 逐字节恒等 + **defined mouse face**（S1 两跑各
+  xdotool warp (10,10) 全按钮外 no-hover——hover 是首个鼠标位置入像素
+  的无输入锚面 PITS 425②）+ **槽不创建断言 PASS**【菜单退出 = 世界
+  未建 = --save 槽不触碰——新 S1 面】】；**click 臂**【xdotool 单人
+  中心（UI (227,214) = 窗口 (340,321)，layout 纯函数同源 test 钉）→
+  600-f 无输入退出存档 vs 直接 --new 600-f → **savenorm EXACT** =
+  菜单零模拟贡献最强形】；3010/3010（+5 菜单族：TitleGeometryAtGate
+  Space / StubGeometry / TitleActions 11 面 / StubBack 4 面 / TitleLabe
+  lsAndChapters 词表 + 5 章单源；banner re-pin 1）；canary 4×2 新≡旧
+  二进制（tm_v342 v3.42.0）【demo 绕菜单 = 结构免疫实证：树内 RAW
+  r1==r2 EXACT ×4 + savenorm 跨树 EXACT ×4 = 零世界差；跨树 RAW =
+  **字体 v-UV 重缩放文本边缘白名单**【92-118 px = 0.010-0.013%——
+  atlas 长度变 = 全部字形归一化 v（y/高度）重缩放 → 线性过滤亚 texel
+  偏移 → 文本抗锯齿边缘差【finished 面板/toast/clock/badge】；逐 px
+  审计 100% 文本边缘【邻域 text-like 灰白】+ 零世界像素 + 心行/图标 0
+  差 + diffmap 留证；17b 起两树同 2208 字体 = 恢复 EXACT】】；性能 A/B
+  同档【旧 = tm_v342 v3.42.0 + g139 双树两轮：round1 new upd med
+  0.361/0.513/0.573 vs old 0.389/0.396/0.349（new 轮内升 = 机载漂移
+  loadavg 2.1）+ control 轮 0.579/0.611/0.586 vs 0.427/0.614/0.605
+  （median 交错入带）+ render/swap 同档 + **changesApplied 9/3/1 逐位
+  ×2** + **终档跨树 savenorm EXACT**（control 轮）= 结构零成本——菜单
+  = 第 4 循环 world pass 位级不变】；**门内捕获 PITS 425 四坑**【①
+  beginFrame viewport = DRAWABLE【renderMenu 初版用 UI 空间 453×496 =
+  glViewport 压缩左上角——render() 双尺寸分工】②hover 鼠标位置依赖面
+  = S1 锚须 mouse-warp 纪律 ③字体尾部追加否决 = lower_bound 有序不变
+  量 + 侦察 cell 号混淆 ④atlas 长度变 = v-UV 重缩放跨二进制文本边缘
+  差】；详见 `docs/archive/phase-3.43.0.md`）；
   门计数 232（**V3-18 存档扩展名 v3.42.0** 门 232 全 PASS【11-08 用户
   诉求「.json 扩展名体现不出压缩后的 json，与没压缩的混淆」；**零
   format**【容器 = V3-7 确定性 gzip 不变】/ **零像素**【纯 IO】/ 零
@@ -1829,7 +1909,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（424 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（425 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

@@ -11,6 +11,39 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.43.0（2026-11-12）— V3-17a 主菜单系统：标题页 + 教学入口 + 字体 +21（门 233 全 PASS）
+
+**11-07 用户实机诉求首相位**（「demo 要分组展示；游戏打开后有设置/
+登陆/教学页面」；V3-17 拆 4 相位 17a-d，本相 = 菜单架构 + 标题页 +
+3 stub）：交互 boot 进**主菜单**（第 4 循环 runMenuLoop——window+
+renderer+UI 资产后、buildScene 前；renderMenu = clear + UiBatch only
+禁 render/renderUi【世界未建】；调色板/原语 = renderUi 文件局部
+lambda 的拷贝，renderUi 原文零触碰）；标题页 = logo「TokenMine.cpp」
++ 版本行 + 单人/多人/设置/教学/退出 5 项（hover 白条 + click/Enter
+激活 + ESC 返回/退出，零新 GameKey）；**单人 = 直接 fresh world-
+start（--new 形：config 种子、存档不触碰——m_frameCount 自世界首帧
+0 起 = 位级孪生）**；多人/设置 = stub「the later face」（17b/17d）；
+**教学 stub = kDemoCategories 5 章标题**（两级 demo 列表 + mode 过滤
++ 需联机 badge = 17c）；**menuEnabled 门** = demo/net/script/--new
+绕开（结构免疫根：canary 位级形 + 管理旗 main 即退）；其余世界塑造
+旗与菜单组合（种子覆写先入 m_config）；**buildUiAssets = buildScene
+头提取幂等**（ui shader + font 纹理 + 双 scale——菜单 init 建一次，
+单人启动 buildScene 重入跳过）；菜单退出（无世界）= save 写跳过
+（--save 槽不创建）；**字体 +21**（人设教学返主距气声缩窗联创继第大
+维远征历协）= 代码点序插入 + 后缀 +1..+21 重格（v3.15.0 于先例；
+侦察「尾部追加」否决——glyphUv lower_bound 有序不变量）+ atlas
+2112→2208（region V3-10d 起 528/528 满）+ **top-512 红线 131072 px
+逐字节恒等**；**S1 重锚 base20**（f60 无输入 = 标题 21900 B——菜单
+无输入渲染纯函数【17a 全静态无墙钟入像素】×2 逐字节 + defined mouse
+face (10,10) no-hover warp 纪律 + 槽不创建断言）；门内捕获 PITS 425
+四坑【beginFrame drawable 双坐标系 / hover 鼠标位置依赖面 / 字体尾部
+追加否决 / atlas 长度变 = v-UV 重缩放文本边缘差】；3010/3010（+5
+菜单族）+ canary 4×2 新≡旧（tm_v342）树内 RAW + savenorm EXACT +
+跨树 RAW = 文本边缘白名单【92-118 px = 0.01%，逐 px 审计 100% 文本
+边缘 + 零世界像素，17b 起恢复 EXACT】+ click 臂 单人≡--new
+savenorm EXACT + 性能 A/B 同档【changesApplied 9/3/1 逐位 ×2 + 终档
+跨树 savenorm EXACT】；详见 `docs/archive/phase-3.43.0.md`
+
 ## v3.42.0（2026-11-12）— V3-18 存档扩展名（门 232 全 PASS）
 
 **11-08 用户诉求**（「.json 扩展名体现不出压缩后的 json，与没压缩的
