@@ -3,9 +3,35 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–426，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–427，新条目继续前插于尾部块首。
 
-- **主菜单 17b 设置页两坑（PITS 426，门 234 v3.44.0）**——① **表单
+- **主菜单 17c 登陆/教学 + 门 235 前置四坑（PITS 427）**——①
+  **背景构建未确认完成就改源 = 混合 .o 态 + 陈旧日志误判**（门 235
+  前置实证）：版本 bump 全量重编还在后台跑时误信了**上一次运行写同
+  路径**的 tests 日志（3017/3017 假完成信号）→ 中途 g139 插桩改
+  源 → 后台 ninja（源变前启动）链接混入新 .o 的旧库 = `collect2: ld
+  返回 1` + 前台 `cmake --build` 同 build 目录竞态 + 15-min timeout
+  杀掉 zsh 后**孤儿 ninja 续跑**（pgrep -x ninja 探测存活）。纪律
+  = 背景构建完成以**新二进制时间戳 + 本次运行专属日志文件**为证
+  （不复用旧日志路径），插桩/改源前 `pgrep -x ninja` 必须为空；
+  timeout 杀 zsh 不杀 ninja = 孤儿先例（等完 > 抢跑）。② **tier-2
+  demo 行长文件名溢出**：初版「guide_materials.dmo · 07:03」@1.5
+  穿出行 hover 条右缘（截图冒烟捕获）——修 = .dmo 剥除 + tier-2 行
+  scale 1.0（tier-1 章行 1.5 不变）；最长 21 字符 @1.0 = 356 px 自
+  x70 止 426 < 453 页宽（行 hit 宽 333 略窄于文本 = hover 条短于
+  字，可接受记录）。③ **mm:ss 须 --list-demos 逐字公式**（total/
+  3600, (total%3600)/60 非 ceil）：初稿 ceil(11387/60)=03:03 与
+  --list-demos 03:09 不符——菜单显示 = main.cpp:601-605 单源镜像，
+  纯函数 test 钉 index 真实值（03:09/04:13/03:01）。④ **文本输入
+  追加默认名 + 清默认计数**（结构形：无光标，SDL 文本面
+  append-only + backspace 尾部删）：默认 "player" 上直接 type =
+  "playergate"——门臂先 N×BackSpace 清默认再 type；N 必须 = 默
+  认名长度 6（初臂发 4 = 剩 "pl" + "gate" = "plgate" 假异常——
+  两次实跑 0ms/150ms 间隔 4 键全消费 = frameBackspace 无同帧吞
+  并，纯计数错）；日志行 `singleplayer's name 'gate'` = frameText
+  + frameBackspace 双通路权威（名字会话态不入档，存档断言证不
+  到此面）。
+- - **主菜单 17b 设置页两坑（PITS 426，门 234 v3.44.0）**——① **表单
   value 列中心 = 标签右缘与按钮左缘的中点**：初版 (w-150)/2 = 151
   （453 UI 空间）→ 4 字符值文本（@1.5 ≈ 100 px）左缘 101 与标签右缘
   140 重叠（截图冒烟「视图距离80」叠字）——修 = w/2 + test 钉（表单

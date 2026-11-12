@@ -232,7 +232,29 @@ font.png FNV re-pin 9d0c9e32976679ff；**S1 重锚 base20**【f60 无输入 =
 2.0 标题 ×2 RAW EXACT】+ canary 4×2 新≡旧（tm_v343）树内 RAW +
 savenorm + 跨树 RAW EXACT ×4 + 性能 A/B 同档【median 交错 +
 changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 426 两
-坑【value 列中心叠字 / 标题版本串】）**
+坑【value 列中心叠字 / 标题版本串】）**；**v3.45.0 = V3-17c 主菜单：登陆页 + 教学两级
+（门 235，11-12：BACKLOG 规格③④——标题→单人 = Login 页【300×40 输入框 +
+（可选）hint + 开始/返回；**文本输入生命周期 m_textInputOn 页入开/页出关**
+【SDL_StartTextInput 仅登陆期开 = 创造搜索/聊天先例】+ frameText/
+frameBackspace + latinOnly + 12 cap + m_menuName 默认 player **会话态零
+format**】；**教学两级**【tier1 5 章 +「· N 个」计数 = init 缓存 m_demo-
+Index 零额外 IO / tier2 章内 demo name·mm:ss【.dmo 剥除 + scale 1.0 防
+溢出——门内截图冒烟捕获】+ coop 需联机 badge + **coop 拒收**【mode 检
+查 = net×demo 互斥同款】】；**菜单驱动 demo = startDemoFromMenu**【main
+.cpp --demo parse 复刻：loadDemoFile 严格永不 force + spec→args +
+**applyDemoArgs = init --demo 块原文提取共用单源**】→ menuExit 2 →
+buildScene → runDemoReplay = CLI 位级孪生；mm:ss = --list-demos 逐字
+公式【非 ceil——初稿不符门内捕获】；hover 从 uiMouse 逐帧派生【m_menu-
+Hovered 移除】；**零字体**【词表全在 457 表——8 缺字措辞规避】；3017/
+3017（+5 菜单族 + banner re-pin 1）+ S1 重锚 base20 = v3.45.0 标题
+【×2 逐字节 + 旧锚 diff 101 px 单行版本行有界 + 槽不创建】+ 登陆臂
+【6×BackSpace 清默认 + type gate：日志 name 'gate' = 双文本通路权威 +
+存档 ≡ --new savenorm EXACT】+ 教学臂【菜单 ×2 savenorm+RAW EXACT +
+**菜单 ≡ CLI --demo savenorm EXACT = 位级孪生最强形**】+ coop 空章截
+图 + canary 4×2 新≡旧（tm_v344）跨树 RAW EXACT ×4【零字体门面延续】+
+性能 A/B 同档【median 交错 + changesApplied 9/3/1 vs 9/2/1 + 终档跨树
+savenorm EXACT】；PITS 427 四坑【背景构建竞态旧日志假信号 / tier-2 长
+文件名溢出 / mm:ss 逐字公式 / 清默认名计数 6 非 4】）**
 
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
@@ -256,8 +278,9 @@ pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
 + 16g ✅ v3.38.0 = ⑩黑夜历险（门 228，survival 章首支，18301f，弓箭
  combat + 火把环 + 活到天亮，PITS 419 八坑）+ 16h① ✅ v3.39.0 = ①下界门（门 229，dimension 章首支，10865f，obsidian 帧预置 + flint_and_steel 点火 + 站入传送 8:1 落生成帧 + 下 frame 观下界，返程不做，PITS 420 四坑）+ 16h② ✅ v3.40.0 = ②末影龙（门 230，15214f，嵌 12 眼【GOOD cell 末位】+ --dragon-damage 200 仪式 + 珍珠 28° 40-m 一掷 + 破 2 出口水晶 + netherite 甲 enderman 对策，PITS 422 八坑）** = V3-16 10 主题全完成】+ V3-19 死亡屏计时 ✅ v3.41.0（门 231，存活行快照 3 点修，两帧臂 AE 0 vs 旧树 43px 复现）+ V3-18 存档扩展名 ✅ v3.42.0（门 232，.json.gz 新写 + 两级探测零迁移 + scene 资产随改，PITS 424 四坑）+ V3-17 主菜单系统【17a ✅ v3.43.0 标题页 + 教学入口 + 字体 +21
 （门 233，S1 重锚 base20，PITS 425）+ 17b ✅ v3.44.0 设置页（门 234，8 行
-表单 + Config::save 写回 + 字体 +3 不增 atlas，PITS 426）/ 17c-d ⬜；
-标题/设置/登陆/教学/多人五页 + MOTD 并入】】**【大项已相位拆分 V3-10a~d /
+表单 + Config::save 写回 + 字体 +3 不增 atlas，PITS 426）+ 17c ✅ v3.45.0
+登陆 + 教学两级（门 235，文本输入生命周期 + 菜单 ≡ CLI demo 位级孪生，
+PITS 427）/ 17d ⬜；标题/设置/登陆/教学/多人五页 + MOTD 并入】】**【大项已相位拆分 V3-10a~d /
 V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
 
 - **v2.0.0 = 1.x 收官里程碑**（无新玩法）：1.x 任务表 40/40 + UX-8g/UX-9
@@ -317,9 +340,10 @@ V3-11a~b / V3-12a~c / V3-14a~d / V3-16a~h，BACKLOG 待执行项明细】**）
   `docs/archive/v2x/HISTORY.md`（+ 同目录 BACKLOG/CHANGELOG/phase
   存档 20 份，全两批）；1.x 历史全在 `docs/archive/v1x/HISTORY.md`
   （只读，别把历史细节当现状）。
-- 测试 **3012/3012**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】+ v3.41.0 V3-19 死亡屏计时族 1【survivalStatsLine 纯函数】+ v3.42.0 V3-18 存档扩展名族 6【slot 路径族/双形枚举去重/复制重命名迁移/删除全槽/scene 两级探测】+ v3.43.0 V3-17a 主菜单族 5【布局门几何/状态机 11+4 面/词表章表 +
+- 测试 **3017/3017**（2777 基线 + V3-8a 手柄 open 修复 1【用户 11-06 并行提交 d5a5ea6】+ v3.13.0 demo sim 族 6 + v3.14.0 V3-8b 手柄映射族 3 + v3.15.0 死亡统计屏族 5 + v3.16.0 V3-15 小批族 3 + v3.17.0 V3-11a 创造基础族 6 + v3.18.0 V3-11b 创造物品栏族 10 + v3.19.0 V3-14a 爆炸机制族 10 + v3.20.0 V3-14b ghast 族 12 + v3.21.0 V3-14c piglin 交易族 14 + v3.22.0 V3-14d strider 骑乘族 9 + v3.23.0 V3-10a 末地族 29 + v3.24.0 V3-10b 末地内容族 14 + v3.25.0 V3-10c 末影人族 31 + v3.26.0 V3-10d1 末影龙族 29 + v3.27.0 V3-10d2 召唤复杀族 5 + v3.28.0 banner re-pin 0 + v3.29.0 V3-12b 多人 net 族 10 + v3.30.0 V3-12c1 大厅聊天 re-pin 0【F3 22 行既有面】+ v3.31.0 V3-12c2 REJOIN/format 33 族 13【SaveFormat33 9 + NetSnapshot 4】+ v3.32.0 V3-16a 指导 demo 族 11【词表/展开/编解码/script 拒收/scene/索引拒收/交叉检查】+ banner re-pin 1 + v3.34.0 banner re-pin 1【V3-16c 内容相位零新增】+ v3.35.0 banner re-pin 1【V3-16d 内容相位零新增】+ v3.36.0 banner re-pin 1【V3-16e 内容相位零新增】+ v3.37.0 banner re-pin 1【V3-16f 内容相位零新增】+ v3.38.0 banner re-pin 1【V3-16g 内容相位零新增】+ v3.39.0 banner re-pin 1【V3-16h① 内容相位零新增】+ v3.40.0 banner re-pin 1【V3-16h② 内容相位零新增】+ v3.41.0 V3-19 死亡屏计时族 1【survivalStatsLine 纯函数】+ v3.42.0 V3-18 存档扩展名族 6【slot 路径族/双形枚举去重/复制重命名迁移/删除全槽/scene 两级探测】+ v3.43.0 V3-17a 主菜单族 5【布局门几何/状态机 11+4 面/词表章表 +
 banner re-pin 1】+ v3.44.0 V3-17b 设置页族 2【布局门几何 8 面 hit/
-状态机 11 面 + banner re-pin 1】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+状态机 11 面 + banner re-pin 1】+ v3.45.0 V3-17c 登陆/教学族 5【登录
+布局+4 面 / 教学布局+7 面+mm:ss 逐字 / Title re-pin + banner re-pin 1】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -484,6 +508,63 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 235（**V3-17c 主菜单：登陆页 + 教学两级 v3.45.0** 门 235 全
+PASS【V3-17 相位 C/4——BACKLOG 规格③④；**零字体**：17c 词表全在
+457 表【登/陆/请/符/暂/支/演/示 8 缺字靠措辞规避——「名字（可
+选）」/「需联机」】= 跨树 RAW 恒 EXACT 门面延续】：**Login 页**【
+标题→单人经此页——BACKLOG「登陆页（本地名字——singleplayer 可
+选）」；名字标题 + 300×40 面板输入框 +「（可选）」hint + 开始/
+返回；**文本输入生命周期** = m_textInputOn 页入开/页出关【SDL_
+StartTextInput 仅登陆期开 = 创造搜索/聊天先例，结构性免疫根】+
+Input frameText/frameBackspace【SDL 文本编辑面——17c 第 3 消费
+方】+ **latinOnly 净化 + 12 cap**【net HELLO name 载体域 = 17d 消
+费点】+ m_menuName 默认 "player"【可选面——直接开始 = 默认名；
+空名回落】+ **会话态零 format**【名字不入存档——solo 显示面】】；
+**教学两级**【tier 1 = kDemoCategories 5 章 +「· N 个」计数【init
+缓存 m_demoIndex = loadDemoIndexChecked 结果成员化——既有
+fail-fast 不动零额外 IO】/ tier 2 = 章内 demo「name · mm:ss」
+【**.dmo 剥除 + scale 1.0**——长文件名防溢出门内截图冒烟捕获
+PITS 427②；tier-1 章行 1.5 不变】+ coop 行「需联机」badge】+
+**coop 拒收**【tier2 LaunchDemo 前 mode 检查：需联机消息 + 日志
+点名 = net×demo 互斥 main.cpp:382 同款——solo boot 跑不了 coop
+demo；index coop 章空 = 拒收面单测覆盖 + 门臂空章截图】；**菜单
+驱动 demo = startDemoFromMenu**【main.cpp:628-669 --demo headless
+parse 复刻：loadDemoFile **严格永不 force**【菜单 = 发行内容面，
+init 交叉检已验证】+ world spec→args【fresh seed/newWorld / save
+slot / scene】+ m_args.demo/demoFile + **applyDemoArgs = init
+--demo 块原文提取共用单源**】→ run() menuExit 2 → buildScene →
+runDemoReplay = **CLI --demo 位级孪生**】；mm:ss = main.cpp:
+601-605 **逐字**【total/3600, (total%3600)/60 非 ceil——初稿
+ceil 03:03 vs --list-demos 03:09 不符门内捕获 PITS 427③】；render
+三新面【login/tutorial tier1/tier2】hover 从 uiMouse() 逐帧派生
+【**m_menuHovered 成员移除** = 17c 重构：循环/渲染零共享帧态】；
+3017/3017（+5：MenuLoginTest Layout/Step 4 面 + MenuTutorialTest
+Layout/Step 7 面/LengthText index 真实值 3 钉 + TitleActions
+re-pin item 0→Login；banner re-pin 1）；**S1 重锚 base20 =
+v3.45.0 标题**【f60 无输入 ×2 RAW 逐字节 + 旧锚 diff 101 px 单行
+rows 164-169 = 版本行有界断言 + defined mouse (10,10) + 槽不创建
+→ 21910 B】+ **登陆臂**【单人 → 6×BackSpace 清默认【PITS 427④：
+初臂 4 = 剩 "pl" 假异常——"player" 6 字符计数】→ type "gate" →
+开始 → 600-f：日志 `singleplayer's name 'gate'` = frameText +
+frameBackspace **双通路权威** + **存档 ≡ 直接 --new savenorm
+EXACT**【名字会话态不入档 = 位级孪生延续】】+ **教学臂**【教学 →
+day1 → guide_mining：`Loaded demo scene pilot_mine` + `Demo
+replay` 日志面 + 菜单 ×2 savenorm + RAW EXACT + **菜单 ≡ CLI
+--demo guide_mining savenorm EXACT = applyDemoArgs 共享单源零
+分叉最强形**】+ **coop 空章臂**【多人协作 0 demo = 标题 + 返回
+零行零崩溃截图】+ canary 4×2 新≡旧（tm_v344 v3.44.0）【树内 RAW
++ savenorm + **跨树 RAW EXACT ×4**【零字体 = v-UV 不变，PITS 425④
+不复发】】+ 性能 A/B 同档【OW 900f：new upd med 0.722/0.661/0.697
+vs old 0.740/0.778/0.754 median 交错入带【old 轮 render max
+14957ms 一次性 OS 停顿】+ render/swap 同档 + changesApplied
+9/3/1 vs 9/2/1【win2 = streaming 边界 real-dt 域门 207/210/217
+先例】+ **终档跨树 savenorm EXACT** = 零世界面结构零成本】；
+**门内捕获 PITS 427 四坑**【①背景构建竞态 + 旧路径日志假完成
+信号 = g139 中途改源混 .o 链接失败 + timeout 孤儿 ninja 先例
+【改源前 pgrep -x ninja 必须为空】②tier-2 长文件名 @1.5 出行
+hover 条【.dmo 剥除 + 1.0 修】③mm:ss ceil vs 逐字公式 ④清默认
+名计数 6 非 4 = "plgate" 假异常】；详见
+`docs/archive/phase-3.45.0.md`）；
   门计数 234（**V3-17b 主菜单：设置页 v3.44.0** 门 234 全 PASS【V3-17
   相位 B/4——BACKLOG 规格 = config 表单化编辑 view_distance/
   day_length/天气/声音/ui.scale/窗口 + 严格读 + 写回 config.json】：
@@ -1971,7 +2052,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（426 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（427 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

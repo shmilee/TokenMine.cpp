@@ -88,9 +88,10 @@ TEST(MenuStepTest, TitleActions) {
     // ESC quits at any hover.
     EXPECT_EQ(menuStepTitle(false, false, true, 0).action, MenuAction::Quit);
     EXPECT_EQ(menuStepTitle(true, false, true, 3).action, MenuAction::Quit);
-    // The click / the Enter activate the hovered item.
-    EXPECT_EQ(menuStepTitle(true, false, false, 0).action,
-              MenuAction::StartSingleplayer);
+    // The click / the Enter activate the hovered item (V3-17c: item 0
+    // = the LOGIN page — the name's entry before the start).
+    EXPECT_EQ(menuStepTitle(true, false, false, 0).page, MenuPage::Login);
+    EXPECT_EQ(menuStepTitle(true, false, false, 0).action, MenuAction::None);
     EXPECT_EQ(menuStepTitle(false, true, false, 1).page, MenuPage::Multiplayer);
     EXPECT_EQ(menuStepTitle(true, false, false, 2).page, MenuPage::Settings);
     EXPECT_EQ(menuStepTitle(false, true, false, 3).page, MenuPage::Tutorial);
@@ -215,4 +216,106 @@ TEST(MenuStepTest, TitleLabelsAndChaptersAreFontSafe) {
     EXPECT_STREQ(kDemoCategories[2].title, "维度远征");
     EXPECT_STREQ(kDemoCategories[3].title, "生存历险");
     EXPECT_STREQ(kDemoCategories[4].title, "多人协作");
+}
+
+// ---------------------------------------------------------------------------
+// V3-17c: the login page + the tutorial's two-level (the pure face).
+// ---------------------------------------------------------------------------
+
+TEST(MenuLoginTest, LayoutGeometryAtGateSpace) {
+    const MenuLoginLayout l = menuLoginLayout(kW, kH);
+    // The title 名字 (66 px @ 2.0).
+    EXPECT_EQ(l.titleX, 194);
+    EXPECT_EQ(l.titleY, 50);
+    // The field (300x40, centered, at 0.32h).
+    EXPECT_EQ(l.field.x, 77);
+    EXPECT_EQ(l.field.y, 159);
+    EXPECT_EQ(l.field.w, 300);
+    EXPECT_EQ(l.field.h, 40);
+    // The hint （可选） (84 px @ 1.0, under the field).
+    EXPECT_EQ(l.hintX, 185);
+    EXPECT_EQ(l.hintY, 159 + 40 + 8);
+    // The 开始 / 返回 buttons (70 px, at 0.72h / 0.85h).
+    EXPECT_EQ(l.start.x, 192);
+    EXPECT_EQ(l.start.y, 357);
+    EXPECT_EQ(l.start.w, 70);
+    EXPECT_EQ(l.back.x, 192);
+    EXPECT_EQ(l.back.y, 422);
+    // The hit test (the gate's xdotool clicks the same centers).
+    EXPECT_TRUE(l.start.contains(l.start.x + 35, l.start.y + 14));
+    EXPECT_TRUE(l.back.contains(l.back.x + 35, l.back.y + 14));
+    EXPECT_FALSE(l.start.contains(10, 10));
+}
+
+TEST(MenuLoginTest, StepActions) {
+    // The 开始 button / the Enter = the singleplayer's start.
+    EXPECT_EQ(menuLoginStep(true, false, false, true, false).action,
+              MenuAction::StartSingleplayer);
+    EXPECT_EQ(menuLoginStep(false, true, false, false, false).action,
+              MenuAction::StartSingleplayer);
+    // ESC / the 返回 button = the title's back.
+    EXPECT_EQ(menuLoginStep(false, false, true, false, false).action,
+              MenuAction::Back);
+    EXPECT_EQ(menuLoginStep(true, false, false, false, true).action,
+              MenuAction::Back);
+    // A click in the field (the input's face, no button) = nothing
+    // (the text rides frameText, not a step).
+    EXPECT_EQ(menuLoginStep(true, false, false, false, false).action,
+              MenuAction::None);
+}
+
+TEST(MenuTutorialTest, LayoutGeometryAtGateSpace) {
+    const MenuTutorialLayout l = menuTutorialLayout(kW, kH);
+    EXPECT_EQ(l.titleX, 194);
+    EXPECT_EQ(l.titleY, 50);
+    // The 5 rows (0.22h start, the 32-px pitch).
+    EXPECT_EQ(l.rows[0].x, 60);
+    EXPECT_EQ(l.rows[0].y, 109);
+    EXPECT_EQ(l.rows[0].w, 333);
+    EXPECT_EQ(l.rows[4].y, 109 + 4 * 32); // 237
+    // The back button (70 px, at 0.85h).
+    EXPECT_EQ(l.back.x, 192);
+    EXPECT_EQ(l.back.y, 422);
+    // The 需联机's message (74 px @ 1.5, at 0.78h).
+    EXPECT_EQ(l.msgX, 190);
+    EXPECT_EQ(l.msgY, 387);
+    EXPECT_TRUE(l.rows[2].contains(60 + 166, l.rows[2].y + 14));
+}
+
+TEST(MenuTutorialTest, StepActions) {
+    // Tier 1: a row click = OpenChapter.
+    EXPECT_EQ(menuTutorialStep(true, false, false, 2, false).kind,
+              MenuTutorialStep::Kind::OpenChapter);
+    EXPECT_EQ(menuTutorialStep(true, false, false, 2, false).index, 2);
+    // Tier 2: a row click = LaunchDemo (the mode's filter is the
+    // Game's face — the pure step doesn't know solo/coop).
+    EXPECT_EQ(menuTutorialStep(true, false, false, 1, true).kind,
+              MenuTutorialStep::Kind::LaunchDemo);
+    EXPECT_EQ(menuTutorialStep(true, false, false, 1, true).index, 1);
+    // ESC / the back button = Back (the target is the Game's face:
+    // tier 2 -> the chapters, tier 1 -> the title).
+    EXPECT_EQ(menuTutorialStep(false, true, false, -1, false).kind,
+              MenuTutorialStep::Kind::Back);
+    EXPECT_EQ(menuTutorialStep(true, false, true, -1, true).kind,
+              MenuTutorialStep::Kind::Back);
+    // A click in the air = nothing.
+    EXPECT_EQ(menuTutorialStep(true, false, false, -1, false).kind,
+              MenuTutorialStep::Kind::None);
+    // An out-of-range row is rejected (the 5-row belt).
+    EXPECT_EQ(menuTutorialStep(true, false, false, 5, false).kind,
+              MenuTutorialStep::Kind::None);
+    EXPECT_EQ(menuTutorialStep(true, false, false, -2, false).kind,
+              MenuTutorialStep::Kind::None);
+}
+
+TEST(MenuTutorialTest, DemoLengthText) {
+    // 1/60 fps -> mm:ss (the --list-demos' verbatim read: the index's
+    // lengths' pinned values).
+    EXPECT_EQ(menuDemoLengthText(180), "00:03");
+    EXPECT_EQ(menuDemoLengthText(11387), "03:09");  // guide_mining
+    EXPECT_EQ(menuDemoLengthText(15214), "04:13");  // guide_dragon
+    EXPECT_EQ(menuDemoLengthText(10865), "03:01");  // guide_nether
+    EXPECT_EQ(menuDemoLengthText(0), "00:00");
+    EXPECT_EQ(menuDemoLengthText(59), "00:00");
+    EXPECT_EQ(menuDemoLengthText(60), "00:01");
 }

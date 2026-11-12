@@ -313,8 +313,7 @@ public:
     // V3-17: the main menu's loop (the 4th loop — the presentation
     // layer before the world's build; the demo/net/script's flags
     // bypass it = the structural immunity's root). Returns 0 = quit,
-    // 1 = the singleplayer's start (the caller builds the fresh
-    // world, the --new's shape).
+    // 1 = the singleplayer's start, 2 = the tutorial's demo launch.
     int runMenuLoop();
     // V3-17: the menu's render (the clear + the UiBatch's only —
     // render/renderUi are forbidden here: they read the world's
@@ -336,6 +335,19 @@ public:
     std::string settingsRowValueText(int row) const;
     void settingsRowAdjust(int row, int delta);
     void saveSettingsFromMenu();
+    // V3-17c: the demo's args' apply (init's --demo block extracted —
+    // the menu's tutorial launch's re-use: m_demoMode/Replay + the
+    // m_demoPlayer's emplace + the save/scene's existence rejects).
+    Result<void> applyDemoArgs();
+    // V3-17c: the tutorial page's demo launch (the main.cpp --demo's
+    // headless parse replicated in-menu: the strict load — never the
+    // force, the world spec's args application, then applyDemoArgs).
+    Result<void> startDemoFromMenu(const DemoIndexEntry& entry);
+    // V3-17c: the chapter's demo count (the tier-1's rows' face).
+    int tutorialChapterCount(int chapter) const;
+    // V3-17c: the tier-2's row label (the file + the length's mm:ss +
+    // the coop's 需联机 badge).
+    std::string tutorialRowLabel(int chapter, int i) const;
     // The per-frame camera sync (the pre-V3-9 update()'s camera block,
     // extracted VERBATIM — the player's state + the session's camera
     // mode / zoom; update() calls it at the same point, the bit-
@@ -1721,7 +1733,18 @@ std::optional<MobHit> targetMob() const;
     bool m_menuActive = false;
     int m_menuFrame = 0;
     MenuPage m_menuPage = MenuPage::Title;
-    int m_menuHovered = -1; // the hovered item (render face, frame state)
+    // V3-17c: the login's name (the net HELLO's carrier — the 17d's
+    // consumption; the solo's display-only face) + the tutorial's
+    // two-level's state (-1 = the chapters, >= 0 = the chapter's demos)
+    // + the coop row's reject message (the 需联机's face, cleared on
+    // the row's change).
+    std::string m_menuName = "player";
+    int m_menuTutorialChapter = -1;
+    bool m_menuCoopMessage = false;
+    bool m_textInputOn = false; // the SDL text input's state (the login's face)
+    // V3-17c: the init's demo-index cross-check's result (cached — the
+    // tutorial page's data source, zero extra IO).
+    std::optional<DemoIndex> m_demoIndex;
     AssetManager m_assets;
     Window m_window;
     Input m_input;

@@ -158,6 +158,84 @@ void Game::saveSettingsFromMenu() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// V3-17c: the tutorial's two-level's data face (the init-cached
+// DemoIndex — zero extra IO).
+// ---------------------------------------------------------------------------
+
+int Game::tutorialChapterCount(int chapter) const {
+    if (!m_demoIndex || chapter < 0 ||
+        chapter >= static_cast<int>(std::size(kDemoCategories))) {
+        return 0;
+    }
+    int count = 0;
+    for (const auto& e : m_demoIndex->demos) {
+        if (e.category == kDemoCategories[chapter].id) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::string Game::tutorialRowLabel(int chapter, int i) const {
+    // The tier-2's row: the demo's NAME (the .dmo's extension stripped —
+    // the filenames run long at the row's width) + the length's mm:ss +
+    // the coop's 需联机 badge (the solo's row is bare).
+    if (!m_demoIndex || chapter < 0) {
+        return {};
+    }
+    int n = 0;
+    for (const auto& e : m_demoIndex->demos) {
+        if (e.category != kDemoCategories[chapter].id) {
+            continue;
+        }
+        if (n == i) {
+            std::string name = e.file;
+            const std::string ext = ".dmo";
+            if (name.size() > ext.size() &&
+                name.compare(name.size() - ext.size(), ext.size(),
+                             ext) == 0) {
+                name.resize(name.size() - ext.size());
+            }
+            std::string label = name + " · " +
+                                menuDemoLengthText(e.lengthFrames);
+            if (e.mode == "coop") {
+                label += "  需联机";
+            }
+            return label;
+        }
+        ++n;
+    }
+    return {};
+}
+
+Result<void> Game::startDemoFromMenu(const DemoIndexEntry& entry) {
+    // The menu's demo launch (the main.cpp's --demo headless parse
+    // replicated: the STRICT load — never the force: the menu is the
+    // shipped content's face, the init's cross-check already validated
+    // it — the world spec's args application, then the applyDemoArgs'
+    // shared state).
+    const std::filesystem::path dpath =
+        std::filesystem::path("assets/demos") / entry.file;
+    auto demo = loadDemoFile(dpath, false);
+    if (!demo.ok()) {
+        return MC_FAIL("menu's demo load failed: " + demo.error().message);
+    }
+    const DemoWorldSpec& spec = demo->world;
+    if (spec.type == DemoWorldSpec::Type::Fresh) {
+        m_args.seed = spec.seed;
+        m_args.newWorld = true;
+    } else if (spec.type == DemoWorldSpec::Type::Save) {
+        m_args.saveSlot = spec.slot;
+    }
+    // The SCENE spec: the args' face untouched (the init's cross-check
+    // already validated the asset; the applyDemoArgs sets the
+    // m_demoSceneName).
+    m_args.demo = dpath;
+    m_args.demoFile = std::move(*demo);
+    return applyDemoArgs();
+}
+
 int Game::runMenuLoop() {
     // The menu's loop (see the header's discipline). One frame = pump
     // the input (this machine's m_input is the SDL queue's sole
@@ -181,30 +259,54 @@ int Game::runMenuLoop() {
 
         const UiSize space = uiSize();
         if (m_menuPage == MenuPage::Title) {
-            const std::string version = "v" + std::string(TM_VERSION);
             const MenuTitleLayout layout = menuTitleLayout(
                 space.width, space.height,
-                static_cast<int>(version.size()) * 17 - 1);
+                static_cast<int>(("v" + std::string(TM_VERSION)).size()) * 17 - 1);
             int hovered = -1;
             for (int i = 0; i < kMenuTitleItemCount; ++i) {
                 if (layout.items[i].contains(mx, my)) {
                     hovered = i;
                 }
             }
-            m_menuHovered = hovered;
             const MenuStep step = menuStepTitle(click, enter, esc, hovered);
             if (step.action == MenuAction::Quit) {
                 MC_LOG_INFO("menu: quit (the title's 退出 / ESC)");
                 return 0;
             }
-            if (step.action == MenuAction::StartSingleplayer) {
-                MC_LOG_INFO("menu: singleplayer — the fresh world's start "
-                            "(the --new's shape)");
-                return 1;
-            }
             if (step.page != MenuPage::Title) {
                 m_menuPage = step.page;
-                m_menuHovered = -1;
+            }
+        } else if (m_menuPage == MenuPage::Login) {
+            // V3-17c: the name's entry (the SDL text input's face — the
+            // creative search's / the chat's precedent: opened only
+            // while this page is active; the frameText/frameBackspace's
+            // ride, the latinOnly's sanitize (the net HELLO's charset —
+            // the 17d's carrier), the 12-cap).
+            const MenuLoginLayout layout = menuLoginLayout(space.width,
+                                                           space.height);
+            for (const char c : m_input.frameText()) {
+                if (m_menuName.size() < 12) {
+                    m_menuName.push_back(c);
+                }
+            }
+            if (m_input.frameBackspace() && !m_menuName.empty()) {
+                m_menuName.pop_back();
+            }
+            m_menuName = latinOnly(m_menuName);
+            const bool startHovered = layout.start.contains(mx, my);
+            const bool backHovered = layout.back.contains(mx, my);
+            const MenuStep step = menuLoginStep(click, enter, esc,
+                                                startHovered, backHovered);
+            if (step.action == MenuAction::Back) {
+                m_menuPage = MenuPage::Title;
+            } else if (step.action == MenuAction::StartSingleplayer) {
+                if (m_menuName.empty()) {
+                    m_menuName = "player";
+                }
+                MC_LOG_INFO("menu: singleplayer's name '" + m_menuName +
+                            "' (the net HELLO's carrier — the 17d's "
+                            "consumption; the solo's display-only)");
+                return 1;
             }
         } else if (m_menuPage == MenuPage::Settings) {
             // V3-17b: the settings form (the pure layout + step — the
@@ -212,13 +314,11 @@ int Game::runMenuLoop() {
             const MenuSettingsLayout layout =
                 menuSettingsLayout(space.width, space.height);
             const int controlId = menuSettingsControl(layout, mx, my);
-            m_menuHovered = controlId;
             const MenuSettingsStep step =
                 menuSettingsStep(click, enter, esc, controlId);
             switch (step.kind) {
                 case MenuSettingsStep::Kind::Back:
                     m_menuPage = MenuPage::Title;
-                    m_menuHovered = -1;
                     break;
                 case MenuSettingsStep::Kind::Dec:
                     settingsRowAdjust(step.row, -1);
@@ -235,17 +335,91 @@ int Game::runMenuLoop() {
                 case MenuSettingsStep::Kind::None:
                     break;
             }
+        } else if (m_menuPage == MenuPage::Tutorial) {
+            // V3-17c: the two-level (tier 1 = the 5 chapters' list,
+            // tier 2 = the chapter's demos — the init-cached DemoIndex's
+            // data, the kDemoCategories' single source). The coop's row
+            // = the 需联机's message (the net × demo's mutual exclusion —
+            // a solo boot can't run it, the launch is rejected).
+            const MenuTutorialLayout layout =
+                menuTutorialLayout(space.width, space.height);
+            const bool tier2 = m_menuTutorialChapter >= 0;
+            int rowCount = 0;
+            std::vector<const DemoIndexEntry*> rowEntries;
+            if (tier2) {
+                for (const auto& e : m_demoIndex->demos) {
+                    if (e.category ==
+                        kDemoCategories[m_menuTutorialChapter].id) {
+                        rowEntries.push_back(&e);
+                    }
+                }
+                rowCount = static_cast<int>(rowEntries.size());
+            } else {
+                rowCount = 5; // the chapters' fixed face
+            }
+            int hoveredRow = -1;
+            for (int i = 0; i < rowCount; ++i) {
+                if (layout.rows[i].contains(mx, my)) {
+                    hoveredRow = i;
+                }
+            }
+            const bool backHovered = layout.back.contains(mx, my);
+            const MenuTutorialStep step = menuTutorialStep(
+                click, esc, backHovered, hoveredRow, tier2);
+            switch (step.kind) {
+                case MenuTutorialStep::Kind::Back:
+                    if (tier2) {
+                        m_menuTutorialChapter = -1;
+                        m_menuCoopMessage = false;
+                    } else {
+                        m_menuPage = MenuPage::Title;
+                    }
+                    break;
+                case MenuTutorialStep::Kind::OpenChapter:
+                    m_menuTutorialChapter = step.index;
+                    m_menuCoopMessage = false;
+                    break;
+                case MenuTutorialStep::Kind::LaunchDemo: {
+                    const DemoIndexEntry& e = *rowEntries[step.index];
+                    if (e.mode == "coop") {
+                        m_menuCoopMessage = true;
+                        MC_LOG_INFO("menu: the coop's demo '" + e.file +
+                                    "' is rejected (需联机 — the net × "
+                                    "demo's mutual exclusion)");
+                    } else {
+                        auto launched = startDemoFromMenu(e);
+                        if (!launched.ok()) {
+                            MC_LOG_ERROR("menu's demo launch failed: " +
+                                         launched.error().describe());
+                        } else {
+                            return 2;
+                        }
+                    }
+                    break;
+                }
+                case MenuTutorialStep::Kind::None:
+                    break;
+            }
         } else {
+            // The multiplayer's stub (17d's host + join + the MOTD land
+            // here).
             const MenuStubLayout layout = menuStubLayout(space.width,
                                                          space.height);
             const bool backHovered = layout.back.contains(mx, my);
-            m_menuHovered = backHovered ? 0 : -1;
             const MenuStep step = menuStepStub(click, enter, esc,
                                                backHovered);
             if (step.action == MenuAction::Back) {
                 m_menuPage = MenuPage::Title;
-                m_menuHovered = -1;
             }
+        }
+
+        // The SDL text input's lifecycle (V3-17c: the login's name — the
+        // creative search's / the chat's precedent: opened only while
+        // the page that types is active, closed the frame it leaves).
+        const bool wantText = (m_menuPage == MenuPage::Login);
+        if (wantText != m_textInputOn) {
+            m_window.setTextInputEnabled(wantText);
+            m_textInputOn = wantText;
         }
 
         renderMenu();
@@ -311,6 +485,8 @@ void Game::renderMenu() {
     const Vec4 kTextDim {1.0f, 1.0f, 1.0f, 0.55f};
     const Vec4 kHover {1.0f, 1.0f, 1.0f, 1.0f};
     const Vec4 kHoverBar {1.0f, 1.0f, 1.0f, 0.12f};
+    const Vec4 kSelected {1.0f, 0.82f, 0.0f, 1.0f};
+    const Vec4 kPanel {0.08f, 0.08f, 0.11f, 0.88f};
 
     std::vector<UiBatch> batches;
     auto batchFor = [&](const Vec4& color, bool textured,
@@ -371,6 +547,8 @@ void Game::renderMenu() {
                         2;
     };
 
+    const auto [mx, my] = uiMouse();
+
     if (m_menuPage == MenuPage::Title) {
         const std::string version = "v" + std::string(TM_VERSION);
         const MenuTitleLayout layout = menuTitleLayout(
@@ -380,7 +558,7 @@ void Game::renderMenu() {
         addText(version, layout.versionX, layout.versionY, 1.0, kTextDim);
         for (int i = 0; i < kMenuTitleItemCount; ++i) {
             const MenuButton& r = layout.items[i];
-            const bool hov = (i == m_menuHovered);
+            const bool hov = r.contains(mx, my);
             if (hov) {
                 addHoverBar(r);
             }
@@ -389,6 +567,43 @@ void Game::renderMenu() {
                     r.y + (r.h - static_cast<int>(16.0 * fScale(kMenuItemScale))) / 2,
                     kMenuItemScale, hov ? kHover : kTextDim);
         }
+    } else if (m_menuPage == MenuPage::Login) {
+        // V3-17c: the name's entry (the field + the cursor's blink —
+        // the frame-locked m_menuFrame, the creative search's twin;
+        // the text input's face is the loop's, the render's read-only).
+        const MenuLoginLayout layout = menuLoginLayout(w, h);
+        addText("名字", layout.titleX, layout.titleY, kMenuTitleScale, kText);
+        {
+            UiBatch fieldBox;
+            fieldBox.color = kPanel;
+            addQuad(fieldBox, layout.field.x, layout.field.y, layout.field.w,
+                    layout.field.h);
+            drawUiBatch(fieldBox.vertices, ortho, m_fontTexture, false,
+                        fieldBox.color);
+        }
+        addText(m_menuName, layout.field.x + 8,
+                layout.field.y + (layout.field.h - static_cast<int>(16.0 * fScale(1.0))) / 2,
+                1.0, kText);
+        if (m_menuFrame % 30 < 15) {
+            const int cx = layout.field.x + 8 +
+                           static_cast<int>(textWidth(m_menuName,
+                                                      fScale(1.0)));
+            addText("|", cx, layout.field.y + (layout.field.h - static_cast<int>(16.0 * fScale(1.0))) / 2,
+                    1.0, kHover);
+        }
+        addText("（可选）", layout.hintX, layout.hintY, 1.0, kTextDim);
+        const bool startHov = layout.start.contains(mx, my);
+        const bool backHov = layout.back.contains(mx, my);
+        if (startHov) {
+            addHoverBar(layout.start);
+        }
+        if (backHov) {
+            addHoverBar(layout.back);
+        }
+        addText("开始", centerX("开始", 1.5, layout.start.x, layout.start.w),
+                layout.start.y, 1.5, startHov ? kHover : kText);
+        addText("返回", centerX("返回", 1.5, layout.back.x, layout.back.w),
+                layout.back.y, 1.5, backHov ? kHover : kText);
     } else if (m_menuPage == MenuPage::Settings) {
         // V3-17b: the settings form (the pure layout — the test's
         // twin; the codec's face: the value's text / the adjust / the
@@ -399,8 +614,8 @@ void Game::renderMenu() {
         addText("部分项重启后生效", layout.noteX, layout.noteY, 1.0, kTextDim);
         for (int i = 0; i < kMenuSettingsRowCount; ++i) {
             const MenuSettingsLayout::Row& r = layout.rows[i];
-            const bool hovM = (m_menuHovered == i * 2);
-            const bool hovP = (m_menuHovered == i * 2 + 1);
+            const bool hovM = r.minus.contains(mx, my);
+            const bool hovP = r.plus.contains(mx, my);
             if (hovM) {
                 addHoverBar(r.minus);
             }
@@ -425,44 +640,82 @@ void Game::renderMenu() {
                         hovP ? kHover : kTextDim);
             }
         }
-        const bool hovS = (m_menuHovered == kMenuSettingsSave);
+        const bool hovS = layout.save.contains(mx, my);
         if (hovS) {
             addHoverBar(layout.save);
         }
         addText("保存", centerX("保存", 1.5, layout.save.x, layout.save.w),
                 layout.save.y, 1.5, hovS ? kHover : kText);
-    } else {
-        const MenuStubLayout layout = menuStubLayout(w, h);
-        const char* pageTitle = "教学";
-        if (m_menuPage == MenuPage::Multiplayer) {
-            pageTitle = "多人";
-        }
-        addText(pageTitle, layout.titleX, layout.titleY, kMenuTitleScale,
-                kText);
-        if (m_menuPage == MenuPage::Tutorial) {
-            // The 17a's stub: the 5 chapters' TITLES (kDemoCategories'
-            // single source) — the two-level's category -> demo list
-            // is the 17c's face (the click's, the mode's filter's, the
-            // 需联机's badge's).
-            for (std::size_t i = 0; i < std::size(kDemoCategories); ++i) {
-                const MenuButton& r = layout.rows[i];
-                const std::string title = kDemoCategories[i].title;
-                addText(title, centerX(title, 1.5, r.x, r.w), r.y + 4, 1.5,
-                        kTextDim);
-            }
+    } else if (m_menuPage == MenuPage::Tutorial) {
+        // V3-17c: the two-level (tier 1 = the chapters + the counts,
+        // tier 2 = the chapter's demos + the lengths + the coop's
+        // badge; the 需联机's message on a reject).
+        const MenuTutorialLayout layout = menuTutorialLayout(w, h);
+        const bool tier2 = m_menuTutorialChapter >= 0;
+        if (!tier2) {
+            addText("教学", layout.titleX, layout.titleY, kMenuTitleScale,
+                    kText);
         } else {
-            // The later face's placeholder (17d's host + join + the
-            // MOTD land on this page).
-            const std::string later = kMenuLaterFace;
-            addText(later, centerX(later, 1.0, 0, w), layout.rows[0].y + 4,
-                    1.0, kTextDim);
+            const std::string title =
+                kDemoCategories[m_menuTutorialChapter].title;
+            addText(title, centerX(title, 1.5, 0, w), layout.titleY, 1.5,
+                    kText);
+        }
+        for (int i = 0; i < (tier2 ? tutorialChapterCount(m_menuTutorialChapter)
+                                   : 5); ++i) {
+            const MenuButton& r = layout.rows[i];
+            const bool hov = r.contains(mx, my);
+            std::string label;
+            if (!tier2) {
+                int count = 0;
+                for (const auto& e : m_demoIndex->demos) {
+                    if (e.category == kDemoCategories[i].id) {
+                        ++count;
+                    }
+                }
+                label = std::string(kDemoCategories[i].title) + " · " +
+                        std::to_string(count) + " 个";
+            } else {
+                label = tutorialRowLabel(m_menuTutorialChapter, i);
+            }
+            if (hov) {
+                addHoverBar(r);
+            }
+            // The tier-2's demo rows at 1.0 (the names run long), the
+            // tier-1's chapter rows at 1.5.
+            const double rowScale = tier2 ? 1.0 : 1.5;
+            addText(label, r.x + 10,
+                    r.y + (r.h - static_cast<int>(16.0 * fScale(rowScale))) / 2,
+                    rowScale, hov ? kText : kTextDim);
+        }
+        if (tier2 && m_menuCoopMessage) {
+            addText("需联机", layout.msgX, layout.msgY, 1.5, kSelected);
         }
         const MenuButton& back = layout.back;
-        const bool hov = (m_menuHovered == 0);
+        const bool hov = back.contains(mx, my);
         if (hov) {
             addHoverBar(back);
         }
-        addText(kMenuBackLabel, centerX(kMenuBackLabel, kMenuItemScale, back.x, back.w),
+        addText(kMenuBackLabel,
+                centerX(kMenuBackLabel, kMenuItemScale, back.x, back.w),
+                back.y + (back.h - static_cast<int>(16.0 * fScale(kMenuItemScale))) / 2,
+                kMenuItemScale, hov ? kHover : kText);
+    } else {
+        // The multiplayer's stub (17d's host + join + the MOTD land
+        // here).
+        const MenuStubLayout layout = menuStubLayout(w, h);
+        addText("多人", layout.titleX, layout.titleY, kMenuTitleScale,
+                kText);
+        const std::string later = kMenuLaterFace;
+        addText(later, centerX(later, 1.0, 0, w), layout.rows[0].y + 4,
+                1.0, kTextDim);
+        const MenuButton& back = layout.back;
+        const bool hov = back.contains(mx, my);
+        if (hov) {
+            addHoverBar(back);
+        }
+        addText(kMenuBackLabel,
+                centerX(kMenuBackLabel, kMenuItemScale, back.x, back.w),
                 back.y + (back.h - static_cast<int>(16.0 * fScale(kMenuItemScale))) / 2,
                 kMenuItemScale, hov ? kHover : kText);
     }

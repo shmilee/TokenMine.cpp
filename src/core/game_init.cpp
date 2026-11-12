@@ -189,6 +189,47 @@ Result<void> Game::buildUiAssets() {
     return {};
 }
 
+Result<void> Game::applyDemoArgs() {
+    // V3-17c: the demo's args' state (the init's --demo block extracted
+    // VERBATIM — the CLI's headless parse (main.cpp) and the menu's
+    // tutorial launch share this face: the m_demoMode's Replay + the
+    // m_demoPlayer's emplace (DemoPlayer holds the file's REFERENCE —
+    // the m_args member's lifetime covers the session; no move) + the
+    // save/scene's existence rejects).
+    if (m_args.demoFile.has_value()) {
+        m_demoMode = DemoMode::Replay;
+        m_demoPlayer.emplace(*m_args.demoFile);
+        m_demoPath = m_args.demo.string();
+        // The demo's SAVE spec references a slot (deviation 6: not
+        // embedded) — a deleted slot is the named reject HERE (the
+        // tryLoadSave's "starting fresh" silent fallback is out: a
+        // save demo must start from its state).
+        const DemoWorldSpec& spec = m_args.demoFile->world;
+        if (spec.type == DemoWorldSpec::Type::Save &&
+            saveReadPath().empty()) {
+            return MC_FAIL("demo's save slot '" + spec.slot +
+                           "' not found (the demo references the slot, "
+                           "it is not embedded — restore it or re-"
+                           "record)");
+        }
+        // V3-16a: the SCENE spec (the committed guide asset — the
+        // existence's named reject's twin; the load's path is
+        // tryLoadSave's scene face, the never-write-back is
+        // structural: the scene is not a slot, the exit's --save
+        // composes like the fresh spec).
+        if (spec.type == DemoWorldSpec::Type::Scene) {
+            if (demoSceneReadPath(spec.slot).empty()) {
+                return MC_FAIL("demo's scene '" + spec.slot +
+                               "' not found (the committed "
+                               "assets/demos/scenes directory — the "
+                               "guide asset is missing)");
+            }
+            m_demoSceneName = spec.slot;
+        }
+    }
+    return {};
+}
+
 Result<void> Game::buildScene() {
     // PIPE-2: the save journal's observer, installed at the TOP of
     // buildScene — before ANY cell-level write: the demo-area generation
@@ -2807,39 +2848,11 @@ Result<void> Game::init(const GameArgs& args) {
 
     // --- V3-9: the demo mode's state (the three flags absent = Off —
     // the bit-identical normal run below) ---------------------------------
-    if (m_args.demoFile.has_value()) {
-        m_demoMode = DemoMode::Replay;
-        // The emplace (DemoPlayer holds the file's REFERENCE — the
-        // m_args member's lifetime covers the session; no move).
-        m_demoPlayer.emplace(*m_args.demoFile);
-        m_demoPath = m_args.demo.string();
-        // The demo's SAVE spec references a slot (deviation 6: not
-        // embedded) — a deleted slot is the named reject HERE (the
-        // tryLoadSave's "starting fresh" silent fallback is out: a
-        // save demo must start from its state).
-        const DemoWorldSpec& spec = m_args.demoFile->world;
-        if (spec.type == DemoWorldSpec::Type::Save &&
-            saveReadPath().empty()) {
-            return MC_FAIL("demo's save slot '" + spec.slot +
-                           "' not found (the demo references the slot, "
-                           "it is not embedded — restore it or re-"
-                           "record)");
-        }
-        // V3-16a: the SCENE spec (the committed guide asset — the
-        // existence's named reject's twin; the load's path is
-        // tryLoadSave's scene face, the never-write-back is
-        // structural: the scene is not a slot, the exit's --save
-        // composes like the fresh spec).
-        if (spec.type == DemoWorldSpec::Type::Scene) {
-            if (demoSceneReadPath(spec.slot).empty()) {
-                return MC_FAIL("demo's scene '" + spec.slot +
-                               "' not found (the committed "
-                               "assets/demos/scenes directory — the "
-                               "guide asset is missing)");
-            }
-            m_demoSceneName = spec.slot;
-        }
-    } else if (m_args.demoRecord) {
+    MC_TRY(applyDemoArgs());
+
+    // V3-17c: the record mode (the --record flag — the demo's args'
+    // face is absent here, the world spec's construction stays local).
+    if (m_args.demoRecord) {
         m_demoMode = DemoMode::Record;
         DemoWorldSpec spec;
         if (m_args.saveSlot.has_value()) {
@@ -2878,6 +2891,10 @@ Result<void> Game::init(const GameArgs& args) {
     {
         auto index = loadDemoIndexChecked();
         MC_TRY(index);
+        // V3-17c: the cache (the menu's tutorial page's data source —
+        // zero extra IO; the flagged boots keep the local's shape, the
+        // member just carries the same document).
+        m_demoIndex = std::move(*index);
     }
 
     // --- window + GL context ----------------------------------------------
@@ -3003,11 +3020,21 @@ int Game::run() {
     if (m_menuActive) {
         const int menuExit = runMenuLoop();
         m_menuActive = false;
-        if (menuExit == 1) {
-            // The singleplayer's start = the fresh world's shape
-            // (the --new's twin: the config's seed, the save's load
-            // skipped — the menu never touches a slot).
-            m_args.newWorld = true;
+        if (menuExit == 1 || menuExit == 2) {
+            // menuExit 1 = the singleplayer's start (the --new's
+            // shape); 2 = the tutorial's demo launch (the --demo's
+            // shape — applyDemoArgs already set m_demoMode/Replay +
+            // the m_args' demo face, buildScene + the loop below do
+            // the rest = the CLI's boot's bit-twin).
+            if (menuExit == 1) {
+                m_args.newWorld = true;
+                MC_LOG_INFO("menu: singleplayer — the fresh world's start "
+                            "(the --new's shape)");
+            } else {
+                MC_LOG_INFO("menu: tutorial — the demo's launch (the "
+                            "--demo's shape: '" +
+                            m_args.demo.filename().string() + "')");
+            }
             auto scene = buildScene();
             if (!scene.ok()) {
                 MC_LOG_ERROR("Scene build failed: " + scene.error().describe());

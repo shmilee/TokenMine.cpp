@@ -11,6 +11,40 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.45.0（2026-11-12）— V3-17c 主菜单：登陆页 + 教学两级（门 235 全 PASS）
+
+**V3-17 相位 C/4**（BACKLOG 规格 ③ 登陆页【本地名字——net HELLO
+名字载体消费，singleplayer 可选】④ 教学页【V3-16 demo 族宿主：分类
+→ demo 两级 + mode 上下文过滤 +「需联机」徽章】；**零字体**——17c
+词表全在 457 表，8 缺字靠措辞规避）：标题→单人 = **Login 页**（名
+字标题 + 300×40 输入框 +「（可选）」hint + 开始/返回）；**文本输入
+生命周期** = m_textInputOn 页入开/页出关（SDL_StartTextInput 仅登
+陆期开——创造搜索/聊天同款先例）+ frameText/frameBackspace +
+latinOnly 净化 + 12 上限（net HELLO name 载体域）+ m_menuName 默认
+"player" 会话态零 format【名字不入存档】；**教学两级** = tier 1
+5 章 +「· N 个」计数（init 缓存 m_demoIndex 零额外 IO）+ tier 2 章
+内 demo「name · mm:ss」【.dmo 剥除 + scale 1.0 防溢出——门内截图冒
+烟捕获】+ coop 行「需联机」badge + **coop 拒收**（mode 检查 = 需联
+机消息 + 日志点名，net×demo 互斥同款）；**菜单驱动 demo 启动 =
+startDemoFromMenu**【main.cpp --demo headless parse 复刻：
+loadDemoFile 严格永不 force + world spec→args + **applyDemoArgs
+（init --demo 块原文提取共用单源）**】→ menuExit 2 → buildScene →
+runDemoReplay = CLI --demo 位级孪生【门臂 savenorm EXACT 实证】；
+mm:ss = --list-demos 逐字公式（total/3600, (total%3600)/60 非
+ceil——初稿 ceil 不符门内捕获）；render 三新面 hover 从 uiMouse 逐
+帧派生【m_menuHovered 成员移除——循环/渲染零共享帧态】。门 235：
+3017/3017（+5）+ S1 重锚 base20 = v3.45.0 标题【×2 逐字节 + 旧锚
+diff 101 px 单行版本行有界 + 槽不创建】+ **登陆臂**【6×BackSpace
+清默认 + type "gate"：日志 `name 'gate'` = frameText + frameBack-
+space 双通路权威 + 存档 ≡ --new savenorm EXACT】+ **教学臂**【菜
+单 ×2 savenorm+RAW EXACT + **菜单 ≡ CLI --demo savenorm EXACT =
+位级孪生最强形**】+ coop 空章截图 + canary 4×2 新≡旧（tm_v344）
+**跨树 RAW EXACT ×4**【零字体门面延续】+ 性能 A/B 同档【median 交
+错 + changesApplied 9/3/1 vs 9/2/1【win2 = real-dt 域先例】+ 终档
+跨树 savenorm EXACT】；门内捕获 PITS 427 四坑【背景构建竞态 +
+旧日志假完成信号 / tier-2 长文件名溢出 / mm:ss 逐字公式 / 清默认名
+计数 6 非 4】；详见 `docs/archive/phase-3.45.0.md`
+
 ## v3.44.0（2026-11-12）— V3-17b 主菜单：设置页（门 234 全 PASS）
 
 **V3-17 相位 B/4**（BACKLOG 规格 = config 表单化编辑 + 严格读 + 写回

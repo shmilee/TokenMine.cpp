@@ -12,22 +12,26 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdio>
+#include <string>
 
 namespace mc {
 
 // The menu's pages (the loop's state).
 enum class MenuPage {
     Title,
+    Login,       // 17c: the name's entry (before the singleplayer's start)
     Multiplayer,
     Settings,
-    Tutorial,
+    Tutorial,    // 17c: the two-level's host (the chapter's list / the demos')
 };
 
 // The actions a menu step raises (the loop consumes them).
 enum class MenuAction {
     None,
     Back,             // a stub page -> the title (ESC / the 返回 click)
-    StartSingleplayer, // the title's 单人 -> the fresh world's start
+    StartSingleplayer, // the login page's 开始 -> the fresh world's start
+    LaunchDemo,        // the tutorial's demo row (solo) -> the replay's start
     Quit,              // the title's 退出 / the ESC -> the process exit
 };
 
@@ -128,7 +132,8 @@ struct MenuStep {
 
 // Pure: the title page's step. hovered = the item index under the
 // pointer (-1 = none); click or Enter activates the hovered item; ESC
-// quits. An out-of-range / no hover is a no-op (a click in the air).
+// quits. Item 0 (单人) = the LOGIN page (17c: the name's entry before
+// the start); an out-of-range / no hover is a no-op.
 inline MenuStep menuStepTitle(bool click, bool enter, bool esc,
                               int hovered) {
     MenuStep s;
@@ -140,7 +145,7 @@ inline MenuStep menuStepTitle(bool click, bool enter, bool esc,
         hovered < kMenuTitleItemCount) {
         switch (hovered) {
             case 0:
-                s.action = MenuAction::StartSingleplayer;
+                s.page = MenuPage::Login;
                 return s;
             case 1:
                 s.page = MenuPage::Multiplayer;
@@ -295,6 +300,128 @@ inline MenuSettingsStep menuSettingsStep(bool click, bool enter, bool esc,
         return s;
     }
     return s;
+}
+
+// ---------------------------------------------------------------------------
+// V3-17c: the login page (the name's entry) + the tutorial's two-level.
+// ---------------------------------------------------------------------------
+
+// The login page's geometry (the title 名字 + the field + the hint +
+// the 开始/返回 buttons). The field = the SDL text input's face (the
+// creative search / the chat's precedent — opened only while this page
+// is active).
+struct MenuLoginLayout {
+    int titleX = 0, titleY = 0;
+    MenuButton field;
+    int hintX = 0, hintY = 0; // the （可选）
+    MenuButton start;
+    MenuButton back;
+};
+
+inline MenuLoginLayout menuLoginLayout(int w, int h) {
+    MenuLoginLayout l;
+    const int titleW = 2 * static_cast<int>(17.0 * kMenuTitleScale) -
+                       static_cast<int>(kMenuTitleScale);
+    l.titleX = (w - titleW + 1) / 2;
+    l.titleY = menuRoundDiv(10 * h, 100);
+    constexpr int kFieldW = 300;
+    constexpr int kFieldH = 40;
+    l.field = MenuButton {(w - kFieldW + 1) / 2, menuRoundDiv(32 * h, 100),
+                          kFieldW, kFieldH};
+    const int hintW = 5 * 17 - 1; // （可选） 5 glyphs @ 1.0
+    l.hintX = (w - hintW + 1) / 2;
+    l.hintY = l.field.y + l.field.h + 8;
+    l.start = MenuButton {(w - 70 + 1) / 2, menuRoundDiv(72 * h, 100), 70, 28};
+    l.back = MenuButton {(w - 70 + 1) / 2, menuRoundDiv(85 * h, 100), 70, 28};
+    return l;
+}
+
+// Pure: the login page's step. The whole page is the input's face (the
+// text rides Input::frameText/frameBackspace); the 开始 button / Enter
+// = the start, ESC / the 返回 button = the title.
+inline MenuStep menuLoginStep(bool click, bool enter, bool esc,
+                              bool startHovered, bool backHovered) {
+    MenuStep s;
+    if (esc) {
+        s.action = MenuAction::Back;
+        return s;
+    }
+    if (enter || (click && startHovered)) {
+        s.action = MenuAction::StartSingleplayer;
+        return s;
+    }
+    if (click && backHovered) {
+        s.action = MenuAction::Back;
+        return s;
+    }
+    return s;
+}
+
+// The tutorial's two-level's geometry (tier 1 = the 5 chapters, tier 2
+// = the chapter's demos — the same rows' rect, the title's scale is the
+// caller's face).
+struct MenuTutorialLayout {
+    int titleX = 0, titleY = 0;
+    MenuButton rows[5];
+    MenuButton back;
+    int msgX = 0, msgY = 0; // the 需联机's message (tier 2's reject face)
+};
+
+inline MenuTutorialLayout menuTutorialLayout(int w, int h) {
+    MenuTutorialLayout l;
+    const int titleW = 2 * static_cast<int>(17.0 * kMenuTitleScale) -
+                       static_cast<int>(kMenuTitleScale);
+    l.titleX = (w - titleW + 1) / 2;
+    l.titleY = menuRoundDiv(10 * h, 100);
+    const int rowY0 = menuRoundDiv(22 * h, 100);
+    constexpr int kRowPitch = 32;
+    constexpr int kRowX = 60;
+    constexpr int kRowW = 333;
+    for (int i = 0; i < 5; ++i) {
+        l.rows[i] = MenuButton {kRowX, rowY0 + i * kRowPitch, kRowW, 28};
+    }
+    l.back = MenuButton {(w - 70 + 1) / 2, menuRoundDiv(85 * h, 100), 70, 28};
+    const int msgW = 3 * 25 - 1; // 需联机 3 glyphs @ 1.5
+    l.msgX = (w - msgW + 1) / 2;
+    l.msgY = menuRoundDiv(78 * h, 100);
+    return l;
+}
+
+// Pure: the tutorial's tier step. hoveredRow = the row under the pointer
+// (-1 = none); the tier's kind selects the back's target (tier 1 = the
+// title, tier 2 = the chapters); a row click = OpenChapter (tier 1) /
+// LaunchDemo (tier 2 — the mode's filter is the Game's face: the coop's
+// row raises the message, never the launch).
+struct MenuTutorialStep {
+    enum class Kind { None, Back, OpenChapter, LaunchDemo };
+    Kind kind = Kind::None;
+    int index = -1;
+};
+
+inline MenuTutorialStep menuTutorialStep(bool click, bool esc, bool backHovered,
+                                         int hoveredRow, bool tier2) {
+    MenuTutorialStep s;
+    if (esc || (click && backHovered)) {
+        s.kind = MenuTutorialStep::Kind::Back;
+        return s;
+    }
+    if (click && hoveredRow >= 0 && hoveredRow < 5) {
+        s.index = hoveredRow;
+        s.kind = tier2 ? MenuTutorialStep::Kind::LaunchDemo
+                       : MenuTutorialStep::Kind::OpenChapter;
+        return s;
+    }
+    return s;
+}
+
+// Pure: the demo length's mm:ss text (1/60 fps — the --list-demos'
+// VERBATIM read: mm = total/3600, ss = (total%3600)/60).
+inline std::string menuDemoLengthText(int frames) {
+    const int mm = frames / 3600;
+    const int ss = (frames % 3600) / 60;
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%02d:%02d", mm, ss);
+    return std::string(buf);
 }
 
 } // namespace mc
