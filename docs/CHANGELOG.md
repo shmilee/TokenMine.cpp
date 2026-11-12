@@ -11,6 +11,32 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.42.0（2026-11-12）— V3-18 存档扩展名（门 232 全 PASS）
+
+**11-08 用户诉求**（「.json 扩展名体现不出压缩后的 json，与没压缩的
+混淆」）；**零 format**（容器 = V3-7 确定性 gzip 不变）/ **零像素**
+（纯 IO）/ 零 config：写路径单源 = **`slotWritePath`/`slotReadPath`
+路径族**（save_slot.hpp）——新写形 `<slot>.json.gz`（gzip 容器可见
+扩展名），读 = **两级探测**（.json.gz 先、legacy .json 后 = **零迁移**
+——legacy 槽可读，下次写自动换名温和迁移；V3-7 魔数探测同款先例）；
+Game::saveWritePath/saveReadPath 委托（writeSave/autosave/exit 共享
+写恒新形，tryLoadSave + demo save-spec 检查走探测）；**SAVE-3 管理
+面双扩展名**（list 两形枚举去重 .json.gz 赢 / copy = 探测读 + 新形
+写【复制即迁移】/ rename + delete = 消费全槽删孪生）；**demo scene
+资产随改**（assets/demos/scenes/ 11 个 committed 资产 git mv →
+.json.gz + mk_scene.py 输出新形 + demoSceneReadPath(name, dir) 两级
+探测参数化单源 + init 交叉检走探测【门内捕获：初版硬编码 .json 后缀
+= 全索引假拒 PITS 424①】）；文案 --help + CONTENT_GUIDE_CONFIG /
+ARCHITECTURE / README 存档槽行；gate_compare.py 已魔数探测零改动。
+**3005/3005**（+6：SaveSlotTest 5【写形/两级探测/双形枚举去重/复制
+重命名迁移含全槽消费/删除全槽】+ V316aDemo ScenePathTwoStageFind +
+2 既有断言 re-pin）+ S1 第 113 次【f60 ×2 ≡ base19——纯 IO 零像素】
++ canary 4×2 新≡旧二进制（tm_v341 v3.41.0）RAW+savenorm EXACT + 迁移
+臂【新写 .json.gz + legacy 名可读 + 写回自动换名 + list 双形去重 +
+copy/delete 全槽】+ scene 臂【guide_mining 11387f 自 .json.gz scene
+回放 + --list-demos 交叉检 OK】+ 性能 A/B 同档；详见
+`docs/archive/phase-3.42.0.md`
+
 ## v3.41.0（2026-11-12）— V3-19 死亡屏计时（门 231 全 PASS）
 
 **11-08 用户报障修复**（「死亡界面存活时间不停增加」；表现层 3 点修，

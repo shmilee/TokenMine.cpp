@@ -1411,9 +1411,32 @@ TEST(V316aDemo, SceneWorldSpecRejects) {
         EXPECT_NE(out.error().message.find("fresh|save|scene"),
                   std::string::npos);
     }
-    // The scene's path's face.
+    // The scene's path's face (V3-18: the .json.gz's extension — the
+    // save family's rename).
     EXPECT_EQ(demoScenePath("abc_1").string(),
-              "assets/demos/scenes/abc_1.json");
+              "assets/demos/scenes/abc_1.json.gz");
+}
+
+TEST(V316aDemo, ScenePathTwoStageFind) {
+    // V3-18: the scene asset rides the save family's rename — the
+    // committed form is .json.gz, the legacy .json still reads (zero
+    // migration, the mid-rename checkout's boot).
+    const auto dir = scratchDir() / "scenefind";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    // Neither = the empty path (the cross-check's naming's input).
+    EXPECT_TRUE(demoSceneReadPath("ghost", dir).empty());
+    // The legacy .json alone is found.
+    writeAll((dir / "legacy.json").string(), "x");
+    EXPECT_EQ(demoSceneReadPath("legacy", dir), dir / "legacy.json");
+    // The current .json.gz alone is found.
+    writeAll((dir / "modern.json.gz").string(), "x");
+    EXPECT_EQ(demoSceneReadPath("modern", dir), dir / "modern.json.gz");
+    // BOTH forms = the .json.gz wins (the current form's read).
+    writeAll((dir / "both.json.gz").string(), "gz");
+    writeAll((dir / "both.json").string(), "legacy");
+    EXPECT_EQ(demoSceneReadPath("both", dir), dir / "both.json.gz");
+    std::filesystem::remove_all(dir, ec);
 }
 
 TEST(V316aDemo, IndexParseValid) {

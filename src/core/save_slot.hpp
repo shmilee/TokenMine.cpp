@@ -51,30 +51,52 @@ struct SaveSlotSummary {
 // plain file name inside data/saves.
 bool isValidSlotName(const std::string& name);
 
-// Lists the save slots in `dir` (file names minus .json, sorted).
-// Non-JSON entries and subdirectories are not slots.
+// V3-18: the slot's FILE NAMES. The new write form is <name>.json.gz
+// (the gzip container's visible extension — the user's 11-08 report:
+// the .json name showed nothing of the compressed content, confused
+// with the pre-V3-7 plaintext); the legacy <name>.json (the V3-7-era
+// file name — its content is ALREADY the gzip container) keeps loading
+// = zero migration (the V3-7 magic-probe's twin: the reader probes the
+// bytes, the name is only the find-order).
+std::filesystem::path slotWritePath(const std::filesystem::path& dir,
+                                    const std::string& name);
+// The two-stage find: .json.gz first (the current write form), the
+// legacy .json after; neither present = the empty path (the caller
+// names the problem).
+std::filesystem::path slotReadPath(const std::filesystem::path& dir,
+                                   const std::string& name);
+
+// Lists the save slots in `dir` (file names minus the extension,
+// sorted). Both extensions enumerate (.json.gz + the legacy .json); a
+// slot holding BOTH files surfaces once (the .json.gz's — the current
+// form's — summary). Non-save entries and subdirectories are not slots.
 Result<std::vector<std::string>> listSaveSlots(
     const std::filesystem::path& dir);
 
-// Reads one slot's summary from `dir / (name + ".json")`. The slot name
-// must be valid; a missing file is a naming; a file that does not parse
-// (or lacks the summary fields) comes back readable=false with the
-// naming (the list must show the problem, not hide the file).
+// Reads one slot's summary via the two-stage find (slotReadPath). The
+// slot name must be valid; a missing slot is a naming; a file that does
+// not parse (or lacks the summary fields) comes back readable=false
+// with the naming (the list must show the problem, not hide the file).
 Result<SaveSlotSummary> readSaveSlotSummary(
     const std::filesystem::path& dir, const std::string& name);
 
-// Byte-faithful copy (branch a save). The destination must NOT exist
-// (named); the write is atomic (same-directory temp + rename — a failed
-// copy never leaves a half-written destination).
+// Byte-faithful copy (branch a save). The source is found via the
+// two-stage probe; the destination is written in the NEW form
+// (<dst>.json.gz — the copy migrates a legacy slot's name) and must NOT
+// exist (either form, named); the write is atomic (same-directory temp
+// + rename — a failed copy never leaves a half-written destination).
 Result<void> copySaveSlot(const std::filesystem::path& dir,
                           const std::string& src, const std::string& dst);
 
-// Rename (move). The destination must NOT exist (named); atomic
-// (std::filesystem::rename on the same directory).
+// Rename (move). The source is found via the two-stage probe (a slot
+// holding BOTH files is consumed whole — the twin is deleted, the slot
+// moves once); the destination is written in the NEW form and must NOT
+// exist (named); atomic (std::filesystem::rename on the same directory).
 Result<void> renameSaveSlot(const std::filesystem::path& dir,
                             const std::string& src, const std::string& dst);
 
-// Delete. The slot must exist (named).
+// Delete. Consumes the whole slot (BOTH extensions, if present); the
+// slot must exist in at least one form (named).
 Result<void> deleteSaveSlot(const std::filesystem::path& dir,
                             const std::string& name);
 

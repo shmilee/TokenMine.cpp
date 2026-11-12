@@ -1316,9 +1316,16 @@ std::optional<MobHit> targetMob() const;
                      bool textured, const Vec4& color);
 
     // Save/load (Phase 13), opt-in via --save <slot>. The file
-    // data/saves/<slot>.json holds the seed + the cells that differ from
-    // that seed's generation + the full game state (see core/save.hpp).
-    std::filesystem::path savePath() const;
+    // data/saves/<slot>.json.gz holds the seed + the cells that differ
+    // from that seed's generation + the full game state (see
+    // core/save.hpp). V3-18: the new name is .json.gz (the gzip
+    // container's visible extension — the user's 11-08 report); the
+    // legacy <slot>.json (the V3-7-era name, same container) still
+    // loads = zero migration.
+    std::filesystem::path saveWritePath() const;
+    // The two-stage find (.json.gz first, the legacy .json after);
+    // empty path = no slot file (the caller names it).
+    std::filesystem::path saveReadPath() const;
     // Gathers the current state into a SaveGame (world diff + player +
     // inventory + entities + time).
     Result<SaveGame> collectSave() const;

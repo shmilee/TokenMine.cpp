@@ -15,6 +15,7 @@
 #include "block/chance_drop.hpp"
 #include "block/cube_face_table.hpp"
 #include "core/game_local.hpp"
+#include "core/save_slot.hpp" // V3-18: the slot path family
 #include "core/json.hpp"
 #include "core/png.hpp"
 #include "entity/end_spawn_pool.hpp"
@@ -2464,8 +2465,12 @@ void Game::rescanEndPortals() {
 }
 
 
-std::filesystem::path Game::savePath() const {
-    return "data/saves/" + *m_args.saveSlot + ".json";
+std::filesystem::path Game::saveWritePath() const {
+    return slotWritePath("data/saves", *m_args.saveSlot);
+}
+
+std::filesystem::path Game::saveReadPath() const {
+    return slotReadPath("data/saves", *m_args.saveSlot);
 }
 
 void Game::rescanCrops() {
@@ -2793,7 +2798,7 @@ Result<void> Game::init(const GameArgs& args) {
         // save demo must start from its state).
         const DemoWorldSpec& spec = m_args.demoFile->world;
         if (spec.type == DemoWorldSpec::Type::Save &&
-            !std::filesystem::exists(savePath())) {
+            saveReadPath().empty()) {
             return MC_FAIL("demo's save slot '" + spec.slot +
                            "' not found (the demo references the slot, "
                            "it is not embedded — restore it or re-"
@@ -2805,7 +2810,7 @@ Result<void> Game::init(const GameArgs& args) {
         // structural: the scene is not a slot, the exit's --save
         // composes like the fresh spec).
         if (spec.type == DemoWorldSpec::Type::Scene) {
-            if (!std::filesystem::exists(demoScenePath(spec.slot))) {
+            if (demoSceneReadPath(spec.slot).empty()) {
                 return MC_FAIL("demo's scene '" + spec.slot +
                                "' not found (the committed "
                                "assets/demos/scenes directory — the "

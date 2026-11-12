@@ -1460,7 +1460,14 @@ Result<DemoFile> parseScriptTimeline(const std::filesystem::path& path) {
 // ---------------------------------------------------------------------------
 
 std::filesystem::path demoScenePath(const std::string& name) {
-    return std::filesystem::path("assets/demos/scenes") / (name + ".json");
+    return std::filesystem::path("assets/demos/scenes") / (name + ".json.gz");
+}
+
+std::filesystem::path demoSceneReadPath(
+    const std::string& name, const std::filesystem::path& dir) {
+    // V3-18: the two-stage find (the committed .json.gz first, the
+    // legacy .json after — a checkout mid-rename still boots).
+    return slotReadPath(dir, name);
 }
 
 namespace {
@@ -1670,9 +1677,10 @@ Result<void> checkDemoIndexDir(const DemoIndex& index,
                            " dts (re-pin the index)");
         }
         if (r->world.type == DemoWorldSpec::Type::Scene) {
-            const std::filesystem::path spath =
-                scenesDir / (r->world.slot + ".json");
-            if (!std::filesystem::exists(spath, ec)) {
+            // V3-18: the two-stage scene find (.json.gz first, the
+            // legacy .json after) — the committed asset's rename rides
+            // the save family's discipline.
+            if (demoSceneReadPath(r->world.slot, scenesDir).empty()) {
                 return MC_FAIL(ctx + ": the scene '" + r->world.slot +
                                "' is not in '" + scenesDir.string() +
                                "'");

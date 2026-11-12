@@ -174,11 +174,12 @@ inline constexpr double kDemoMinPacingWaitSeconds = 0.002;
 // not found"; a slot MODIFIED between record and replay = the start
 // point shifts with it — the documented boundary)).
 // V3-16a: the SCENE start point = the committed guide asset
-// assets/demos/scenes/<name>.json (a deterministic save document the
+// assets/demos/scenes/<name>.json.gz (a deterministic save document the
 // GUIDE demos reference: the prepared inventory / time / terrain the
 // shipped content needs, the user's data/saves cannot carry). Read-
 // only by construction (an asset, never the exit write's path) = the
-// observation-only red line's structural root.
+// observation-only red line's structural root. V3-18: the .json.gz's
+// extension (the save family's rename — the legacy .json still reads).
 struct DemoWorldSpec {
     enum class Type { Fresh, Save, Scene } type = Type::Fresh;
     std::int64_t seed = 0; // Fresh only
@@ -324,9 +325,17 @@ struct DemoIndex {
     std::vector<DemoIndexEntry> demos; // file order = the data's order
 };
 
-// The scene asset's path (the committed deterministic save document;
-// the .json's extension rides the save family's gzip-magic discipline).
+// The scene asset's path (the committed deterministic save document).
+// V3-18: the scene's extension rides the save family's rename — the
+// .json.gz first (the committed form), the legacy .json after (zero
+// migration, the save slot's twin). The dir's default is the committed
+// asset's location (the tests pass a scratch dir).
 std::filesystem::path demoScenePath(const std::string& name);
+// The scene's two-stage find (.json.gz first, the legacy .json after);
+// empty = the scene asset is missing (the init cross-check's naming).
+std::filesystem::path demoSceneReadPath(
+    const std::string& name,
+    const std::filesystem::path& dir = "assets/demos/scenes");
 
 // The index's strict parse (the closed keys / the vocabularies / the
 // charsets / the seq's contiguity / the uniqueness — every violation

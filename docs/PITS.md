@@ -3,8 +3,26 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–423，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–424，新条目继续前插于尾部块首。
 
+- **存档扩展名重命名坑（PITS 424，门 232 v3.42.0 V3-18 存档扩展名）**
+  ——① **路径族 = 参数化探测单源**：scene 交叉检初版沿用
+  `scenesDir / (slot + ".json")` 硬编码后缀 + demoScenePath 硬编码
+  committed 目录 → 11 个 scene 资产重命名后**全索引假拒**（"the
+  scene 'pilot_mine' is not in assets/demos/scenes"，--list-demos
+  rc 1）+ 测试的 scratch 目录面恒假拒（IndexCheckCrossFace 两测试
+  红）——修 = demoSceneReadPath(name, dir = 默认) 两级探测（.json.gz
+  先 legacy .json 后）参数化，交叉检/加载/测试同走单源。② **双形槽
+  消费语义**：copy = 探测读 + **新形写**（复制即 legacy 槽名迁移）；
+  rename/delete = **消费全槽**（双形皆存在时删孪生）——否则残留旧形
+  污染 list 去重/摘要/存在性判。③ **list 去重优先级 = .json.gz 赢**
+  （双形槽 surface 一次，摘要走探测 = 现形）——std::set 去重（字符集
+  无 '.' = 无歧义 stem）。④ **WM 平铺漂移 = S1 几何破锚**（门 232
+  捕获）：base19 锚 = 679×744 WM 平铺态（110+ 门同几何），门机 WM
+  平铺布局漂移后游戏窗不再被 tile = 截图 1280×720（IHDR 第 19 字节
+  = 宽字段 DIFF，内容全同不可比）——修 = S1 门 config 直接请求锚
+  几何 679×744（config_s1.json 换 679/744 版，不再赌 WM 心情）= 锚
+  几何门内钉死，S1 ≡ base19 恢复 ×2 BYTE-EXACT（第 113 次）。
 - **死亡屏两帧臂裁剪坑（PITS 423，门 231 v3.41.0 V3-19 死亡屏计时）**
   ——① **死亡屏行 y 名义位 ≠ 渲染 bbox**：存活行名义 = h/2+74
   （line 表 offset），实际文本 top ≈ h/2+108（标题「你死了！」scale
@@ -17,7 +35,7 @@
   存活行 crop 可 AE=0 严格 EXACT；对照臂（旧树活读）= AE 43/42 px
   （秒位字形差「4 秒→7 秒→10 秒」= 修复前爬升实证，既有 ×2 RAW 同
   帧协议抓不到跨帧漂移）。
-- - **末影龙 guide authoring 珍珠/嵌眼/出口门八坑（PITS 422，门 230
+- **末影龙 guide authoring 珍珠/嵌眼/出口门八坑（PITS 422，门 230
   v3.40.0 V3-16h② ② 末影龙）**——① **传送后视图 re-anchor = yaw +
   位置（pitch 已同步勿覆写）**：travelEnd 强制 yaw +π/2（朝西）+ 保
   pitch（= 12 嵌眼 aim −20.96°），pearl 保视图——author re-anchor 只
@@ -51,8 +69,7 @@
   = 1-block 实心墙**：3×3 center（end_portal 非实心 y53）被 12 实心
   frame（顶 y54）环围——入 center = step-up + step-down；egg 悬
   center 上空（y54 非实心）；水晶坐 frame 顶 y54（中心 y55）。
-- - **末地 portal 嵌眼激活坑（PITS 421，V3-16h② 末影龙侦察，门 230 待执行，
-  demo 未发布但机制实证）**——① **末帧嵌眼须在 GOOD cell**：ring 激活扫描只查
+- **末地 portal 嵌眼激活坑（PITS 421，门 230 v3.40.0 V3-16h② ② 末影龙）**——① **末帧嵌眼须在 GOOD cell**：ring 激活扫描只查
   嵌眼格的 **8 候选中心**（offset (±2,0)(0,±2)(±1,±2)，end_portal.cpp
   25-38），5×5 ring 中心 (cx,cz) 仅对 12 边框格中的 **8 格**是候选
   （顶/底行中格 + 左/右列中格 + 顶/底行非角格；侧列非中格 (x=4,z=5/7)

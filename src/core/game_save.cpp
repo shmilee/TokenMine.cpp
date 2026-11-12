@@ -700,7 +700,7 @@ Result<void> Game::writeSave(bool byAutoSave) const {
     MC_TRY(saved);
     auto serialized = serializeSave(*saved, m_items);
     MC_TRY(serialized);
-    const std::filesystem::path path = savePath();
+    const std::filesystem::path path = saveWritePath();
     const std::string payload = serialized->dump(2) + '\n';
     // V3-7: the on-disk encoding (save.compression): Gzip = the
     // deterministic container (kGzipHeader + raw deflate + CRC32 /
@@ -1567,7 +1567,8 @@ Result<void> Game::tryLoadSave() {
     // the slot's twin face, the read-only by construction: an asset,
     // never the exit write's path).
     if (!m_demoSceneName.empty()) {
-        const std::filesystem::path path = demoScenePath(m_demoSceneName);
+        const std::filesystem::path path =
+            demoSceneReadPath(m_demoSceneName);
         const auto started = std::chrono::steady_clock::now();
         auto save = readSaveFile(path);
         MC_TRY(save);
@@ -1590,9 +1591,13 @@ Result<void> Game::tryLoadSave() {
     if (!m_args.saveSlot.has_value() || m_args.newWorld) {
         return {};
     }
-    const std::filesystem::path path = savePath();
-    if (!std::filesystem::exists(path)) {
-        MC_LOG_INFO("No save at '" + path.string() + "' — starting fresh");
+    // V3-18: the two-stage find (.json.gz first, the legacy .json
+    // after = zero migration — a legacy slot loads, and the next
+    // write re-names it to the new form).
+    const std::filesystem::path path = saveReadPath();
+    if (path.empty()) {
+        MC_LOG_INFO("No save at slot '" + *m_args.saveSlot +
+                    "' (.json.gz or the legacy .json) — starting fresh");
         return {};
     }
     // V3-7: the load log line's encoding marker — the file's on-disk

@@ -23,6 +23,8 @@ using mc::isValidSlotName;
 using mc::listSaveSlots;
 using mc::readSaveSlotSummary;
 using mc::renameSaveSlot;
+using mc::slotReadPath;
+using mc::slotWritePath;
 
 namespace {
 
@@ -117,7 +119,10 @@ TEST(SaveSlotTest, SummaryMissingFileIsANamingNotAError) {
     auto r = readSaveSlotSummary(dir, "ghost");
     ASSERT_TRUE(r.ok()); // the list must SURFACE the file state
     EXPECT_FALSE(r->readable);
-    EXPECT_NE(r->problem.find("cannot open"), std::string::npos)
+    // V3-18: the two-stage find names a missing slot directly (both
+    // extensions absent) — the pre-V3-18 "cannot open" naming's twin,
+    // the probe's earlier fail.
+    EXPECT_NE(r->problem.find("no such save slot"), std::string::npos)
         << r->problem;
 }
 
@@ -213,16 +218,17 @@ TEST(SaveSlotTest, CopyIsByteFaithfulAndRefusesExistingDest) {
     EXPECT_FALSE(miss.ok());
     EXPECT_NE(miss.error().message.find("no such save slot"),
               std::string::npos);
-    // The copy is byte-faithful.
+    // The copy is byte-faithful (V3-18: the destination is written in
+    // the NEW form — the legacy source's bytes, the .json.gz's name).
     auto ok = copySaveSlot(dir, "a", "b");
     ASSERT_TRUE(ok.ok()) << ok.error().message;
-    EXPECT_EQ(readFile(dir / "b.json"), readFile(dir / "a.json"));
+    EXPECT_EQ(readFile(dir / "b.json.gz"), readFile(dir / "a.json"));
     // An existing destination is a naming (the source is untouched).
     auto exist = copySaveSlot(dir, "a", "b");
     EXPECT_FALSE(exist.ok());
     EXPECT_NE(exist.error().message.find("already exists"),
               std::string::npos);
-    EXPECT_EQ(readFile(dir / "b.json"), readFile(dir / "a.json"));
+    EXPECT_EQ(readFile(dir / "b.json.gz"), readFile(dir / "a.json"));
     // Invalid names are namings on both sides.
     auto bad = copySaveSlot(dir, "a/b", "b");
     EXPECT_FALSE(bad.ok());
@@ -266,7 +272,9 @@ TEST(SaveSlotTest, RenameMovesTheBytesAndRefusesExistingDest) {
     auto ok = renameSaveSlot(dir, "a", "b");
     ASSERT_TRUE(ok.ok()) << ok.error().message;
     EXPECT_FALSE(std::filesystem::exists(dir / "a.json"));
-    EXPECT_EQ(readFile(dir / "b.json"), bytes);
+    // V3-18: the rename moves the slot into the NEW form (.json.gz).
+    EXPECT_FALSE(std::filesystem::exists(dir / "b.json"));
+    EXPECT_EQ(readFile(dir / "b.json.gz"), bytes);
 }
 
 TEST(SaveSlotTest, DeleteRemovesAndRefusesMissing) {
@@ -283,4 +291,101 @@ TEST(SaveSlotTest, DeleteRemovesAndRefusesMissing) {
     auto ok = deleteSaveSlot(dir, "a");
     ASSERT_TRUE(ok.ok()) << ok.error().message;
     EXPECT_FALSE(std::filesystem::exists(dir / "a.json"));
+}
+
+// ---------------------------------------------------------------------------
+// V3-18: the extension's rename (the user's 11-08 report — the .json's
+// name showed nothing of the gzip content). The write's NEW form is
+// .json.gz; the READ is a two-stage find (.json.gz first, the legacy
+// .json after = zero migration — a legacy slot loads, the next write
+// re-names it).
+// ---------------------------------------------------------------------------
+
+TEST(SaveSlotTest, V318_WritePathIsTheGzExtension) {
+    const auto dir = scratchDir();
+    EXPECT_EQ(slotWritePath(dir, "abc"), dir / "abc.json.gz");
+    // The legacy name is never a write target (a stale .json is only
+    // ever READ, then replaced by the next write's new form).
+    EXPECT_NE(slotWritePath(dir, "abc").string().find(".json.gz"),
+              std::string::npos);
+}
+
+TEST(SaveSlotTest, V318_ReadPathTwoStageFind) {
+    const auto dir = scratchDir();
+    // Neither = the empty path (the caller's naming).
+    EXPECT_TRUE(slotReadPath(dir, "ghost").empty());
+    // The legacy .json alone is found (zero migration's read leg).
+    writeFile(dir / "legacy.json", "x");
+    EXPECT_EQ(slotReadPath(dir, "legacy"), dir / "legacy.json");
+    // The current .json.gz alone is found.
+    writeFile(dir / "modern.json.gz", "x");
+    EXPECT_EQ(slotReadPath(dir, "modern"), dir / "modern.json.gz");
+    // BOTH forms = the .json.gz wins (the current form's summary).
+    writeFile(dir / "both.json.gz", "gz-bytes");
+    writeFile(dir / "both.json", "legacy-bytes");
+    EXPECT_EQ(slotReadPath(dir, "both"), dir / "both.json.gz");
+    EXPECT_EQ(readFile(slotReadPath(dir, "both")), "gz-bytes");
+}
+
+TEST(SaveSlotTest, V318_ListEnumeratesBothExtensionsDeduped) {
+    const auto dir = scratchDir();
+    writeFile(dir / "a.json.gz", "{}");
+    writeFile(dir / "b.json", "{}");
+    writeFile(dir / "c.json.gz", "{}");
+    writeFile(dir / "c.json", "{}"); // a slot holding BOTH
+    writeFile(dir / "d.txt", "{}"); // not a slot
+    std::filesystem::create_directories(dir / "e.json"); // a DIR
+    auto names = listSaveSlots(dir);
+    ASSERT_TRUE(names.ok()) << names.error().message;
+    // a (new form), b (legacy), c (both = ONCE) — sorted, deduped.
+    EXPECT_EQ(*names, (std::vector<std::string> {"a", "b", "c"}));
+    // The both-form slot's summary comes from the .json.gz (the current
+    // form's win in the two-stage find).
+    writeFile(dir / "c.json.gz",
+              saveJson(22, 111, 0.1, 1, 1, 1, 20.0));
+    writeFile(dir / "c.json", saveJson(99, 222, 0.9, 9, 9, 9, 1.0));
+    auto sum = readSaveSlotSummary(dir, "c");
+    ASSERT_TRUE(sum.ok());
+    EXPECT_EQ(sum->format, 22);
+    EXPECT_EQ(sum->seed, 111);
+}
+
+TEST(SaveSlotTest, V318_CopyAndRenameMigrateToTheNewForm) {
+    const auto dir = scratchDir();
+    writeFile(dir / "src.json", saveJson(22, 7, 0.5, 1, 2, 3, 20.0));
+    // Copy: a legacy source reads, the destination is the NEW form.
+    auto cp = copySaveSlot(dir, "src", "dst");
+    ASSERT_TRUE(cp.ok()) << cp.error().message;
+    EXPECT_FALSE(std::filesystem::exists(dir / "dst.json"));
+    EXPECT_EQ(readFile(dir / "dst.json.gz"), readFile(dir / "src.json"));
+    // Rename: the slot moves to the NEW form, the legacy twin is gone.
+    auto rn = renameSaveSlot(dir, "src", "ren");
+    ASSERT_TRUE(rn.ok()) << rn.error().message;
+    EXPECT_FALSE(std::filesystem::exists(dir / "src.json"));
+    EXPECT_EQ(readFile(dir / "ren.json.gz"),
+              saveJson(22, 7, 0.5, 1, 2, 3, 20.0));
+    // A rename of a BOTH-form slot consumes the whole slot (the twin's
+    // deletion — no lingering file under the old name).
+    writeFile(dir / "tw.json.gz", "gz");
+    writeFile(dir / "tw.json", "legacy");
+    auto rn2 = renameSaveSlot(dir, "tw", "tw2");
+    ASSERT_TRUE(rn2.ok()) << rn2.error().message;
+    EXPECT_FALSE(std::filesystem::exists(dir / "tw.json"));
+    EXPECT_FALSE(std::filesystem::exists(dir / "tw.json.gz"));
+    EXPECT_EQ(readFile(dir / "tw2.json.gz"), "gz"); // the .json.gz's won
+}
+
+TEST(SaveSlotTest, V318_DeleteConsumesBothForms) {
+    const auto dir = scratchDir();
+    writeFile(dir / "a.json.gz", "gz");
+    writeFile(dir / "a.json", "legacy");
+    auto ok = deleteSaveSlot(dir, "a");
+    ASSERT_TRUE(ok.ok()) << ok.error().message;
+    EXPECT_FALSE(std::filesystem::exists(dir / "a.json"));
+    EXPECT_FALSE(std::filesystem::exists(dir / "a.json.gz"));
+    // A double delete is a naming (the slot is gone).
+    auto again = deleteSaveSlot(dir, "a");
+    EXPECT_FALSE(again.ok());
+    EXPECT_NE(again.error().message.find("no such save slot"),
+              std::string::npos);
 }

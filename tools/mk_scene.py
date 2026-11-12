@@ -2,14 +2,14 @@
 """V3-16a: the guide's SCENE surgery.
 
 A scene = a prepared start-point for a guide demo (the committed asset
-assets/demos/scenes/<name>.json): a FRESH world run (no input, the
+assets/demos/scenes/<name>.json.gz): a FRESH world run (no input, the
 config's seed) + a SPEC's mutations (the player's state / the time /
 block journal entries) re-serialized in the game's deterministic gzip
 container (the PITS 385 recipe: the pinned 10-B header + the raw
 deflate 6 + the CRC32/ISIZE trailer — byte-reproducible).
 
 Usage:
-  python3 tools/mk_scene.py <spec.json> [--out assets/demos/scenes/<name>.json]
+  python3 tools/mk_scene.py <spec.json> [--out assets/demos/scenes/<name>.json.gz]
 
 The spec (the closed face):
   {"name": "pilot_mine",
@@ -170,8 +170,11 @@ def main():
     payload = json.dumps(doc, sort_keys=True, separators=(',', ':'),
                          ensure_ascii=False).encode('utf-8')
     if out_path is None:
+        # V3-18: the scene's extension rides the save family's rename
+        # (the .json.gz — the gzip container's visible extension; the
+        # game's two-stage find still reads a legacy .json).
         out_path = os.path.join(ROOT, 'assets', 'demos', 'scenes',
-                                name + '.json')
+                                name + '.json.gz')
     out_path = out_path if os.path.isabs(out_path) else os.path.join(ROOT, out_path)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, 'wb') as f:

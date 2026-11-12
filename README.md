@@ -68,7 +68,7 @@ cmake --build build
 # 从指定时刻开始（0 = 黎明前, 0.25 = 正午, 0.5 = 日落, 0.75 = 午夜）
 ./build/bin/tokenmine --time 0.75
 
-# 存档槽（Phase 13）：启动时加载 data/saves/<slot>.json（若存在），干净退出时写回
+# 存档槽（Phase 13）：启动时加载 data/saves/<slot>.json.gz（若存在；legacy <slot>.json 同名探测零迁移），干净退出时写回
 ./build/bin/tokenmine --save myworld
 # 忽略现有存档、从全新世界开始（退出时覆盖该槽）
 ./build/bin/tokenmine --save myworld --new

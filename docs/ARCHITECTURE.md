@@ -21,7 +21,7 @@ tokenmine/
 │                    # JSON）；demos/ = shipped 示例 .dmo（V3-9）
 ├── config/          # 用户配置（config.json，已提交文件：view_distance 80 /
 │                    # day_length 600 用户调值，不还原；内容改动仅用户要求时做）
-├── data/            # 存档目录（data/saves/<slot>.json，format 30 = gzip 容器
+├── data/            # 存档目录（data/saves/<slot>.json.gz，format 30 = gzip 容器
 │                    # V3-7；data/demos/ 录制 demo V3-9，gitignore）
 ├── logs/            # 运行日志（logs/tokenmine.log）
 ├── src/
@@ -179,7 +179,7 @@ render-only 保持。
   状态效果倒计时/自动存档计时——长墙钟跑触发 36s 饥饿 tick 类相位差，
   savenorm 按类剥离（PITS 244/286）。
 
-### 存档（format 30，data/saves/<slot>.json）
+### 存档（format 30，data/saves/<slot>.json.gz【V3-18 起；legacy .json 同名探测零迁移】）
 
 seed + time + player{pos/velocity/yaw/pitch/health/absorption/hunger/
 saturation/armor[4]/effects/oxygen/xp/xp_seed/respawn/stats/tutorial/

@@ -105,7 +105,7 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 启动游戏）。
 
 - 存档槽名只允许字母/数字/`_`/`-`（防路径穿越）；文件在 `data/saves/
-  <slot>.json`（git 忽略）。**V3-7 起 on-disk = 确定性 gzip(JSON) 容器
+  <slot>.json.gz`（git 忽略）。**V3-7 起 on-disk = 确定性 gzip(JSON) 容器
   （默认开）**：JSON 格式化输出、`gunzip` 后可直接阅读；加载按魔数
   `1f 8b` 自动探测编码——**旧明文档（format 28 及更早）零迁移直读**；
   `config` 键 `save.compression: "gzip"|"none"` 严格读（absent = gzip

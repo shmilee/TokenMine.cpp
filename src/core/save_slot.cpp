@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <system_error>
 
@@ -25,15 +26,32 @@ bool isValidSlotName(const std::string& name) {
     return true;
 }
 
-namespace {
-
-const std::filesystem::path slotPath(const std::filesystem::path& dir,
-                                     const std::string& name) {
-    return dir / (name + ".json");
+std::filesystem::path slotWritePath(const std::filesystem::path& dir,
+                                    const std::string& name) {
+    return dir / (name + ".json.gz");
 }
 
-std::string readFileBytes(const std::filesystem::path& path,
-                          std::string& error) {
+std::filesystem::path slotReadPath(const std::filesystem::path& dir,
+                                   const std::string& name) {
+    // V3-18: the two-stage find — the current write form (.json.gz)
+    // first, the legacy name (.json — the V3-7-era file, its content
+    // already the gzip container) after = zero migration (a legacy slot
+    // loads and the NEXT write re-names it to the new form).
+    const std::filesystem::path current = slotWritePath(dir, name);
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(current, ec) && !ec) {
+        return current;
+    }
+    const std::filesystem::path legacy = dir / (name + ".json");
+    if (std::filesystem::is_regular_file(legacy, ec) && !ec) {
+        return legacy;
+    }
+    return {};
+}
+
+namespace {
+
+std::string readBytes(const std::filesystem::path& path, std::string& error) {
     std::ifstream in(path);
     if (!in) {
         error = "cannot open save file '" + path.string() + "'";
@@ -61,20 +79,35 @@ Result<std::vector<std::string>> listSaveSlots(
         return MC_FAIL("save path '" + dir.string() +
                        "' is not a directory");
     }
+    // V3-18: BOTH extensions enumerate (the new .json.gz form + the
+    // legacy .json); a slot holding both surfaces ONCE (the std::set's
+    // dedup — the .json.gz wins the summary find via slotReadPath).
+    std::set<std::string> seen;
     for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
         if (!entry.is_regular_file(ec) || ec) {
             continue; // subdirectories and special files are not slots
         }
         const std::string p = entry.path().filename().string();
-        constexpr const char* kExt = ".json";
-        constexpr std::size_t kExtLen = 5;
-        if (p.size() <= kExtLen ||
-            p.compare(p.size() - kExtLen, kExtLen, kExt) != 0) {
+        std::string stem;
+        constexpr const char* kGzExt = ".json.gz";
+        constexpr const char* kLegacyExt = ".json";
+        if (p.size() > std::char_traits<char>::length(kGzExt) &&
+            p.compare(p.size() - std::char_traits<char>::length(kGzExt),
+                      std::char_traits<char>::length(kGzExt), kGzExt) == 0) {
+            stem = p.substr(0, p.size() -
+                                 std::char_traits<char>::length(kGzExt));
+        } else if (p.size() > std::char_traits<char>::length(kLegacyExt) &&
+                   p.compare(p.size() - std::char_traits<char>::length(kLegacyExt),
+                             std::char_traits<char>::length(kLegacyExt),
+                             kLegacyExt) == 0) {
+            stem = p.substr(0, p.size() -
+                                 std::char_traits<char>::length(kLegacyExt));
+        } else {
             continue; // not a slot file
         }
-        names.push_back(p.substr(0, p.size() - kExtLen));
+        seen.insert(stem);
     }
-    std::sort(names.begin(), names.end()); // deterministic order
+    names.assign(seen.begin(), seen.end()); // sorted (the set's order)
     return names;
 }
 
@@ -86,9 +119,13 @@ Result<SaveSlotSummary> readSaveSlotSummary(
     }
     SaveSlotSummary out;
     out.name = name;
-    const std::filesystem::path path = slotPath(dir, name);
+    const std::filesystem::path path = slotReadPath(dir, name);
+    if (path.empty()) {
+        out.problem = "no such save slot '" + name + "'";
+        return out;
+    }
     std::string openError;
-    const std::string data = readFileBytes(path, openError);
+    const std::string data = readBytes(path, openError);
     if (!openError.empty()) {
         out.problem = openError;
         return out;
@@ -151,27 +188,24 @@ Result<void> copySaveSlot(const std::filesystem::path& dir,
         return MC_FAIL("invalid save slot name '" + dst +
                        "' (letters, digits, '_' or '-')");
     }
-    const std::filesystem::path from = slotPath(dir, src);
-    const std::filesystem::path to = slotPath(dir, dst);
-    std::error_code ec;
-    if (!std::filesystem::is_regular_file(from, ec)) {
-        return MC_FAIL("no such save slot '" + src + "' (" +
-                       from.string() + " is not a file)");
+    const std::filesystem::path from = slotReadPath(dir, src);
+    if (from.empty()) {
+        return MC_FAIL("no such save slot '" + src + "'");
     }
-    if (ec) {
-        return MC_FAIL("cannot stat save slot '" + src + "': " + ec.message());
-    }
-    if (std::filesystem::exists(to, ec)) {
+    const std::filesystem::path to = slotWritePath(dir, dst);
+    if (!slotReadPath(dir, dst).empty()) {
         return MC_FAIL("save slot '" + dst + "' already exists (delete it "
                        "first or pick another name)");
     }
     std::string openError;
-    const std::string data = readFileBytes(from, openError);
+    const std::string data = readBytes(from, openError);
     if (!openError.empty()) {
         return MC_FAIL("copying save slot '" + src + "': " + openError);
     }
     // SAVE-1 atomic write: the destination holds either nothing (a
-    // failed copy) or the complete source bytes — never half.
+    // failed copy) or the complete source bytes — never half. V3-18:
+    // the destination is written in the NEW form (the copy re-names a
+    // legacy slot — zero-migration's gentle path).
     return writeAtomicFile(to, data);
 }
 
@@ -185,23 +219,31 @@ Result<void> renameSaveSlot(const std::filesystem::path& dir,
         return MC_FAIL("invalid save slot name '" + dst +
                        "' (letters, digits, '_' or '-')");
     }
-    const std::filesystem::path from = slotPath(dir, src);
-    const std::filesystem::path to = slotPath(dir, dst);
-    std::error_code ec;
-    if (!std::filesystem::is_regular_file(from, ec)) {
-        return MC_FAIL("no such save slot '" + src + "' (" +
-                       from.string() + " is not a file)");
+    const std::filesystem::path from = slotReadPath(dir, src);
+    if (from.empty()) {
+        return MC_FAIL("no such save slot '" + src + "'");
     }
-    if (ec) {
-        return MC_FAIL("cannot stat save slot '" + src + "': " + ec.message());
-    }
-    if (std::filesystem::exists(to, ec)) {
+    if (!slotReadPath(dir, dst).empty()) {
         return MC_FAIL("save slot '" + dst + "' already exists");
     }
+    const std::filesystem::path to = slotWritePath(dir, dst);
+    std::error_code ec;
     std::filesystem::rename(from, to, ec);
     if (ec) {
         return MC_FAIL("cannot rename save slot '" + src + "' to '" + dst +
                        "': " + ec.message());
+    }
+    // V3-18: the slot is consumed WHOLE — if the source held BOTH forms
+    // (a .json.gz + a legacy .json), the moved one is gone but the twin
+    // lingers: delete it (the rename moves the slot, not one of its
+    // files).
+    const std::filesystem::path twin = slotReadPath(dir, src);
+    if (!twin.empty()) {
+        std::filesystem::remove(twin, ec);
+        if (ec) {
+            return MC_FAIL("cannot delete the renamed slot's twin file '" +
+                           twin.string() + "': " + ec.message());
+        }
     }
     return {};
 }
@@ -212,19 +254,24 @@ Result<void> deleteSaveSlot(const std::filesystem::path& dir,
         return MC_FAIL("invalid save slot name '" + name +
                        "' (letters, digits, '_' or '-')");
     }
-    const std::filesystem::path path = slotPath(dir, name);
+    const std::filesystem::path found = slotReadPath(dir, name);
+    if (found.empty()) {
+        return MC_FAIL("no such save slot '" + name + "'");
+    }
     std::error_code ec;
-    if (!std::filesystem::is_regular_file(path, ec)) {
-        return MC_FAIL("no such save slot '" + name + "' (" + path.string() +
-                       " is not a file)");
-    }
-    if (ec) {
-        return MC_FAIL("cannot stat save slot '" + name + "': " + ec.message());
-    }
-    std::filesystem::remove(path, ec);
+    std::filesystem::remove(found, ec);
     if (ec) {
         return MC_FAIL("cannot delete save slot '" + name + "': " +
                        ec.message());
+    }
+    // V3-18: the slot is consumed WHOLE (the twin form, if present).
+    const std::filesystem::path twin = slotReadPath(dir, name);
+    if (!twin.empty()) {
+        std::filesystem::remove(twin, ec);
+        if (ec) {
+            return MC_FAIL("cannot delete save slot '" + name + "' twin '" +
+                           twin.string() + "': " + ec.message());
+        }
     }
     return {};
 }
