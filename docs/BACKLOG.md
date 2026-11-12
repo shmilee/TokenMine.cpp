@@ -543,13 +543,17 @@
    v3.1.0 = V3-7 首功能版；PITS 355 三件套）。
 4. **每版发布前必做性能 A/B**（用户硬要求），旧侧 = 上一 release tag 或
    指定 commit。
-5. tag/release 政策（**11-05 用户定案 = 3.x 逐版 release 撤销**）：
-   3.1.0–3.10.0 只留 **v3.9.0** 代表（用户字面定案，非最新版 v3.10.0；
-   Latest = v3.9.0），9 release + 9 tag 删除（正文归档
-   /tmp/opencode/v3x_releases_archive/ 留底）；v3.0.0 开启版保留。后续
-   3.x 版本（v3.11.0 收官）不打逐版 tag/release，矩阵收官发单一 release
-   （notes 覆盖 3.x 全史），用户可推翻。2.x 历史 = v2.0.0 / v2.10.0
-   release + v2.19.0 收官 tag（无 release，历史遗留）。
+5. tag/release 政策（**用户定案：3.x 不打逐版 tag/release，只留节点**）：
+   11-05：v3.1.0–v3.10.0 只留 **v3.9.0** 代表（9 release + 9 tag 删除，
+   正文归档 /tmp/opencode/v3x_releases_archive/ 留底）；v3.0.0 开启版保留。
+   11-13：v3.12.0–v3.46.0 只留 **v3.31.0（1f36bf2）/ v3.40.0（0575203）**
+   两节点 tag（用户字面定案；33 tag 删除全无 release，SHA 清单见
+   变更记录 + /tmp/opencode/v3x_del33_shas.txt 留底）；**v3.40.0 发单一
+   代表 release**（= GitHub Latest，notes 覆盖 v3.12.0–v3.40.0 29 版）；
+   v3.31.0 = tag-only 无 release。v3.x 终态 = 5 tag（v3.0.0 / v3.9.0 /
+   v3.11.0 / v3.31.0 / v3.40.0）3 release（v3.0.0 / v3.11.0 / v3.40.0）。
+   2.x 历史 = v2.0.0 / v2.10.0 release + v2.19.0 收官 tag（无 release，
+   历史遗留）。
 6. **11-06 矩阵扩容 + 大项相位拆分**：6 个 ⬜ 项（V3-10 / V3-11 /
    V3-12 / V3-13 / V3-14 / V3-15）执行顺序待用户定案——**大项按相位
    取**（V3-8b = v3.14.0 已完成）——建议序 = V3-13（小·UX 收尾）→
@@ -562,6 +566,20 @@
 
 ## 变更记录（3.x）
 
+- **11-13（GitHub tag 精简，用户要求）**：v3.12.0–v3.46.0 逐版 tag 35 个
+  （≈ 一 commit 一 tag）→ 只留 **v3.31.0（1f36bf2）/ v3.40.0（0575203）**
+  两节点 tag（用户字面定案）；**33 tag 删除**（全无 release，SHA 留档：
+  648b80d / 0705139 / d61a757 / 55da85d / 6b031c5 / 57c417e / b71cb5e /
+  e1320b4 / 113ed11 / 11c1840 / bc26bed / d0c0435 / e2e2071 / 23c4e7c /
+  94dc3d9 / 3f9ae83 / a8259c8 / 1f2e10f / d316cfc / 75266af / 477082c /
+  7e4a1a2 / 00cb62a / 4139b4e / 0b45caf / 5f9e1d4 / 001f696 / b65f32b /
+  f4b7aab / 2409b26 / 1b8ebc0 / 3cdb7b9 / aac5fa7，完整 tag→SHA 表
+  /tmp/opencode/v3x_del33_shas.txt）；**v3.40.0 新增单一代表 release**
+  （title "TokenMine.cpp v3.40.0"，notes 覆盖 v3.12.0–v3.40.0 29 版 =
+  末地维度 / 多人联机 / 教学 demo 族 10 主题 / 下界战斗链 / 创造模式 /
+  打磨）→ **GitHub Latest = v3.40.0**（v3.11.0 摘 Latest）；v3.31.0 =
+  tag-only。v3.x 终态 = 5 tag 3 release + 孤儿 tag v2.19.0 / v3.9.0
+  （历史遗留无 release，留待用户定夺）。执行顺序 #5 已刷新。
 - **11-06（V3-15 生存/表现小批完成）**：**v3.16.0 已提交**（门 206 全
   PASS：结构免疫第 86 次【S1 ≡ base19】+ S2a portal 场景【存档 ×2 RAW
   + 动画关控制臂 ×2 RAW + 单跑目检漩涡流动/蒸汽 + f400/f460 diff 3560
