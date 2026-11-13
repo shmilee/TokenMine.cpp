@@ -85,6 +85,10 @@ void printUsage() {
         "                    (the config's seed's 360-degree view from the\n"
         "                    spawn's eye, 8 views stitched — the one-shot,\n"
         "                    no loop / no save)\n"
+        "  --panorama-scene <n>\n"
+        "                    V3-22: the panorama's staged world (the\n"
+        "                    committed scene asset — the wide horizon's\n"
+        "                    column-forcing ring + the prepared time)\n"
         "  --menu-open <p>   V3-21: open the menu at the page (title/login/\n"
         "                    multiplayer/settings/tutorial — the demo's\n"
         "                    return's deep-link)\n"
@@ -277,6 +281,12 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             const char* v = nextValue(i, "--panorama");
             if (!v) return false;
             args.panoramaOut = v;
+        } else if (arg == "--panorama-scene") {
+            // V3-22: the panorama's staged world (the committed scene
+            // asset — the wide horizon's ring + the prepared time).
+            const char* v = nextValue(i, "--panorama-scene");
+            if (!v) return false;
+            args.panoramaScene = v;
         } else if (arg == "--menu-open") {
             // V3-21: the menu's deep-link (the closed vocabulary — the
             // named reject's belt; the demo's return's handoff page).
@@ -464,6 +474,13 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
          !args.script.empty() || args.listDemos)) {
         err = "--panorama runs the world once (the strip's render): "
               "drop the game-run flags";
+        return false;
+    }
+    // V3-22: --panorama-scene is the --panorama's companion (the
+    // staged world's name — alone it is the dead flag).
+    if (!args.panoramaScene.empty() && args.panoramaOut.empty()) {
+        err = "--panorama-scene names the panorama's world: "
+              "--panorama <out> is required";
         return false;
     }
     // V3-21: --menu-open is the MENU's deep-link — every flag that

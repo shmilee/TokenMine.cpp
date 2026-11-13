@@ -24,7 +24,11 @@ The spec (the closed face):
    "clear_entities": true,
    "blocks": [[x, y, z, "name"], ...],
    "fluids": [[x, y, z, level, "water"|"lava"], ...],
-   "campfires": [[x, y, z], ...]}
+   "campfires": [[x, y, z], ...],
+   "ring": {"center": [x, z] or "spawn", "radius": 48, "y": 90}}
+   # ring = one air edit per COLUMN of the chebyshev square (radius in
+   # chunk columns, center in blocks) — forces generation + the fog's
+   # filled radius (the panorama's wide horizon's face).
 
 The base run's slot is __scene_tmp (overwritten each run — the scene
 is the source of truth, never the base's slot).
@@ -114,6 +118,46 @@ def apply_spec(doc, spec):
                                  ' collides with the base worldgen'
                                  ' journal' % (name, i, x, y, z))
             fls.append([x, y, z, level, kind])
+    # V3-22: the column-forcing ring (the panorama's wide horizon —
+    # every column of the chebyshev square gets ONE air edit at
+    # spec y: applyWorldEdits' getOrCreateChunk generates the column
+    # and the ensureColumn completes it; the air-at-air cell is a
+    # no-op journal-wise (the same-state's removal's belt). A base
+    # journal collision at the edit cell is a loud reject.)
+    if 'ring' in spec:
+        r = spec['ring']
+        if len(r) != 3 or set(r.keys()) != {'center', 'radius', 'y'}:
+            raise SystemExit('scene %s: ring must have exactly '
+                             '{center, radius, y}' % name)
+        c = r['center']
+        if c == 'spawn':
+            # the base run's player's column (the fresh world's
+            # kSpawnCandidates's pick — the self-referencing face:
+            # the ring follows the seed's spawn).
+            p = doc['players'][0]['pos']
+            c = [int(p[0]), int(p[2])]
+        if len(c) != 2 or not all(isinstance(v, int) for v in c):
+            raise SystemExit('scene %s: ring center = [x, z] ints or '
+                             '"spawn"' % name)
+        rad = r['radius']
+        y = r['y']
+        # radius in CHUNK COLUMNS (the fog's chebyshev's unit —
+        # end = radius*16 blocks); the center is in blocks.
+        if not isinstance(rad, int) or not 4 <= rad <= 128:
+            raise SystemExit('scene %s: ring radius %r out of [4, 128] '
+                             'chunk columns' % (name, rad))
+        if not isinstance(y, int) or not 64 <= y <= 127:
+            raise SystemExit('scene %s: ring y %r out of [64, 127] '
+                             '(the guaranteed-air band)' % (name, y))
+        base_cells = {(e[0], e[1], e[2]) for e in doc['blocks']}
+        for dx in range(-rad, rad + 1):
+            for dz in range(-rad, rad + 1):
+                x, z = c[0] + dx * 16, c[1] + dz * 16
+                if (x, y, z) in base_cells:
+                    raise SystemExit('scene %s: ring edit at (%d,%d,%d)'
+                                     ' collides with the base journal'
+                                     % (name, x, y, z))
+                doc['blocks'].append([x, y, z, 'air'])
     # V3-16f: the prepared campfires (lit): the four-slot
     # cooking-state entry (the format 13 cross-check: every
     # campfire-family block owns a state entry). The block journal

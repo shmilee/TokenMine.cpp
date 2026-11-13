@@ -55,11 +55,16 @@ constexpr int kCrackStages = 5;
 constexpr int kPanoramaViews = 8;
 constexpr int kPanoramaViewWidth = 640;
 constexpr int kPanoramaViewHeight = 360;
-// V3-21: the panorama's per-view FOV = 360 / views — the views must
-// TILE the circle exactly (no overlap, no gap): the 70-degree game FOV
-// made 8 views span 560 degrees, the wrap's 200-degree jump = the
-// user's visible seam's on-machine catch.
-constexpr float kPanoramaFovDegrees = 360.0f / kPanoramaViews;
+// V3-21 → V3-22: the panorama's per-view HORIZONTAL FOV = 360 / views
+// — the views must TILE the azimuth's circle exactly (no overlap, no
+// gap). Mat4::perspective's first argument is the VERTICAL FOV: the
+// vertical's twin = 2·atan(tan(h/2)·H/W), computed in render's
+// effective-FOV's face. The v3.48 gate-catch (the user's 11-13
+// second report): the tile-exact's value was fed to the vertical's
+// argument — each view then covered a 72.7-degree azimuth, the 8
+// views' 27.7-degree overlap = the every-boundary's scene-cut's root
+// (the grass's / the tree's misalignment the user saw).
+constexpr float kPanoramaHfovDegrees = 360.0f / kPanoramaViews;
 
 inline double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /

@@ -207,6 +207,11 @@ struct GameArgs {
     // 360-degree view from the spawn's eye, stitched, then exit — no
     // loop, no save, no net, no demo).
     std::filesystem::path panoramaOut;
+    // V3-22: the --panorama-scene <name> — the panorama's STAGED
+    // world (the committed assets/demos/scenes asset: the wide
+    // column-forcing ring's horizon + the prepared time; absent =
+    // the fresh config-seed world's bit-line).
+    std::string panoramaScene;
     // V3-21: the --menu-open <page> — the menu's deep-link (the closed
     // title/login/multiplayer/settings/tutorial vocabulary; the Join's
     // sub-page is the Multiplayer's interior, never a boot's page).
@@ -468,9 +473,12 @@ private:
     // V3-20: the withUi's gate (the panorama's seam's world-only's
     // render; the gameplay's default true = the bit-identical's line).
     void render(bool withUi = true);
-    // V3-21: the render's effective FOV (the panorama's capture's
-    // override; the gameplay's -1 = the kFovDegrees' bit-line).
-    float effectiveRenderFov() const;
+    // V3-21 → V3-22: the render's effective VERTICAL FOV (degrees —
+    // Mat4::perspective's first argument's face): the gameplay's
+    // -1 override = the kFovDegrees' bit-line; the panorama's
+    // capture = the kPanoramaHfovDegrees' horizontal's vertical's
+    // twin (2·atan(tan(h/2)·H/W) — the tile-exact's circle's belt).
+    float effectiveRenderVFovDegrees() const;
     // Rebuilds the GPU mesh of every column whose merged GL mesh is stale
     // (ctx.columnRebuildPending). PIPE-1: the mesher's COMPUTE no longer runs
     // here — worker mesh jobs (postMeshJobs / integrateMeshJobs) refresh
@@ -563,6 +571,11 @@ private:
     // the chunk and re-queues it), and the column joins
     // m_columnRebuildPending for the GL upload. FIFO = deterministic.
     void integrateMeshJobs(const DimCtx& ctx);
+    // V3-22: the panorama's staged horizon (the loaded-but-unmeshed
+    // columns' synchronous main-thread mesh — the MeshJob's worker
+    // body verbatim; the --panorama's one-shot's face, the gameplay's
+    // boot never calls it).
+    void meshLoadedColumns(const DimCtx& ctx);
     // Unloads the loaded columns far behind the player (the memory leak
     // fix: streaming only ever ADDED chunks — a radius-80 session grew to
     // 11k+ chunks / several GB and kept rising). Runs right after
@@ -1667,6 +1680,15 @@ std::optional<MobHit> targetMob() const;
     // setCrystalsAlive / setDragonAnchors feeds, the shoot callback's
     // dragon fireball wiring, the growl/breath seams).
     void spawnDragon();
+    // V3-22: the panorama's STAGED dragon (the spawnDragon's
+    // overworld twin — the no-callback's silent orbit, the center's
+    // relative anchors; the --panorama's one-shot's face).
+    void spawnPanoramaDragon(const Vec3& camera);
+    // V3-22: the panorama's STAGED animals (the pool's under-camera's
+    // gate-catch — the mid-distance's herd on the generator's
+    // surface, the spawnPanoramaDragon's twin; the --panorama's
+    // one-shot's face).
+    void spawnPanoramaMobs(const Vec3& center);
     // V3-10d: the CRYSTAL shatter (the breakBlock's explode hook's
     // caller-over — the arrow sweep's direct path): set the cell air
     // (the journal's choke), relight, detonate the block's data
@@ -1781,10 +1803,12 @@ std::optional<MobHit> targetMob() const;
     // lazy load — the menu's path only: the demo/net/--new's boots
     // never render the menu = the asset's zero cost there).
     Texture m_menuPanorama;
-    // V3-21: the render's FOV's override (the panorama's capture's
-    // kPanoramaFovDegrees' tile-exact's face; -1 = the game's
-    // kFovDegrees' bit-line, the gameplay's every render's default).
-    float m_panoramaFovDegrees = -1.0f;
+    // V3-21 → V3-22: the render's per-view HORIZONTAL FOV's override
+    // (the panorama's capture's kPanoramaHfovDegrees' tile-exact's
+    // face — the vertical's twin is computed in
+    // effectiveRenderVFovDegrees; -1 = the game's kFovDegrees'
+    // vertical's bit-line, the gameplay's every render's default).
+    float m_panoramaHfovDegrees = -1.0f;
     // V3-17c: the login's name (the net HELLO's carrier — the 17d's
     // consumption; the solo's display-only face) + the tutorial's
     // two-level's state (-1 = the chapters, >= 0 = the chapter's demos)

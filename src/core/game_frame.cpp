@@ -1909,6 +1909,94 @@ void Game::spawnDragon() {
     }
 }
 
+void Game::spawnPanoramaDragon(const Vec3& camera) {
+    // V3-22: the panorama's STAGED dragon (the spawnDragon's overworld
+    // twin — the user's content's face: the silhouette in the sky).
+    // The NO-callback's silent flight (the shoot/breath/growl's
+    // callbacks are the End gameplay's wiring — the panorama sets
+    // none, the AI's guards no-op them, the per-frame ambient stream
+    // draw's contract is unchanged = the determinism's belt). The
+    // anchors are relative to the CAMERA (the overlook's eye — the
+    // gate-catch: relative to the player's FEET the orbit sat 15
+    // blocks UNDER the camera = below the frame's horizon). The
+    // orbit = the camera's EAST offset (150 blocks) + the 15-block
+    // lift: the dragon's elevation over the overlook = atan(15 /
+    // 120..180) = 4.8..7.1 degrees — INSIDE the frame's +8.5-degree
+    // top (the directly-overhead orbit's 45-degree minimum's
+    // gate-catch: the dragon must fly at the horizon's band, not the
+    // zenith's). The spawn = the orbit's near-Z point (the warmup's
+    // orbit's arc's deterministic start).
+    const Mob* def = m_mobs.mobTypes.findByName("ender_dragon");
+    if (def == nullptr) {
+        MC_LOG_ERROR("panorama: the dragon's definition is missing (the"
+                     " init's resolution's belt should have named it)");
+        return;
+    }
+    constexpr float kPanoramaDragonOrbitDistance = 150.0f; // +X's face
+    constexpr float kPanoramaDragonOrbitLift = 15.0f;
+    constexpr float kPanoramaDragonPerchLift = 13.0f;
+    constexpr float kPanoramaDragonPerchLead = 25.0f; // +Z's offset
+    constexpr float kPanoramaDragonSpawnLead = 30.0f; // the orbit's
+                                                     // start's -Z point
+    const Vec3 orbit {camera.x + kPanoramaDragonOrbitDistance,
+                      camera.y + kPanoramaDragonOrbitLift, camera.z};
+    const Vec3 perch {camera.x + kPanoramaDragonOrbitDistance,
+                      camera.y + kPanoramaDragonPerchLift,
+                      camera.z + kPanoramaDragonPerchLead};
+    const std::uint64_t seed =
+        static_cast<std::uint64_t>(currentSeed()) ^
+        static_cast<std::uint64_t>(kSaltDragon);
+    const Vec3 spawn {orbit.x, orbit.y, orbit.z - kPanoramaDragonSpawnLead};
+    auto mob = std::make_unique<MobEntity>(m_world, m_blocks, *def, spawn,
+                                           seed);
+    mob->setDragonAnchors(perch, orbit);
+    mob->setCrystalsAlive(0, false); // the End's spawn's twin (the
+                                     // roll's perch p = 1/3's belt)
+    m_entities.push_back(std::move(mob));
+    MC_LOG_DEBUG("panorama: the dragon staged at (" +
+                 std::to_string(spawn.x) + ", " +
+                 std::to_string(spawn.y) + ", " +
+                 std::to_string(spawn.z) + ")");
+}
+
+void Game::spawnPanoramaMobs(const Vec3& center) {
+    // V3-22: the panorama's STAGED animals (the pool's spawns anchor
+    // on the primary player = directly UNDER the overlook's camera —
+    // below the frame's gate-catch — so the visible mid-distance's
+    // herd is staged here, the spawnPanoramaDragon's twin). Each mob
+    // stands on the generator's SURFACE (the pure function's
+    // read — no fall, no damage, the frame-0's settled pose) at a
+    // named offset; the per-index seed = the golden-ratio's
+    // increment (the PITS 391④ stream-isolation's discipline).
+    constexpr float kPanoramaHerdX = 120.0f; // the +X's mid-distance
+                                             // (the frame's -12
+                                             // degree's band, the
+                                             // 120-block's belt)
+    const char* const kinds[] = {"sheep", "cow", "pig", "chicken"};
+    const float dx[] = {-6.0f, 8.0f, 2.0f, -2.0f};
+    const float dz[] = {10.0f, -4.0f, 12.0f, -10.0f};
+    constexpr std::uint64_t kSaltPanoramaMobs = 0x310D5A0B5E3C4F21ULL;
+    for (std::size_t i = 0; i < std::size(kinds); ++i) {
+        const Mob* def = m_mobs.mobTypes.findByName(kinds[i]);
+        if (def == nullptr) {
+            MC_LOG_ERROR("panorama: the mob's definition is missing: '" +
+                         std::string(kinds[i]) + "'");
+            return;
+        }
+        const float x = center.x + kPanoramaHerdX + dx[i];
+        const float z = center.z + dz[i];
+        const int ground = m_generator->surfaceHeight(
+            static_cast<int>(std::floor(x)), static_cast<int>(std::floor(z)));
+        const std::uint64_t seed =
+            static_cast<std::uint64_t>(currentSeed()) ^
+            (kSaltPanoramaMobs ^
+             (0x9E3779B97F4A7C15ULL * static_cast<std::uint64_t>(i + 1)));
+        m_entities.push_back(std::make_unique<MobEntity>(
+            m_world, m_blocks, *def,
+            Vec3 {x, static_cast<float>(ground) + 1.0f, z}, seed));
+    }
+}
+
 bool Game::shatterCrystalAt(int x, int y, int z) {
     // V3-10d: the crystal's shatter (the breakBlock's explode hook's
     // caller-over — the player's break AND the arrow's sweep both flow

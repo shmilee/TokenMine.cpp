@@ -3,9 +3,34 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–431，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–432，新条目继续前插于尾部块首。
 
-- **全景读回滞后 + 覆盖门盲点（PITS 431，门 239 v3.49.0
+- **全景周期布景 + 菜单键盘五坑（PITS 432，门 240 v3.50.0
+  V3-22）**——① **Mat4::perspective 首参 = 垂直 FOV**：v3.48 的
+  「tile 精确」把 45° 喂给垂直参——640×360 tile 实际水平覆盖
+  2·atan(tan22.5°·640/360) = 72.7°，8 向跨 581.8° = 每向重叠
+  27.7°：**每个拼接处场景回跳 27.7°**（用户所见「草地树木都对不
+  上、存在割裂」）；列差接缝带量 ≤28 且回跳落雾区/同质地形可混
+  过 ≤40 绝对带 = 门盲点族（门 238/239 双漏）。纪律 = N 向闭环
+  环带每向**水平** FOV 必 = 360/N，喂投影前换算垂直参（2·atan
+  (tan(h/2)·H/W)）；接缝带断言必用**边界梯度 vs tile 内参考比**
+  （≥3x = 拼接不连续），绝对值带只当辅助。② **静止相机不扩流
+  送**（kStreamTriggerDistance = 1 须玩家贴缺失列，生成域中心永
+  不 engage）：全景宽地平线 = **同步列烘焙**（meshLoadedColumns：
+  MeshJob worker 本体逐字主线程化），5000 帧预热走级联 = 6 分钟
+  零网格的门内捕获。③ **loadedColumns 镜像 ≠ 世界 chunk map**：
+  scene 的 ensureColumn 列在世界但不在镜像（setBlock first-touch
+  的 incomplete-column 腰带），draw pass 恰遍历镜像 → 49-of-9400
+  捕获；同步烘焙须**世界权威枚举 + 镜像回填**双做。④ **ring 半径
+  单位 = chunk 列**（雾 chebyshev 的端 = radius×16 块）：mk_scene
+  初稿按块实现（48 块 = 3 chunk）= 全景 ±3 列小贴片全帧纯天空
+  捕获——生成类坐标参数先核单位再核量级。⑤ **布景锚定 = 相机
+  相对**：初稿 feet 相对 → 龙（feet+15）在 +30 相机**下** 15 块
+  出帧、Steve/池动物在正下方 −90° 出帧；池生成锚定 primary 玩
+  家 = 可见中距动物须帧 0 布景（surfaceHeight+1 无坠伤 + 每
+  index 黄金比例盐隔离流 + 无回调龙 = shoot/breath/growl 守卫
+  no-op 的静默飞行）。
+- - **全景读回滞后 + 覆盖门盲点（PITS 431，门 239 v3.49.0
   V3-21 续）**——① **双缓冲默认读缓冲 = GL_BACK：swap 后读 =
   上一帧**：项目零 glReadBuffer 调用，readFrontBuffer 的
   glReadPixels 读的是后缓冲——renderPanorama 旧序 render → swap

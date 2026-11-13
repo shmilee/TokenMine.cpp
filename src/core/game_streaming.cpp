@@ -185,6 +185,78 @@ Game::DimCtx Game::endCtx() {
 // upload (rebuildColumnMesh — the GL context is main-thread only).
 // ---------------------------------------------------------------------------
 
+void Game::meshLoadedColumns(const DimCtx& ctx) {
+    // V3-22: the panorama's staged horizon (the scene's ring's columns
+    // generated at the load — the ensureColumn's belt — but never
+    // MESHED: the streaming's engagement is the player's proximity's
+    // face, a stationary overlook never engages, the 2-columns-per-
+    // frame cascade's 6-minute's gate-catch) and never MIRROR-ED:
+    // the loadedColumns mirror's setBlock first-touch's incomplete-
+    // column's belt leaves the ring out (the 49-of-9400's gate-catch)
+    // — while the draw pass's column list IS that mirror. So the
+    // authority here is the WORLD's chunk map (chunkPositions), and
+    // every meshed column is inserted into the mirror (the session
+    // ends with the capture — the panorama's one-shot's belt). A
+    // synchronous MAIN-THREAD pass: the MeshJob's worker body verbatim
+    // (the 3x3 snapshot + the unchanged ChunkMesher + the integrate's
+    // landing) in lexicographic order (the set's own = the
+    // determinism). The gameplay's boot never calls it (the mesh is a
+    // pure function of the world — the bit-line holds).
+    std::set<ColumnPos> worldColumns;
+    for (const ChunkPos& cpos : ctx.world.chunkPositions()) {
+        worldColumns.insert({cpos.x, cpos.z});
+    }
+    std::vector<ColumnPos> todo;
+    for (const ColumnPos& col : worldColumns) {
+        const ChunkPos probe {col.x, 0, col.z};
+        if (ctx.chunkMeshData.find(probe) == ctx.chunkMeshData.end()) {
+            todo.push_back(col); // the layer-0's absence = no landing
+        }
+    }
+    for (const ColumnPos& col : todo) {
+        MeshJob job;
+        job.column = col;
+        job.meshes.resize(kVerticalChunksPerColumn);
+        job.snap = World(ctx.world.skyless());
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dz = -1; dz <= 1; ++dz) {
+                for (int cy = 0; cy < kVerticalChunksPerColumn; ++cy) {
+                    const ChunkPos cp {col.x + dx, cy, col.z + dz};
+                    const Chunk* src = ctx.world.findChunk(cp);
+                    if (src != nullptr) {
+                        job.snap.insertSnapshotChunk(cp, *src);
+                    }
+                }
+            }
+        }
+        const ChunkMesher mesher(job.snap, m_blocks, m_atlas.layout(),
+                                 m_aoEnabled);
+        for (std::size_t cy = 0; cy < job.meshes.size(); ++cy) {
+            job.meshes[cy] = mesher.mesh({col.x, static_cast<int>(cy),
+                                          col.z});
+        }
+        for (std::size_t cy = 0; cy < job.meshes.size(); ++cy) {
+            ctx.chunkMeshData[ChunkPos {col.x, static_cast<int>(cy),
+                                         col.z}] = std::move(job.meshes[cy]);
+        }
+        ctx.streaming.loadedColumns.insert(col); // the draw pass's list
+        ctx.columnRebuildPending.insert(col);
+    }
+    if (!todo.empty()) {
+        auto r = updateChunkMeshes(ctx); // the GL's upload's single pass
+        if (!r.ok()) {
+            MC_LOG_ERROR("panorama: the column mesh's upload failed: " +
+                         r.error().describe());
+        }
+        MC_LOG_DEBUG("panorama: meshed " + std::to_string(todo.size()) +
+                     " staged columns (of " +
+                     std::to_string(worldColumns.size()) +
+                     " world, " +
+                     std::to_string(ctx.streaming.loadedColumns.size()) +
+                     " mirror)");
+    }
+}
+
 Result<void> Game::updateChunkMeshes(const DimCtx& ctx) {
     // The merged GL mesh of every column whose chunk meshes landed this
     // frame (integrateMeshJobs) or earlier (a column can be pending across

@@ -2997,6 +2997,19 @@ Result<void> Game::init(const GameArgs& args) {
         return {};
     }
 
+    // V3-22: the panorama's staged scene (the committed asset — the
+    // applyDemoArgs' existence's named reject's twin; the load rides
+    // tryLoadSave's scene's face inside buildScene below).
+    if (!m_args.panoramaScene.empty()) {
+        if (demoSceneReadPath(m_args.panoramaScene).empty()) {
+            return MC_FAIL("panorama's scene '" + m_args.panoramaScene +
+                           "' not found (the committed "
+                           "assets/demos/scenes directory — the staged"
+                           " world asset is missing)");
+        }
+        m_demoSceneName = m_args.panoramaScene;
+    }
+
     auto scene = buildScene();
     MC_TRY(scene);
 

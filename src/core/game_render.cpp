@@ -792,9 +792,21 @@ void Game::drawParticles(const Mat4& view, const Mat4& projection,
 // Phase 15: the screen-space UI pass
 // ---------------------------------------------------------------------------
 
-float Game::effectiveRenderFov() const {
-    return (m_panoramaFovDegrees >= 0.0f) ? m_panoramaFovDegrees
-                                          : kFovDegrees;
+float Game::effectiveRenderVFovDegrees() const {
+    if (m_panoramaHfovDegrees < 0.0f) {
+        return kFovDegrees; // the gameplay's vertical's bit-line
+    }
+    // The panorama's capture: the per-view HORIZONTAL FOV is the
+    // tile-exact's 360/views; Mat4::perspective's first argument is
+    // the VERTICAL FOV — derive it from the current window's aspect
+    // (the capture's forced 640x360's belt). tan(v/2) =
+    // tan(h/2)·(H/W).
+    const float hRad = m_panoramaHfovDegrees *
+                       static_cast<float>(M_PI) / 180.0f;
+    const float aspect = static_cast<float>(m_window.height()) /
+                         static_cast<float>(m_window.width());
+    const float vRad = 2.0f * std::atan(std::tan(hRad / 2.0f) * aspect);
+    return vRad * 180.0f / static_cast<float>(M_PI);
 }
 
 void Game::render(bool withUi) {
@@ -836,7 +848,7 @@ void Game::render(bool withUi) {
 
     // V3-21: the effective FOV (the panorama's capture's 45-degree's
     // tile-exact; the gameplay's -1 override = the kFovDegrees' line).
-    const float fovRadians = effectiveRenderFov() *
+    const float fovRadians = effectiveRenderVFovDegrees() *
                              static_cast<float>(M_PI) / 180.0f;
     const Mat4 projection = Mat4::perspective(
         fovRadians,
@@ -1220,7 +1232,7 @@ void Game::drawSkyObjects(const Mat4& view, const Mat4& projection,
     // V3-21: the effective FOV (the panorama's capture's 45-degree's
     // tile-exact — the sky sprite's pixel-to-world's twin).
     const float pxToWorld = 2.0f *
-                             std::tan(effectiveRenderFov() *
+                             std::tan(effectiveRenderVFovDegrees() *
                                       static_cast<float>(M_PI) /
                                       360.0f) /
                              static_cast<float>(viewportHeight);
@@ -1406,8 +1418,18 @@ Result<void> Game::renderPanorama() {
                        std::to_string(kPanoramaViewWidth) + "x" +
                        std::to_string(kPanoramaViewHeight) + ")");
     }
-    constexpr float kPanoramaAltitude = 18.0f; // the overlook's lift
-    constexpr float kPanoramaPitch = -0.30f;   // the down-look (radians)
+    // V3-22: the wide overlook (the user's "farther" request — the
+    // +30 lift + the near-level pitch puts the SKY band (sun's zenith's
+    // outside, the clouds' horizon band) + the far fogged horizon +
+    // the near terrain/trees all in the 26.2-degree vertical frame:
+    // frame top = pitch + 13.1 = +8.5 degrees above the horizon).
+    constexpr float kPanoramaAltitude = 30.0f; // the overlook's lift
+    constexpr float kPanoramaPitch = -0.08f;   // the near-level's face
+                                               // (radians, -4.6 degrees)
+    constexpr float kPanoramaSteveDistance = 110.0f; // the protagonist's
+                                                    // +X's mid-distance
+                                                    // (the frame's -11
+                                                    // degree's band)
     // The warm-up (the f30's discipline: the terrain's mesh integrates in
     // update()'s streaming, not buildScene's — the render-only warm-up
     // showed the sky's-only face, the gate-catch). A FIXED dt = the
@@ -1416,6 +1438,10 @@ Result<void> Game::renderPanorama() {
     // yet (the f150's first-spawn's belt, well past N), the CLEAR's
     // first segment holds (>= kClearMin), no particles — the static
     // landscape.
+    // V3-22: the scene's ring's columns meshed synchronously (the
+    // streaming cascade's stationary-player's gate-catch — the 6-
+    // minute's 5000-frame's warmup replaced by the one-shot pass).
+    meshLoadedColumns(overworldCtx());
     constexpr int kPanoramaWarmup = 40;
     constexpr double kPanoramaDt = 1.0 / 60.0;
     for (int f = 0; f < kPanoramaWarmup; ++f) {
@@ -1424,13 +1450,55 @@ Result<void> Game::renderPanorama() {
         update(kPanoramaDt);
         ++m_frameCount;
     }
+    // V3-22: the panorama's STAGING (the user's 11-13 content's face:
+    // the sky + the cloud layer (the frame-top's band) + the Steve's
+    // body (the SECOND player — the local body's first-person skip's
+    // belt: only a non-local player's body draws) + the mid-distance's
+    // HERD (the pool's spawns anchor on the primary player = directly
+    // under the overlook's camera — below the frame's gate-catch) +
+    // the dragon's SILENT flight (the no-callback's spawnDragon's
+    // twin — the shoot/breath/growl's wiring is the End gameplay's
+    // only, the AI's guards no-op them, the stream contract's zero
+    // change = the determinism's belt)). The staged entities are the
+    // process's ONE-SHOT (the --panorama's exit's belt — never saved,
+    // never in a game's boot). The camera's position is computed
+    // BEFORE the staging: the content's anchors are its relatives
+    // (the gate-catch's belt — the feet-relative's first draft put
+    // the dragon 15 blocks UNDER the camera, the Steve + the pool's
+    // herd at the frame's -90 degrees).
     const Vec3 basePos = m_camera.position;
+    const Vec3 cameraPos = basePos + Vec3 {0.0f, kPanoramaAltitude,
+                                           0.0f};
+    netAddPlayer(1);
+    if (m_players[1]) {
+        const float sx = basePos.x + kPanoramaSteveDistance;
+        const float sz = basePos.z + 3.0f;
+        const int sy = m_generator->surfaceHeight(
+            static_cast<int>(std::floor(sx)),
+            static_cast<int>(std::floor(sz)));
+        m_players[1]->setPosition(
+            Vec3 {sx, static_cast<float>(sy) + 1.0f, sz});
+    }
+    spawnPanoramaMobs(basePos);
+    spawnPanoramaDragon(cameraPos);
+    // The second warmup (the staging's settle's face): the pool's
+    // mobs fill their cap-4 (the first_spawn_frame 60's past) + the
+    // staged dragon's orbit's arc + the Steve's 1-block's settle —
+    // the mesh ran synchronously above (no streaming cascade's wait).
+    constexpr int kPanoramaStagingWarmup = 300;
+    for (int f = 0; f < kPanoramaStagingWarmup; ++f) {
+        m_input.frameBegin();
+        m_input.pump();
+        update(kPanoramaDt);
+        ++m_frameCount;
+    }
     const float baseYaw = m_camera.yaw;
     const float basePitch = m_camera.pitch;
-    // V3-21: the tile-exact's FOV for the whole capture (the warm-up's
-    // render + the views; restored before the return).
-    m_panoramaFovDegrees = kPanoramaFovDegrees;
-    m_camera.position = basePos + Vec3 {0.0f, kPanoramaAltitude, 0.0f};
+    // V3-21 → V3-22: the tile-exact's HORIZONTAL FOV for the whole
+    // capture (the warm-up's render + the views; restored before the
+    // return).
+    m_panoramaHfovDegrees = kPanoramaHfovDegrees;
+    m_camera.position = cameraPos;
     m_camera.pitch = kPanoramaPitch;
     // The warm-up render (the first swap's capture races the GL's first
     // exchange on Mesa — the view-0's black gate-catch): render one
@@ -1468,7 +1536,7 @@ Result<void> Game::renderPanorama() {
                         "lag — the wrap's seam will show)");
         }
     }
-    m_panoramaFovDegrees = -1.0f; // the gameplay's FOV's restore
+    m_panoramaHfovDegrees = -1.0f; // the gameplay's FOV's restore
     m_camera.position = basePos;
     m_camera.yaw = baseYaw;
     m_camera.pitch = basePitch;
