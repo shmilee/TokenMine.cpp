@@ -10,3 +10,11 @@ opencode-sessions/
 .cache/
 .vscode/
 .idea/
+__pycache__/
+# demo/scene authoring's work files (the committed assets are the
+# .dmo / the scenes' .json.gz). The scene's regeneration specs
+# (tools/scenes/<name>.json) are local work files — kept on disk on
+# purpose, never committed (the "explicit paths only" rule's belt);
+# the audit's outputs + the intermediate's dmo's are junk:
+tools/scenes/*_segments.json
+assets/demos/*_timeline.dmo
