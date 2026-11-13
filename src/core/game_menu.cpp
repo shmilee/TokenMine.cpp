@@ -703,7 +703,11 @@ void Game::renderMenu() {
     const Vec4 kText {1.0f, 1.0f, 1.0f, 0.92f};
     const Vec4 kTextDim {1.0f, 1.0f, 1.0f, 0.55f};
     const Vec4 kHover {1.0f, 1.0f, 1.0f, 1.0f};
-    const Vec4 kHoverBar {1.0f, 1.0f, 1.0f, 0.12f};
+    // V3-23: the selection's emphasis (the user's 11-13 report: the
+    // 0.12-alpha's bar "not obvious enough" — the solid white's 0.30
+    // + the orange's left accent's 3px).
+    const Vec4 kHoverBar {1.0f, 1.0f, 1.0f, 0.30f};
+    const Vec4 kSelectionAccent {1.0f, 0.82f, 0.0f, 1.0f};
     const Vec4 kSelected {1.0f, 0.82f, 0.0f, 1.0f};
     const Vec4 kPanel {0.08f, 0.08f, 0.11f, 0.88f};
 
@@ -751,11 +755,18 @@ void Game::renderMenu() {
                          batchFor(color, true, &m_fontTexture).vertices);
     };
     // The hover's bar (rendered under the text — the immediate flush).
+    // V3-23: the selection's emphasis (the white's 0.30 bar + the
+    // orange's 3px left accent — the "obvious selection's" face).
     auto addHoverBar = [&](const MenuButton& r) {
         UiBatch bar;
         bar.color = kHoverBar;
         addQuad(bar, r.x, r.y, r.w, r.h);
         drawUiBatch(bar.vertices, ortho, m_fontTexture, false, bar.color);
+        UiBatch accent;
+        accent.color = kSelectionAccent;
+        addQuad(accent, r.x, r.y, 3, r.h);
+        drawUiBatch(accent.vertices, ortho, m_fontTexture, false,
+                    accent.color);
     };
     // The centered text's x (the textWidth at the DRAWN scale — the
     // fScale's twin, so the centering survives a font_scale config).
