@@ -271,7 +271,7 @@ net.motd 默认 "TokenMine.cpp"【键缺省不写用户 config P32】→ 客户�
 CLI --listen 显式面不变】+ **R7 菜单面守卫**【writeSave 收口 +
 connectHost.empty()——菜单加入运行时设 connectHost 绕过 argv 拒收
 = 客机写档可覆主机槽，门内定案捕获 PITS 428②】；menuStub* 死码 +
-2 单测清除（17d 实面取代）；**零字体**（创建/游戏/加入全在 457 表）；3021/3021（+4：Multiplayer 2 + Join 3 + Welcome codec 1，Stub 2 删净）+ S1 重锚 base20 = v3.46.0 标题【×2 逐字节 + 版本行有界】+ 登陆臂回归 ≡ --new savenorm EXACT + **网络臂 A/B/D 三形×2**【A 菜单主机 hgate + CLI 客：WELCOME hostName → 客机 net chat[hgate] 首聊行 + 主机 client 'client' joined + hash f300/f600 逐字 / B CLI 主机 + 菜单客机 cgate：HELLO 名 + 旧形 "host" 回落 + 主机 save savenorm×2 / D 纯 CLI：legacy host/client + 默认 MOTD + hash 逐字】+ canary 4×2 新≡旧（tm_v345）跨树 RAW EXACT ×4【零字体门面延续】+ 性能 A/B 同档【new upd med 0.607/0.599/0.599 vs old 0.591/0.597/0.584 median 同档 + render/swap 同档 + changesApplied 9/3/1 vs 9/2/1【win2 = real-dt 域先例】】；PITS 428 四坑【WM 二窗互杀方向定式 / R7 菜单面守卫 / 60fps 帧预算 700 / xdotool 名搜索污染三路冗余】）**；**v3.47.0 = V3-20 用户实机诉求批：demo 中文标题 + 菜单全景背景 + 戏字 + 主机无限等待（门 237，11-13：11-12 用户实机 4 条反馈——①教学二级英文 = index.json 每条目 +title 可选字段【absent = 文件名回落；10 条中文：挖矿打造工具/种植与进食/受伤与回血/房子与床/建造皇宫/材料收集/引水成河/黑夜历险/下界传送门/末影龙讨伐】+ **字形安全 fail-fast**【title 每码点 = ASCII 可打印或 kCjkGlyphs 成员，否则 init 命名拒收 U+XXXX——「创建游？」的门盲点反转为输入纪律：缺字不静默回退问号】；②菜单黑屏 = **全景背景**【`--panorama <out>` CLI seam：config 种子 fresh 世界 + 40 帧 fixed-dt update 预热【地形网格在流送集成，render-only = 纯天空】+ 出生点瞭望 +18 俯 0.30 rad + 8 向 640×360 拼接 5120×360 闭环环带【×2 字节恒等 = 确定性生成器】+ committed 资产 704 KB；renderMenu 延迟加载【仅菜单路径零成本】+ **cover-fit UV**【非等比拉伸 = 树木拉尖捕获】+ 帧锁定慢速平移【m_menuFrame 纯函数 = ×2 RAW；闭环 = GL_REPEAT 无缝】+ 0.55 冷暗面纱；render() +withUi 参数【缺省 true 位级】+ takeScreenshot 重构 readFrontBuffer；缺失 = warn + 旧纯色回落】；③「创建游？」= **字体 +12**【戏植血房宫皇城河黑传送讨——戏 U+620F 实证缺失 = 门 236 文档误记；atlas 2208→2272 71 行 + 后缀重格 + top-512 红线恒等 + FNV re-pin 5062bdace4d01da3 = 跨树文本边缘白名单一次性门面】；④主机 10s 超时 = **首客无限等待**【250ms 轮询 + 1s 重渲染节拍【等待期窗口显示天空+HUD——黑窗改善】+ 10s 心跳日志 + ESC/关窗命名取消【输入泵】；附加客 3s 窗不变；模拟冻结 = fresh WELCOME 零字节权威不变】；3022/3022（+1 IndexTitleParse 6 面）+ S1 重锚 base20 = v3.47.0 全景标题【×2 逐字节 + 100% 背景 diff = 用户诉求论证 + 槽不创建 → 111279 B】+ 全景臂【×2 字节恒等 + ≡ committed】+ 标题臂 + S6 缺字形拒收 + 菜单页 ×2 RAW【多人戏修复 + 教学中文标题】+ 等待臂【13s 延迟连接 ×2：心跳 + net chat[wgate] + 宿主档 savenorm EXACT @700f【火稳态帧纪律 PITS 429⑤】】+ canary 4×2 新≡旧（tm_v346）跨树 RAW = 文本边缘白名单【144-187 px 0.02% 审计 100%】+ 性能 A/B 同档【median 交错 + changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 429 五坑【新菜单页须截图断言门盲点 / 全景两预热 / cover-fit / CJK 列宽 / net 臂火稳态帧 700f】）；**v3.48.0 = V3-21 用户实机诉求批 2：全景接缝 + 菜单 demo 返回（门 238，11-13：11-13 用户实机 2 条反馈——①全景接缝【kPanoramaFovDegrees = 360/8 tile 精确：根因 = 70°×8 = 560° wrap 200° 跳变；render FOV 覆写面 m_panoramaFovDegrees【-1 = 70° 位级】+ effectiveRenderFov 投影/天空像素双消费点；资产再生 384 KB ×2 字节恒等 + ≡ committed】②菜单 demo Q 返回教学菜单【进程干净 re-exec ~2s 重载形——架构裁决：就地重建世界 = 无先例大重构超诉求批；--menu-open <page> 封闭词表深链 seam【九形 bypass 旗互斥拒收】+ m_menuDemoReturn/m_demoQuitByAudienceKey 双旗【窗口关闭 = 进程退出形不变 + CLI --demo Q 位级红线】+ execRestartToMenu【池 drain → 音频 → 窗口/SDL → execv /proc/self/exe；save/record 跳过 = 观察红线】】；3023/3023（+1 MenuOpenTest 10 面）+ S1 重锚 base20 = 全景标题 47961 B【×2 逐字节 + 全背景 diff 37.4% 诉求论证 + 槽不创建】+ 接缝臂【tile 边界 mean-abs-diff max 28.1 ≤ 40 PASS】+ menu-open 臂 ×2 RAW + S6 两面 rc 2 + demo 返回臂 ×2【finished 轮询 + Q + banner ×2 + 日志链路】+ canary 4×2 跨树 RAW EXACT ×4【零字体门面终结，PITS 425④ 不复发】+ 性能 A/B 同档【median 同档 + changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 430 三坑【tile 精确 / demo pacing = 录制机 dt / re-exec banner 计数 + 活捕 ≠ 帧锁定】）**
+2 单测清除（17d 实面取代）；**零字体**（创建/游戏/加入全在 457 表）；3021/3021（+4：Multiplayer 2 + Join 3 + Welcome codec 1，Stub 2 删净）+ S1 重锚 base20 = v3.46.0 标题【×2 逐字节 + 版本行有界】+ 登陆臂回归 ≡ --new savenorm EXACT + **网络臂 A/B/D 三形×2**【A 菜单主机 hgate + CLI 客：WELCOME hostName → 客机 net chat[hgate] 首聊行 + 主机 client 'client' joined + hash f300/f600 逐字 / B CLI 主机 + 菜单客机 cgate：HELLO 名 + 旧形 "host" 回落 + 主机 save savenorm×2 / D 纯 CLI：legacy host/client + 默认 MOTD + hash 逐字】+ canary 4×2 新≡旧（tm_v345）跨树 RAW EXACT ×4【零字体门面延续】+ 性能 A/B 同档【new upd med 0.607/0.599/0.599 vs old 0.591/0.597/0.584 median 同档 + render/swap 同档 + changesApplied 9/3/1 vs 9/2/1【win2 = real-dt 域先例】】；PITS 428 四坑【WM 二窗互杀方向定式 / R7 菜单面守卫 / 60fps 帧预算 700 / xdotool 名搜索污染三路冗余】）**；**v3.47.0 = V3-20 用户实机诉求批：demo 中文标题 + 菜单全景背景 + 戏字 + 主机无限等待（门 237，11-13：11-12 用户实机 4 条反馈——①教学二级英文 = index.json 每条目 +title 可选字段【absent = 文件名回落；10 条中文：挖矿打造工具/种植与进食/受伤与回血/房子与床/建造皇宫/材料收集/引水成河/黑夜历险/下界传送门/末影龙讨伐】+ **字形安全 fail-fast**【title 每码点 = ASCII 可打印或 kCjkGlyphs 成员，否则 init 命名拒收 U+XXXX——「创建游？」的门盲点反转为输入纪律：缺字不静默回退问号】；②菜单黑屏 = **全景背景**【`--panorama <out>` CLI seam：config 种子 fresh 世界 + 40 帧 fixed-dt update 预热【地形网格在流送集成，render-only = 纯天空】+ 出生点瞭望 +18 俯 0.30 rad + 8 向 640×360 拼接 5120×360 闭环环带【×2 字节恒等 = 确定性生成器】+ committed 资产 704 KB；renderMenu 延迟加载【仅菜单路径零成本】+ **cover-fit UV**【非等比拉伸 = 树木拉尖捕获】+ 帧锁定慢速平移【m_menuFrame 纯函数 = ×2 RAW；闭环 = GL_REPEAT 无缝】+ 0.55 冷暗面纱；render() +withUi 参数【缺省 true 位级】+ takeScreenshot 重构 readFrontBuffer；缺失 = warn + 旧纯色回落】；③「创建游？」= **字体 +12**【戏植血房宫皇城河黑传送讨——戏 U+620F 实证缺失 = 门 236 文档误记；atlas 2208→2272 71 行 + 后缀重格 + top-512 红线恒等 + FNV re-pin 5062bdace4d01da3 = 跨树文本边缘白名单一次性门面】；④主机 10s 超时 = **首客无限等待**【250ms 轮询 + 1s 重渲染节拍【等待期窗口显示天空+HUD——黑窗改善】+ 10s 心跳日志 + ESC/关窗命名取消【输入泵】；附加客 3s 窗不变；模拟冻结 = fresh WELCOME 零字节权威不变】；3022/3022（+1 IndexTitleParse 6 面）+ S1 重锚 base20 = v3.47.0 全景标题【×2 逐字节 + 100% 背景 diff = 用户诉求论证 + 槽不创建 → 111279 B】+ 全景臂【×2 字节恒等 + ≡ committed】+ 标题臂 + S6 缺字形拒收 + 菜单页 ×2 RAW【多人戏修复 + 教学中文标题】+ 等待臂【13s 延迟连接 ×2：心跳 + net chat[wgate] + 宿主档 savenorm EXACT @700f【火稳态帧纪律 PITS 429⑤】】+ canary 4×2 新≡旧（tm_v346）跨树 RAW = 文本边缘白名单【144-187 px 0.02% 审计 100%】+ 性能 A/B 同档【median 交错 + changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 429 五坑【新菜单页须截图断言门盲点 / 全景两预热 / cover-fit / CJK 列宽 / net 臂火稳态帧 700f】）；**v3.48.0 = V3-21 用户实机诉求批 2：全景接缝 + 菜单 demo 返回（门 238，11-13：11-13 用户实机 2 条反馈——①全景接缝【kPanoramaFovDegrees = 360/8 tile 精确：根因 = 70°×8 = 560° wrap 200° 跳变；render FOV 覆写面 m_panoramaFovDegrees【-1 = 70° 位级】+ effectiveRenderFov 投影/天空像素双消费点；资产再生 384 KB ×2 字节恒等 + ≡ committed】②菜单 demo Q 返回教学菜单【进程干净 re-exec ~2s 重载形——架构裁决：就地重建世界 = 无先例大重构超诉求批；--menu-open <page> 封闭词表深链 seam【九形 bypass 旗互斥拒收】+ m_menuDemoReturn/m_demoQuitByAudienceKey 双旗【窗口关闭 = 进程退出形不变 + CLI --demo Q 位级红线】+ execRestartToMenu【池 drain → 音频 → 窗口/SDL → execv /proc/self/exe；save/record 跳过 = 观察红线】】；3023/3023（+1 MenuOpenTest 10 面）+ S1 重锚 base20 = 全景标题 47961 B【×2 逐字节 + 全背景 diff 37.4% 诉求论证 + 槽不创建】+ 接缝臂【tile 边界 mean-abs-diff max 28.1 ≤ 40 PASS】+ menu-open 臂 ×2 RAW + S6 两面 rc 2 + demo 返回臂 ×2【finished 轮询 + Q + banner ×2 + 日志链路】+ canary 4×2 跨树 RAW EXACT ×4【零字体门面终结，PITS 425④ 不复发】+ 性能 A/B 同档【median 同档 + changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 430 三坑【tile 精确 / demo pacing = 录制机 dt / re-exec banner 计数 + 活捕 ≠ 帧锁定】）；**v3.49.0 = V3-21 续 全景读回滞后修复（门 239，11-13：用户 v3.48.0 复验报接缝仍在 + 诊断「两边树木被截断」= 门 238 环带角度覆盖缺口——项目零 glReadBuffer 调用【默认读缓冲 = GL_BACK】+ 旧序 render→swap→read = 8 tile 逐帧滞后：tile 1 == tile 0 像素恒等 + 新 tile5/6 == 旧 tile6/7 位级 0.0 实证 = [v0][v0][v1]…[v6] **view 7 的 45° 缺失**【×2 恒等 + 列差接缝带双双抓不到 = 门盲点族】；修 = **读回时序 render→read→swap**【swap 前读后缓冲 = 刚画完的帧，呈现竞态出捕获面；takeScreenshot swap 后「落后一帧」既有语义 PITS 391② 独立不动】+ readFrontBuffer 头注释如实化 + in-code 相邻 tile 恒等 WARN 腰带 + **门臂新增角度覆盖断言**【相邻 tile 必异 mean abs < 0.01 判 FAIL——环带类资产须断言覆盖不止连续性】+ 资产再生 401 KB【tile 0 位级不变，tiles 1–7 前移一格】；3023/3023【banner re-pin 1】+ 覆盖臂【tile 差 8.06/13.50/15.59/9.82/3.68/2.04/3.23 全 > 0.01 + wrap 对 4.64 = 正常场景梯度】+ S1 重锚 base20 = 全景标题 47967 B【旧锚 diff 73 px 版本行有界】+ 全景臂 ×2 恒等 + ≡ committed + menu-open 臂 ×2 RAW + S6 两面 rc 2 + canary 4×2 新≡旧（tm_v348）跨树 RAW EXACT ×4【demo 路径位级——改面仅 --panorama 捕获序】+ 性能 A/B 同档【median 交错 + changesApplied 9/3/1 逐位 + 终档跨树 savenorm EXACT】；PITS 431 两坑【swap 后读 = 上一帧 / 门的视觉验证须到内容完整性】）**
 
   ——**3.x 矩阵
 21 项 = 原 11 项全 ✅（v3.1.0–v3.11.0 门 191–201）+ 矩阵后 v3.12.0
@@ -293,7 +293,7 @@ pilot ④（门 222）+ 16b ✅ v3.33.0 = ⑤体力⑥回血（门 223）+
 + 16e ✅ v3.36.0 = ⑧材料（门 226，build 章第二支，7 biome 床
 33 标本）+ 16f ✅ v3.37.0 = ⑨河流（门 227，build 章第三支，19841f）
 + 16g ✅ v3.38.0 = ⑩黑夜历险（门 228，survival 章首支，18301f，弓箭
- combat + 火把环 + 活到天亮，PITS 419 八坑）+ 16h① ✅ v3.39.0 = ①下界门（门 229，dimension 章首支，10865f，obsidian 帧预置 + flint_and_steel 点火 + 站入传送 8:1 落生成帧 + 下 frame 观下界，返程不做，PITS 420 四坑）+ 16h② ✅ v3.40.0 = ②末影龙（门 230，15214f，嵌 12 眼【GOOD cell 末位】+ --dragon-damage 200 仪式 + 珍珠 28° 40-m 一掷 + 破 2 出口水晶 + netherite 甲 enderman 对策，PITS 422 八坑）** = V3-16 10 主题全完成】+ V3-19 死亡屏计时 ✅ v3.41.0（门 231，存活行快照 3 点修，两帧臂 AE 0 vs 旧树 43px 复现）+ V3-18 存档扩展名 ✅ v3.42.0（门 232，.json.gz 新写 + 两级探测零迁移 + scene 资产随改，PITS 424 四坑）+ V3-20 菜单体验小批 ✅ v3.47.0（门 237，demo 中文标题 + 全景背景 + 字体 +12 戏 + 主机无限等待，PITS 429 五坑）+ V3-21 菜单全景接缝 + demo 返回 ✅ v3.48.0（门 238，45° tile 精确拼接 + 进程 re-exec 返回教学菜单 + --menu-open 深链，PITS 430 三坑）+ V3-17 主菜单系统【17a ✅ v3.43.0 标题页 + 教学入口 + 字体 +21
+ combat + 火把环 + 活到天亮，PITS 419 八坑）+ 16h① ✅ v3.39.0 = ①下界门（门 229，dimension 章首支，10865f，obsidian 帧预置 + flint_and_steel 点火 + 站入传送 8:1 落生成帧 + 下 frame 观下界，返程不做，PITS 420 四坑）+ 16h② ✅ v3.40.0 = ②末影龙（门 230，15214f，嵌 12 眼【GOOD cell 末位】+ --dragon-damage 200 仪式 + 珍珠 28° 40-m 一掷 + 破 2 出口水晶 + netherite 甲 enderman 对策，PITS 422 八坑）** = V3-16 10 主题全完成】+ V3-19 死亡屏计时 ✅ v3.41.0（门 231，存活行快照 3 点修，两帧臂 AE 0 vs 旧树 43px 复现）+ V3-18 存档扩展名 ✅ v3.42.0（门 232，.json.gz 新写 + 两级探测零迁移 + scene 资产随改，PITS 424 四坑）+ V3-20 菜单体验小批 ✅ v3.47.0（门 237，demo 中文标题 + 全景背景 + 字体 +12 戏 + 主机无限等待，PITS 429 五坑）+ V3-21 菜单全景接缝 + demo 返回 ✅ v3.48.0（门 238，45° tile 精确拼接 + 进程 re-exec 返回教学菜单 + --menu-open 深链，PITS 430 三坑）+ V3-21 续 全景读回修复 ✅ v3.49.0（门 239，render→read→swap + 角度覆盖门臂，PITS 431 两坑）+ V3-17 主菜单系统【17a ✅ v3.43.0 标题页 + 教学入口 + 字体 +21
 （门 233，S1 重锚 base20，PITS 425）+ 17b ✅ v3.44.0 设置页（门 234，8 行
 表单 + Config::save 写回 + 字体 +3 不增 atlas，PITS 426）+ 17c ✅ v3.45.0
 登陆 + 教学两级（门 235，文本输入生命周期 + 菜单 ≡ CLI demo 位级孪生，
@@ -365,7 +365,7 @@ banner re-pin 1】+ v3.44.0 V3-17b 设置页族 2【布局门几何 8 面 hit/
 布局+4 面 / 教学布局+7 面+mm:ss 逐字 / Title re-pin + banner re-pin 1】
 + v3.46.0 V3-17d 多人/MOTD 族 4【Multiplayer 布局+步 / Join 布局+步+
 ParseHostPort / Welcome codec + cap 拒收；Stub 2 删 = 净 +4；banner
-re-pin 1】+ v3.47.0 V3-20 诉求批族 1【IndexTitleParse 6 面 + banner re-pin 1】+ v3.48.0 V3-21 诉求批族 1【MenuOpenTest 10 面 + banner re-pin 1】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
+re-pin 1】+ v3.47.0 V3-20 诉求批族 1【IndexTitleParse 6 面 + banner re-pin 1】+ v3.48.0 V3-21 诉求批族 1【MenuOpenTest 10 面 + banner re-pin 1】+ v3.49.0 banner re-pin 1【V3-21 续 读回修复零新增测试】），`-Wall -Wextra -Wpedantic -Werror` 恒 0 警告；
   存档 format 33（V3-12c2 多人玩家态：players[] per-player 数组【root player + inventory/inv_grid 迁入 entry，entry 0 = primary 镜像】+ end_xp_entities 恒写【末地 orb 持久化】+ respawn 精确 float【≤32 int cell】；net 快照段 {particles/weather/spawn_counters/particle_break_counter/net_players} 仅 WELCOME 文档携、on-disk 省略；schema 其余与 32 一致）；
   存档 format 32（V3-10a 末地：dimension 词表按 format 分词【30/31
   二词，31 携 "end" = version lie；≥32 三词】+ end 段 {blocks,
@@ -530,6 +530,40 @@ gate"→"he" 实证——文本输入期一切键边沿在捕获前裁决】/ Me
 伸】/ 尾帧 send vs 对端退出竞态【broken pipe = named harmless——
 finalFrame 容错】/ 屏障 anyProgress 死锁形【健康同伴遮死者——min
 水印基准】】；详见 `docs/archive/phase-3.30.0.md`）；
+  门计数 239（**V3-21 续：全景读回滞后修复 v3.49.0** 门 239 全
+PASS【11-13 用户复验 v3.48.0 报障「接缝还在，背景两边的树木被截断
+展示」——用户诊断直指内容级缺口；**TDD 前置复现** = 旧环带 tile 1
+== tile 0 全 640×360 像素恒等（mean abs 0.0）+ 新 tile5/6 == 旧
+tile6/7 逐位 0.0 实证】：**根因**【项目零 glReadBuffer 调用——双缓
+冲上下文默认读缓冲 = GL_BACK，renderPanorama 旧序 render → swap →
+read 使每次读回 = **上一帧**：tile 0 ← 预热帧【恰 = view 0 相机】、
+tile 1 ← view 0、…、tile 7 ← view 6 = 环带 [v0][v0][v1]…[v6]，
+**view 7 的 45° 场景缺失** = wrap 处同一棵树劈两半不闭合；门 238
+未捕获 = ×2 字节恒定【Mesa 行为确定】+ 列差接缝带【滞后产物仍合
+法场景】双双失效 = 门盲点族**】+ **修 = 读回时序 render → read →
+swap**【swap 前读后缓冲 = 刚画完的帧，呈现竞态出捕获面；take-
+Screenshot swap 后「落后一帧」既有语义 PITS 391② 独立不动】+
+readFrontBuffer 头注释如实化【默认读缓冲 + 两种时序分面】+ in-code
+相邻 tile 像素恒等 WARN 腰带【防御纵深】+ **门臂新增角度覆盖断言**
+【相邻 tile 必异 mean abs < 0.01 判 FAIL——环带类资产须断言覆盖不
+止连续性】；资产再生 401 KB【tile 0 位级不变 0.00，tiles 1–7 前移
+一格；wrap 区目检两半互补截断树消失】；3023/3023【banner re-pin 1
+零新增测试】；覆盖臂【tile 差 8.06/13.50/15.59/9.82/3.68/2.04/3.23
+全 > 0.01 + wrap 对 4.64 正常梯度 + 边界带 [11.5,4.1,10.8,28.0,
+1.9,2.1,3.4,4.6] 28.0 = 雾-地形高对比目检零跳变 + 无 WARN】+ S1
+重锚 base20 = v3.49.0 全景标题 47967 B【×2 逐字节 + 旧锚 diff 73 px
+= 版本行有界【PITS 426② 菜单期逐版重锚先例——cover-fit 可见窗未含
+v7 区】+ 槽不创建】+ 全景臂 ×2 恒等 + ≡ committed + menu-open 臂
+×2 RAW + S6 两面 rc 2 命名拒收【v3.48 面位级回归】+ canary 4×2 新
+≡旧（tm_v348 v3.48.0）树内 RAW + savenorm + **跨树 RAW EXACT ×4**
+【改面仅 --panorama 捕获序 = demo 路径全冷位级实证】+ 性能 A/B 同
+档【OW 900f：new upd med 0.652/0.604/0.596 vs old 0.576/0.596/0.592
+median 交错入带【old win1 render max 9.99ms + swap max 14638ms 一
+次性 OS 停顿先例】+ changesApplied 9/3/1 逐位 ×2 + 终档跨树
+savenorm EXACT = 零世界面结构零成本】；PITS 431 两坑【swap 后读 =
+上一帧【GL_BACK 默认读缓冲 + 环带覆盖门臂纪律】/ 门的视觉验证须到
+内容完整性【用户诊断 = 内容级缺口】】；详见
+`docs/archive/phase-3.49.0.md`）；
   门计数 238（**V3-21 用户实机诉求批 2：全景接缝 + 菜单 demo 返回 v3.48.0** 门 238 全
 PASS【11-13 用户实机 2 条反馈（v3.47.0 全景/教学首用）——**V3-21**
 （11-13 用户实机诉求入表，V3-18/19/20 先例）】：**①全景接缝 = 45°
@@ -2186,7 +2220,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
-| [docs/PITS.md](docs/PITS.md) | 坑位合集（430 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
+| [docs/PITS.md](docs/PITS.md) | 坑位合集（431 条，都踩过；pre-3.x → `docs/archive/PITS_PRE3X.md`） | 遇到怪问题 |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 已知问题清单（活跃；pre-2.0 已修复索引 → `docs/archive/PRE2.0-FIXED-INDEX.md`） | 阶段验收前后 |
 | [docs/archive/v0x/ROADMAP.md](docs/archive/v0x/ROADMAP.md) | 0.x 时代 Phase 0–29 规划（已归档） | 了解历史 |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史（3.x 时代逐版明细，v3.0.0 起；2.x 全两批 → `docs/archive/v2x/CHANGELOG.md`、v1.x → `docs/archive/v1x/CHANGELOG.md`、v0.x → `docs/archive/v0x/CHANGELOG.md`） | 查某版改了什么 |

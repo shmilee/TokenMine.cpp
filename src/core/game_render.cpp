@@ -1443,10 +1443,30 @@ Result<void> Game::renderPanorama() {
         m_camera.yaw = baseYaw +
                        static_cast<float>(M_PI * 2.0 * i / kPanoramaViews);
         render(false);
-        m_window.swapBuffers();
+        // V3-21 fix (gate-catch: the read AFTER the swap lags one frame on
+        // Mesa — the default read buffer is GL_BACK, which after the swap
+        // holds the PREVIOUS frame's content: every tile was its
+        // predecessor's, the strip duplicated view 0 and dropped view 7's
+        // 45 degrees — the user's still-visible wrap seam's root). Read
+        // BEFORE the swap: the back buffer then holds exactly the frame
+        // just drawn, the presentation's race is out of the capture.
         PngImage tile;
         MC_TRY(readFrontBuffer(tile));
+        m_window.swapBuffers();
         tiles.push_back(std::move(tile));
+    }
+    // The lag's regression's belt (defense in depth — the gate's
+    // tile-diff arm enforces it with the seed's ground truth): two
+    // adjacent views 45 degrees apart, from the same bird's-eye
+    // overlook, are pixel-identical only if the capture is stale.
+    for (int i = 0; i + 1 < kPanoramaViews; ++i) {
+        if (tiles[static_cast<std::size_t>(i)].rgba ==
+            tiles[static_cast<std::size_t>(i + 1)].rgba) {
+            MC_LOG_WARN("Panorama: adjacent view " + std::to_string(i) +
+                        " and " + std::to_string(i + 1) +
+                        " are pixel-identical (the capture's read may "
+                        "lag — the wrap's seam will show)");
+        }
     }
     m_panoramaFovDegrees = -1.0f; // the gameplay's FOV's restore
     m_camera.position = basePos;

@@ -582,7 +582,12 @@ private:
     Result<void> takeScreenshot(const std::filesystem::path& path);
     // V3-20: takeScreenshot's buffer face extracted (the glReadPixels'
     // flip + the opaque's normalize) — the panorama's stitch re-uses
-    // it without the file's write.
+    // it without the file's write. V3-21 fix: reads the DEFAULT read
+    // buffer (GL_BACK — the context never switches it), so the content
+    // is the frame just DRAWN before the call; called AFTER a swap it
+    // is the previous frame (takeScreenshot's established one-behind
+    // semantics), called BEFORE the swap it is exact (the panorama's
+    // capture's order — the Mesa front-read's lag gate-catch).
     Result<void> readFrontBuffer(PngImage& out);
     // V3-20: the menu's panorama strip's generator (the --panorama's
     // seam — see GameArgs::panoramaOut).
