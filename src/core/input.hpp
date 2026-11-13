@@ -123,6 +123,14 @@ enum class GameKey {
     T, // UX-7: skip the tutorial (locked pointer only)
     G, // V3-11a: the creative mode toggle (the C-key pattern — the
        // game's creative gamemode switch, no other consumer)
+    // V3-22: the menu's keyboard's arrows (the title/login/settings/
+    // tutorial/multiplayer/join's navigation — the gameplay's ZERO
+    // consumer: the demo's / the net's / the sim's faces never see
+    // them pressed outside the menu loop, the bit-line's root).
+    Up,
+    Down,
+    Left,
+    Right,
     // V3-12c1: the chat's ENTER (the net's chat send key — the
     // keyboard's Enter, the gamepad's no mapping; the solo's T
     // tutorial-skip stays, the net's T becomes the chat's toggle).

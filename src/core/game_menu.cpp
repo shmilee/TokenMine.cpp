@@ -263,6 +263,19 @@ int Game::runMenuLoop() {
         const bool click = m_input.wasPressed(MouseButton::Left);
         const bool enter = m_input.wasPressed(GameKey::Enter);
         const bool esc = m_input.wasPressed(GameKey::Escape);
+        // V3-22: the keyboard's nav's edges. The arrows are ALWAYS
+        // free (they never type — the text input's 0x20..0x7e domain's
+        // outside); WASD is gated off while the page's field is open
+        // (a typed 'w' must not move the selection — the text-input
+        // page's letters are the field's).
+        const bool kUp = m_input.wasPressed(GameKey::Up) ||
+                         (!m_textInputOn && m_input.wasPressed(GameKey::W));
+        const bool kDown = m_input.wasPressed(GameKey::Down) ||
+                           (!m_textInputOn && m_input.wasPressed(GameKey::S));
+        const bool kLeft = m_input.wasPressed(GameKey::Left) ||
+                           (!m_textInputOn && m_input.wasPressed(GameKey::A));
+        const bool kRight = m_input.wasPressed(GameKey::Right) ||
+                            (!m_textInputOn && m_input.wasPressed(GameKey::D));
 
         const UiSize space = uiSize();
         if (m_menuPage == MenuPage::Title) {
@@ -275,13 +288,22 @@ int Game::runMenuLoop() {
                     hovered = i;
                 }
             }
-            const MenuStep step = menuStepTitle(click, enter, esc, hovered);
+            // V3-22: the mouse's hover syncs the selection, the
+            // keyboard's arrows move it (the unified m_menuSel).
+            if (hovered >= 0) {
+                m_menuSel = hovered;
+            }
+            m_menuSel = menuMoveSel(m_menuSel, kUp, kDown,
+                                    kMenuTitleItemCount);
+            const MenuStep step =
+                menuStepTitle(click, enter, esc, hovered, m_menuSel);
             if (step.action == MenuAction::Quit) {
                 MC_LOG_INFO("menu: quit (the title's 退出 / ESC)");
                 return 0;
             }
             if (step.page != MenuPage::Title) {
                 m_menuPage = step.page;
+                m_menuSel = -1; // the page-scoped selection's reset
             }
         } else if (m_menuPage == MenuPage::Login) {
             // V3-17c: the name's entry (the SDL text input's face — the
@@ -302,10 +324,19 @@ int Game::runMenuLoop() {
             m_menuName = latinOnly(m_menuName);
             const bool startHovered = layout.start.contains(mx, my);
             const bool backHovered = layout.back.contains(mx, my);
+            // V3-22: the selection's sync/move (the bar's face — the
+            // step's Enter stays the page's primary's 开始).
+            if (startHovered) {
+                m_menuSel = 0;
+            } else if (backHovered) {
+                m_menuSel = 1;
+            }
+            m_menuSel = menuMoveSel(m_menuSel, kUp, kDown, 2);
             const MenuStep step = menuLoginStep(click, enter, esc,
                                                 startHovered, backHovered);
             if (step.action == MenuAction::Back) {
                 m_menuPage = MenuPage::Title;
+                m_menuSel = -1;
             } else if (step.action == MenuAction::StartSingleplayer) {
                 if (m_menuName.empty()) {
                     m_menuName = "player";
@@ -321,11 +352,20 @@ int Game::runMenuLoop() {
             const MenuSettingsLayout layout =
                 menuSettingsLayout(space.width, space.height);
             const int controlId = menuSettingsControl(layout, mx, my);
-            const MenuSettingsStep step =
-                menuSettingsStep(click, enter, esc, controlId);
+            // V3-22: the selection = the ROW (the mouse's control's
+            // hover syncs it, the keyboard's up/down move it, the
+            // left/right adjust it — the Enter's Save stays primary).
+            if (controlId >= 0 && controlId < kMenuSettingsRowCount * 2) {
+                m_menuSel = controlId / 2;
+            }
+            m_menuSel = menuMoveSel(m_menuSel, kUp, kDown,
+                                    kMenuSettingsRowCount);
+            const MenuSettingsStep step = menuSettingsStep(
+                click, enter, esc, controlId, m_menuSel, kLeft, kRight);
             switch (step.kind) {
                 case MenuSettingsStep::Kind::Back:
                     m_menuPage = MenuPage::Title;
+                    m_menuSel = -1;
                     break;
                 case MenuSettingsStep::Kind::Dec:
                     settingsRowAdjust(step.row, -1);
@@ -370,21 +410,31 @@ int Game::runMenuLoop() {
                     hoveredRow = i;
                 }
             }
+            // V3-22: the row's selection (the mouse's sync + the
+            // keyboard's move; the tier's change resets it below).
+            if (hoveredRow >= 0) {
+                m_menuSel = hoveredRow;
+            }
+            m_menuSel = menuMoveSel(m_menuSel, kUp, kDown, rowCount);
             const bool backHovered = layout.back.contains(mx, my);
             const MenuTutorialStep step = menuTutorialStep(
-                click, esc, backHovered, hoveredRow, tier2);
+                click, esc, backHovered, hoveredRow, tier2, m_menuSel,
+                enter, kLeft, kRight, rowCount);
             switch (step.kind) {
                 case MenuTutorialStep::Kind::Back:
                     if (tier2) {
                         m_menuTutorialChapter = -1;
                         m_menuCoopMessage = false;
+                        m_menuSel = -1; // the tier's reset
                     } else {
                         m_menuPage = MenuPage::Title;
+                        m_menuSel = -1;
                     }
                     break;
                 case MenuTutorialStep::Kind::OpenChapter:
                     m_menuTutorialChapter = step.index;
                     m_menuCoopMessage = false;
+                    m_menuSel = -1; // the tier's reset
                     break;
                 case MenuTutorialStep::Kind::LaunchDemo: {
                     const DemoIndexEntry& e = *rowEntries[step.index];
@@ -426,12 +476,24 @@ int Game::runMenuLoop() {
             const bool hostHovered = layout.host.contains(mx, my);
             const bool joinHovered = layout.join.contains(mx, my);
             const bool backHovered = layout.back.contains(mx, my);
+            // V3-22: the button's selection (the mouse's sync + the
+            // keyboard's move; the Enter's twin's activation).
+            if (hostHovered) {
+                m_menuSel = 0;
+            } else if (joinHovered) {
+                m_menuSel = 1;
+            } else if (backHovered) {
+                m_menuSel = 2;
+            }
+            m_menuSel = menuMoveSel(m_menuSel, kUp, kDown, 3);
             const MenuStep step = menuMultiplayerStep(click, esc,
                                                       hostHovered,
                                                       joinHovered,
-                                                      backHovered);
+                                                      backHovered,
+                                                      m_menuSel, enter);
             if (step.action == MenuAction::Back) {
                 m_menuPage = MenuPage::Title;
+                m_menuSel = -1;
             } else if (step.action == MenuAction::HostGame) {
                 if (m_menuName.empty()) {
                     m_menuName = "player";
@@ -464,10 +526,20 @@ int Game::runMenuLoop() {
             m_menuServer = latinOnly(m_menuServer);
             const bool startHovered = layout.start.contains(mx, my);
             const bool backHovered = layout.back.contains(mx, my);
-            const MenuStep step =
-                menuJoinStep(click, esc, startHovered, backHovered);
+            // V3-22: the button's selection (the mouse's sync + the
+            // keyboard's move; the Enter's twin's activation).
+            if (startHovered) {
+                m_menuSel = 0;
+            } else if (backHovered) {
+                m_menuSel = 1;
+            }
+            m_menuSel = menuMoveSel(m_menuSel, kUp, kDown, 2);
+            const MenuStep step = menuJoinStep(click, esc, startHovered,
+                                               backHovered, m_menuSel,
+                                               enter);
             if (step.action == MenuAction::Back) {
                 m_menuPage = MenuPage::Multiplayer;
+                m_menuSel = -1;
             } else if (step.action == MenuAction::JoinGame) {
                 // The host:port's split (the single ':' — the field's
                 // text is "host:port", the parse's twin's belt).
@@ -705,7 +777,10 @@ void Game::renderMenu() {
         addText(version, layout.versionX, layout.versionY, 1.0, kTextDim);
         for (int i = 0; i < kMenuTitleItemCount; ++i) {
             const MenuButton& r = layout.items[i];
-            const bool hov = r.contains(mx, my);
+            // V3-22: the selection's bar (the mouse's hover synced it
+            // in the loop, the keyboard moved it — the -1 = no bar's
+            // zero-pixel's belt).
+            const bool hov = (m_menuSel == i);
             if (hov) {
                 addHoverBar(r);
             }
@@ -739,8 +814,9 @@ void Game::renderMenu() {
                     1.0, kHover);
         }
         addText("（可选）", layout.hintX, layout.hintY, 1.0, kTextDim);
-        const bool startHov = layout.start.contains(mx, my);
-        const bool backHov = layout.back.contains(mx, my);
+        // V3-22: the selection's face (0 = 开始, 1 = 返回).
+        const bool startHov = (m_menuSel == 0);
+        const bool backHov = (m_menuSel == 1);
         if (startHov) {
             addHoverBar(layout.start);
         }
@@ -763,10 +839,14 @@ void Game::renderMenu() {
             const MenuSettingsLayout::Row& r = layout.rows[i];
             const bool hovM = r.minus.contains(mx, my);
             const bool hovP = r.plus.contains(mx, my);
-            if (hovM) {
+            // V3-22: the selected ROW's highlight (the keyboard's
+            // up/down's face — the mouse's control's hover still wins
+            // per-button, the row's bar adds the keyboard's twin).
+            const bool rowSel = (m_menuSel == i);
+            if (hovM || rowSel) {
                 addHoverBar(r.minus);
             }
-            if (hovP) {
+            if (hovP || (rowSel && !isToggleRow(i))) {
                 addHoverBar(r.plus);
             }
             addText(kMenuSettingsLabels[i], r.label.x, r.label.y, 1.5, kText);
@@ -774,7 +854,7 @@ void Game::renderMenu() {
                 // The toggle: the 开/关's state text INSIDE the minus's
                 // button (the plus is dead on a toggle row).
                 addText(settingsRowValueText(i), r.minus.x, r.minus.y, 1.5,
-                        hovM ? kHover : kTextDim);
+                        (hovM || rowSel) ? kHover : kTextDim);
             } else {
                 const std::string value = settingsRowValueText(i);
                 addText(value,
@@ -782,9 +862,9 @@ void Game::renderMenu() {
                             static_cast<int>(textWidth(value, fScale(1.5))) / 2,
                         r.label.y, 1.5, kText);
                 addText("-", r.minus.x, r.minus.y, 1.5,
-                        hovM ? kHover : kTextDim);
+                        (hovM || rowSel) ? kHover : kTextDim);
                 addText("+", r.plus.x, r.plus.y, 1.5,
-                        hovP ? kHover : kTextDim);
+                        (hovP || rowSel) ? kHover : kTextDim);
             }
         }
         const bool hovS = layout.save.contains(mx, my);
@@ -811,7 +891,8 @@ void Game::renderMenu() {
         for (int i = 0; i < (tier2 ? tutorialChapterCount(m_menuTutorialChapter)
                                    : 5); ++i) {
             const MenuButton& r = layout.rows[i];
-            const bool hov = r.contains(mx, my);
+            // V3-22: the selected row's bar (the loop's sync/move).
+            const bool hov = (m_menuSel == i);
             std::string label;
             if (!tier2) {
                 int count = 0;
@@ -878,14 +959,15 @@ void Game::renderMenu() {
                     1.0, kHover);
         }
         addText("（可选）", layout.nameHintX, layout.nameHintY, 1.0, kTextDim);
-        const bool hostHov = layout.host.contains(mx, my);
+        // V3-22: the selected button's bar (0 = 创建, 1 = 加入).
+        const bool hostHov = (m_menuSel == 0);
         if (hostHov) {
             addHoverBar(layout.host);
         }
         addText("创建游戏",
                 centerX("创建游戏", 1.5, layout.host.x, layout.host.w),
                 layout.host.y, 1.5, hostHov ? kHover : kText);
-        const bool joinHov = layout.join.contains(mx, my);
+        const bool joinHov = (m_menuSel == 1);
         if (joinHov) {
             addHoverBar(layout.join);
         }
@@ -930,7 +1012,9 @@ void Game::renderMenu() {
                     1.0, kHover);
         }
         addText("host:port", layout.hintX, layout.hintY, 1.0, kTextDim);
-        const bool startHov = layout.start.contains(mx, my);
+        // V3-22: the selected button's bar (0 = 开始; the 返回 stays
+        // the mouse's hover's face — the ESC's twin).
+        const bool startHov = (m_menuSel == 0);
         if (startHov) {
             addHoverBar(layout.start);
         }

@@ -108,20 +108,42 @@ struct MenuStep {
     MenuAction action = MenuAction::None;
 };
 
+// V3-22: the keyboard's selection's move (the pure function — the
+// test's twin). sel = the selected item's index (-1 = unselected, the
+// no-keyboard's zero-pixel's face); up/down steps with wrap; an
+// unselected sel's first down = 0, first up = the last item. The
+// mouse's hover syncs the SAME sel in the loop (the single selection
+// state — the bar renders the sel, the click's face stays hover's).
+inline int menuMoveSel(int sel, bool up, bool down, int count) {
+    if (count <= 0 || (!up && !down)) {
+        return sel;
+    }
+    if (sel < 0) {
+        return down ? 0 : count - 1;
+    }
+    if (sel >= count) {
+        sel = count - 1;
+    }
+    return up ? (sel - 1 + count) % count : (sel + 1) % count;
+}
+
 // Pure: the title page's step. hovered = the item index under the
-// pointer (-1 = none); click or Enter activates the hovered item; ESC
-// quits. Item 0 (单人) = the LOGIN page (17c: the name's entry before
-// the start); an out-of-range / no hover is a no-op.
+// pointer (-1 = none); click activates the hovered item, Enter the
+// selected one (sel = the keyboard's / mouse-synced selection, -1 =
+// none — the V3-22's unified selection's face); ESC quits. Item 0
+// (单人) = the LOGIN page (17c: the name's entry before the start);
+// an out-of-range / no hover / no selection is a no-op.
 inline MenuStep menuStepTitle(bool click, bool enter, bool esc,
-                              int hovered) {
+                              int hovered, int sel) {
     MenuStep s;
     if (esc) {
         s.action = MenuAction::Quit;
         return s;
     }
-    if ((click || enter) && hovered >= 0 &&
-        hovered < kMenuTitleItemCount) {
-        switch (hovered) {
+    const int target = click && hovered >= 0 ? hovered
+                        : enter && sel >= 0 ? sel : -1;
+    if (target >= 0 && target < kMenuTitleItemCount) {
+        switch (target) {
             case 0:
                 s.page = MenuPage::Login;
                 return s;
@@ -240,8 +262,15 @@ struct MenuSettingsStep {
 
 // Pure: the settings page's step. ESC = back, the Enter = the save's
 // convenience, the click = the hovered control's action.
+// V3-22: sel = the selected ROW (-1 = unselected; the mouse's hover
+// syncs it, the keyboard's up/down move it); left/right adjust the
+// selected row (the toggle row's either direction = the Toggle, the
+// step row's left = Dec / right = Inc — the keyboard's twin of the
+// click's control). Enter = Save (the page's primary action, the
+// selection's independent — the 17b's belt).
 inline MenuSettingsStep menuSettingsStep(bool click, bool enter, bool esc,
-                                         int controlId) {
+                                         int controlId, int sel, bool left,
+                                         bool right) {
     MenuSettingsStep s;
     if (esc) {
         s.kind = MenuSettingsStep::Kind::Back;
@@ -249,6 +278,13 @@ inline MenuSettingsStep menuSettingsStep(bool click, bool enter, bool esc,
     }
     if (enter) {
         s.kind = MenuSettingsStep::Kind::Save;
+        return s;
+    }
+    if ((left || right) && sel >= 0 && sel < kMenuSettingsRowCount) {
+        s.row = sel;
+        s.kind = isToggleRow(sel) ? MenuSettingsStep::Kind::Toggle
+                                  : (left ? MenuSettingsStep::Kind::Dec
+                                          : MenuSettingsStep::Kind::Inc);
         return s;
     }
     if (!click) {
@@ -305,7 +341,9 @@ inline MenuLoginLayout menuLoginLayout(int w, int h) {
 
 // Pure: the login page's step. The whole page is the input's face (the
 // text rides Input::frameText/frameBackspace); the 开始 button / Enter
-// = the start, ESC / the 返回 button = the title.
+// = the start (Enter = the page's primary action — the V3-22's
+// keyboard's 开始/返回 move is the bar's face only, the step's
+// selection-independent), ESC / the 返回 button = the title.
 inline MenuStep menuLoginStep(bool click, bool enter, bool esc,
                               bool startHovered, bool backHovered) {
     MenuStep s;
@@ -365,15 +403,35 @@ struct MenuTutorialStep {
     int index = -1;
 };
 
-inline MenuTutorialStep menuTutorialStep(bool click, bool esc, bool backHovered,
-                                         int hoveredRow, bool tier2) {
+// V3-22: the two-level's keyboard's face — sel = the selected row
+// (-1 = unselected; the mouse's hover syncs it, the keyboard's up/down
+// move it). tier 1: Enter / Right = open the selected chapter; tier 2:
+// Left = back to the chapters, Enter / Right = launch the selected
+// demo (the coop's reject's belt is the caller's — the launch's index
+// rides step.index, the 17c's twin). rowCount = the visible rows'
+// count (tier 1 = 5, tier 2 = the chapter's demos — the sel's clamp's
+// face).
+inline MenuTutorialStep menuTutorialStep(bool click, bool esc,
+                                         bool backHovered, int hoveredRow,
+                                         bool tier2, int sel, bool enter,
+                                         bool left, bool right,
+                                         int rowCount) {
     MenuTutorialStep s;
     if (esc || (click && backHovered)) {
         s.kind = MenuTutorialStep::Kind::Back;
         return s;
     }
-    if (click && hoveredRow >= 0 && hoveredRow < 5) {
-        s.index = hoveredRow;
+    if (tier2 && left) {
+        // The tier-2's Left = the back (the ESC's twin — the sel's
+        // independent: the list's root's step).
+        s.kind = MenuTutorialStep::Kind::Back;
+        return s;
+    }
+    const int target = click && hoveredRow >= 0
+                           ? hoveredRow
+                           : (enter || right) && sel >= 0 ? sel : -1;
+    if (target >= 0 && target < rowCount) {
+        s.index = target;
         s.kind = tier2 ? MenuTutorialStep::Kind::LaunchDemo
                        : MenuTutorialStep::Kind::OpenChapter;
         return s;
@@ -457,9 +515,12 @@ inline MenuMultiplayerLayout menuMultiplayerLayout(int w, int h) {
 
 // Pure: the multiplayer page's step. The name's field is the text-input's
 // face (the loop's, not a step); the buttons raise their actions.
+// V3-22: sel = the selected button (0 = 创建游戏, 1 = 加入游戏,
+// 2 = 返回; -1 = unselected — the mouse's hover syncs it, the
+// keyboard's up/down move it); Enter activates the selected one.
 inline MenuStep menuMultiplayerStep(bool click, bool esc,
                                     bool hostHovered, bool joinHovered,
-                                    bool backHovered) {
+                                    bool backHovered, int sel, bool enter) {
     MenuStep s;
     if (esc) {
         s.action = MenuAction::Back;
@@ -478,6 +539,10 @@ inline MenuStep menuMultiplayerStep(bool click, bool esc,
             s.action = MenuAction::Back;
             return s;
         }
+    }
+    if (enter && sel >= 0) {
+        s.action = sel == 0 ? MenuAction::HostGame
+                : sel == 1 ? MenuAction::JoinGame : MenuAction::Back;
     }
     return s;
 }
@@ -512,8 +577,11 @@ inline MenuJoinLayout menuJoinLayout(int w, int h) {
 // Pure: the join's sub-page's step. The server's field is the text-input's
 // face; the 开始 raises JoinGame (the caller parses host:port — a bad
 // value is the named reject's, the back's no-op), 返回/ESC = the back.
+// V3-22: sel = the selected button (0 = 开始, 1 = 返回; -1 =
+// unselected); Enter activates the selected one (the 开始's parse's
+// named reject's belt is the caller's — the 17d's twin).
 inline MenuStep menuJoinStep(bool click, bool esc, bool startHovered,
-                             bool backHovered) {
+                             bool backHovered, int sel, bool enter) {
     MenuStep s;
     if (esc) {
         s.action = MenuAction::Back;
@@ -528,6 +596,9 @@ inline MenuStep menuJoinStep(bool click, bool esc, bool startHovered,
             s.action = MenuAction::Back;
             return s;
         }
+    }
+    if (enter && sel >= 0) {
+        s.action = sel == 0 ? MenuAction::JoinGame : MenuAction::Back;
     }
     return s;
 }

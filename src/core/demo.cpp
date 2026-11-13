@@ -818,6 +818,12 @@ Result<std::uint32_t> authorKeycode(const std::string& name) {
     if (name == "c") return std::uint32_t(SDLK_C);
     if (name == "t") return std::uint32_t(SDLK_T);
     if (name == "g") return std::uint32_t(SDLK_G); // V3-11a: creative
+    // V3-22: the menu's arrows (the mapKey's twin — the gameplay's
+    // zero consumer, present for the vocabulary's closed-set's belt).
+    if (name == "up") return std::uint32_t(SDLK_UP);
+    if (name == "down") return std::uint32_t(SDLK_DOWN);
+    if (name == "left") return std::uint32_t(SDLK_LEFT);
+    if (name == "right") return std::uint32_t(SDLK_RIGHT);
     if (name == "space") return std::uint32_t(SDLK_SPACE);
     if (name == "shift") return std::uint32_t(SDLK_LSHIFT);
     if (name == "escape") return std::uint32_t(SDLK_ESCAPE);

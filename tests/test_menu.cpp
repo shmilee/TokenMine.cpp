@@ -68,27 +68,28 @@ TEST(MenuLayoutTest, TitleGeometryAtGateSpace) {
 
 TEST(MenuStepTest, TitleActions) {
     // ESC quits at any hover.
-    EXPECT_EQ(menuStepTitle(false, false, true, 0).action, MenuAction::Quit);
-    EXPECT_EQ(menuStepTitle(true, false, true, 3).action, MenuAction::Quit);
+    EXPECT_EQ(menuStepTitle(false, false, true, 0, -1).action, MenuAction::Quit);
+    EXPECT_EQ(menuStepTitle(true, false, true, 3, -1).action, MenuAction::Quit);
     // The click / the Enter activate the hovered item (V3-17c: item 0
     // = the LOGIN page — the name's entry before the start).
-    EXPECT_EQ(menuStepTitle(true, false, false, 0).page, MenuPage::Login);
-    EXPECT_EQ(menuStepTitle(true, false, false, 0).action, MenuAction::None);
-    EXPECT_EQ(menuStepTitle(false, true, false, 1).page, MenuPage::Multiplayer);
-    EXPECT_EQ(menuStepTitle(true, false, false, 2).page, MenuPage::Settings);
-    EXPECT_EQ(menuStepTitle(false, true, false, 3).page, MenuPage::Tutorial);
-    EXPECT_EQ(menuStepTitle(true, false, false, 4).action, MenuAction::Quit);
+    EXPECT_EQ(menuStepTitle(true, false, false, 0, -1).page, MenuPage::Login);
+    EXPECT_EQ(menuStepTitle(true, false, false, 0, -1).action, MenuAction::None);
+    EXPECT_EQ(menuStepTitle(false, true, false, 1, 1).page, MenuPage::Multiplayer);
+    EXPECT_EQ(menuStepTitle(true, false, false, 2, -1).page, MenuPage::Settings);
+    EXPECT_EQ(menuStepTitle(false, true, false, 3, 3).page, MenuPage::Tutorial);
+    EXPECT_EQ(menuStepTitle(true, false, false, 4, -1).action, MenuAction::Quit);
     // A click in the air (no hover) is a no-op.
-    const MenuStep air = menuStepTitle(true, false, false, -1);
+    const MenuStep air = menuStepTitle(true, false, false, -1, -1);
     EXPECT_EQ(air.action, MenuAction::None);
     EXPECT_EQ(air.page, MenuPage::Title);
     // An out-of-range hover is rejected (the index's belt).
-    EXPECT_EQ(menuStepTitle(true, false, false, 5).action, MenuAction::None);
+    EXPECT_EQ(menuStepTitle(true, false, false, 5, -1).action, MenuAction::None);
     // Nothing pressed = nothing.
-    EXPECT_EQ(menuStepTitle(false, false, false, 0).action, MenuAction::None);
+    EXPECT_EQ(menuStepTitle(false, false, false, 0, -1).action, MenuAction::None);
     // The transitions' page + the action are mutually exclusive (a
     // navigated step raises no action).
-    EXPECT_EQ(menuStepTitle(true, false, false, 1).action, MenuAction::None);
+    EXPECT_EQ(menuStepTitle(true, false, false, 1, -1).action,
+              MenuAction::None);
 }
 
 TEST(MenuSettingsTest, LayoutGeometryAtGateSpace) {
@@ -136,33 +137,33 @@ TEST(MenuSettingsTest, LayoutGeometryAtGateSpace) {
 
 TEST(MenuSettingsTest, StepActions) {
     // ESC = back.
-    EXPECT_EQ(menuSettingsStep(false, false, true, 0).kind,
+    EXPECT_EQ(menuSettingsStep(false, false, true, 0, -1, false, false).kind,
               MenuSettingsStep::Kind::Back);
     // The stepper's dec / inc (the control id's row*2 encoding).
-    EXPECT_EQ(menuSettingsStep(true, false, false, 0).kind,
+    EXPECT_EQ(menuSettingsStep(true, false, false, 0, -1, false, false).kind,
               MenuSettingsStep::Kind::Dec);
-    EXPECT_EQ(menuSettingsStep(true, false, false, 0).row, 0);
-    EXPECT_EQ(menuSettingsStep(true, false, false, 1).kind,
+    EXPECT_EQ(menuSettingsStep(true, false, false, 0, -1, false, false).row, 0);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 1, -1, false, false).kind,
               MenuSettingsStep::Kind::Inc);
-    EXPECT_EQ(menuSettingsStep(true, false, false, 13).kind,
+    EXPECT_EQ(menuSettingsStep(true, false, false, 13, -1, false, false).kind,
               MenuSettingsStep::Kind::Inc);
-    EXPECT_EQ(menuSettingsStep(true, false, false, 13).row, 6);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 13, -1, false, false).row, 6);
     // The toggle rows (2 天气 / 5 全屏): the minus's button = the flip.
-    EXPECT_EQ(menuSettingsStep(true, false, false, 4).kind,
+    EXPECT_EQ(menuSettingsStep(true, false, false, 4, -1, false, false).kind,
               MenuSettingsStep::Kind::Toggle);
-    EXPECT_EQ(menuSettingsStep(true, false, false, 4).row, 2);
-    EXPECT_EQ(menuSettingsStep(true, false, false, 10).kind,
+    EXPECT_EQ(menuSettingsStep(true, false, false, 4, -1, false, false).row, 2);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 10, -1, false, false).kind,
               MenuSettingsStep::Kind::Toggle);
-    EXPECT_EQ(menuSettingsStep(true, false, false, 10).row, 5);
+    EXPECT_EQ(menuSettingsStep(true, false, false, 10, -1, false, false).row, 5);
     // The save (the button OR the Enter's convenience).
-    EXPECT_EQ(menuSettingsStep(true, false, false, kMenuSettingsSave).kind,
+    EXPECT_EQ(menuSettingsStep(true, false, false, kMenuSettingsSave, -1, false, false).kind,
               MenuSettingsStep::Kind::Save);
-    EXPECT_EQ(menuSettingsStep(false, true, false, -1).kind,
+    EXPECT_EQ(menuSettingsStep(false, true, false, -1, -1, false, false).kind,
               MenuSettingsStep::Kind::Save);
     // A click in the air = nothing.
-    EXPECT_EQ(menuSettingsStep(true, false, false, -1).kind,
+    EXPECT_EQ(menuSettingsStep(true, false, false, -1, -1, false, false).kind,
               MenuSettingsStep::Kind::None);
-    EXPECT_EQ(menuSettingsStep(false, false, false, 0).kind,
+    EXPECT_EQ(menuSettingsStep(false, false, false, 0, -1, false, false).kind,
               MenuSettingsStep::Kind::None);
 }
 
@@ -253,27 +254,27 @@ TEST(MenuTutorialTest, LayoutGeometryAtGateSpace) {
 
 TEST(MenuTutorialTest, StepActions) {
     // Tier 1: a row click = OpenChapter.
-    EXPECT_EQ(menuTutorialStep(true, false, false, 2, false).kind,
+    EXPECT_EQ(menuTutorialStep(true, false, false, 2, false, -1, false, false, false, 5).kind,
               MenuTutorialStep::Kind::OpenChapter);
-    EXPECT_EQ(menuTutorialStep(true, false, false, 2, false).index, 2);
+    EXPECT_EQ(menuTutorialStep(true, false, false, 2, false, -1, false, false, false, 5).index, 2);
     // Tier 2: a row click = LaunchDemo (the mode's filter is the
     // Game's face — the pure step doesn't know solo/coop).
-    EXPECT_EQ(menuTutorialStep(true, false, false, 1, true).kind,
+    EXPECT_EQ(menuTutorialStep(true, false, false, 1, true, -1, false, false, false, 4).kind,
               MenuTutorialStep::Kind::LaunchDemo);
-    EXPECT_EQ(menuTutorialStep(true, false, false, 1, true).index, 1);
+    EXPECT_EQ(menuTutorialStep(true, false, false, 1, true, -1, false, false, false, 4).index, 1);
     // ESC / the back button = Back (the target is the Game's face:
     // tier 2 -> the chapters, tier 1 -> the title).
-    EXPECT_EQ(menuTutorialStep(false, true, false, -1, false).kind,
+    EXPECT_EQ(menuTutorialStep(false, true, false, -1, false, -1, false, false, false, 5).kind,
               MenuTutorialStep::Kind::Back);
-    EXPECT_EQ(menuTutorialStep(true, false, true, -1, true).kind,
+    EXPECT_EQ(menuTutorialStep(true, false, true, -1, true, -1, false, false, false, 4).kind,
               MenuTutorialStep::Kind::Back);
     // A click in the air = nothing.
-    EXPECT_EQ(menuTutorialStep(true, false, false, -1, false).kind,
+    EXPECT_EQ(menuTutorialStep(true, false, false, -1, false, -1, false, false, false, 5).kind,
               MenuTutorialStep::Kind::None);
     // An out-of-range row is rejected (the 5-row belt).
-    EXPECT_EQ(menuTutorialStep(true, false, false, 5, false).kind,
+    EXPECT_EQ(menuTutorialStep(true, false, false, 5, false, -1, false, false, false, 5).kind,
               MenuTutorialStep::Kind::None);
-    EXPECT_EQ(menuTutorialStep(true, false, false, -2, false).kind,
+    EXPECT_EQ(menuTutorialStep(true, false, false, -2, false, -1, false, false, false, 5).kind,
               MenuTutorialStep::Kind::None);
 }
 
@@ -324,21 +325,21 @@ TEST(MenuMultiplayerTest, LayoutGeometryAtGateSpace) {
 
 TEST(MenuMultiplayerTest, StepActions) {
     // ESC = the title's back.
-    EXPECT_EQ(menuMultiplayerStep(false, true, false, false, false).action,
+    EXPECT_EQ(menuMultiplayerStep(false, true, false, false, false, -1, false).action,
               MenuAction::Back);
     // The 创建游戏's click = the host's start.
-    EXPECT_EQ(menuMultiplayerStep(true, false, true, false, false).action,
+    EXPECT_EQ(menuMultiplayerStep(true, false, true, false, false, -1, false).action,
               MenuAction::HostGame);
     // The 加入游戏's click = the join's sub-page.
-    EXPECT_EQ(menuMultiplayerStep(true, false, false, true, false).action,
+    EXPECT_EQ(menuMultiplayerStep(true, false, false, true, false, -1, false).action,
               MenuAction::JoinGame);
     // The 返回's click = the back.
-    EXPECT_EQ(menuMultiplayerStep(true, false, false, false, true).action,
+    EXPECT_EQ(menuMultiplayerStep(true, false, false, false, true, -1, false).action,
               MenuAction::Back);
     // A click in the air / nothing pressed = nothing.
-    EXPECT_EQ(menuMultiplayerStep(true, false, false, false, false).action,
+    EXPECT_EQ(menuMultiplayerStep(true, false, false, false, false, -1, false).action,
               MenuAction::None);
-    EXPECT_EQ(menuMultiplayerStep(false, false, false, false, false).action,
+    EXPECT_EQ(menuMultiplayerStep(false, false, false, false, false, -1, false).action,
               MenuAction::None);
 }
 
@@ -366,18 +367,18 @@ TEST(MenuJoinTest, LayoutGeometryAtGateSpace) {
 
 TEST(MenuJoinTest, StepActions) {
     // ESC = the multiplayer's back.
-    EXPECT_EQ(menuJoinStep(false, true, false, false).action,
+    EXPECT_EQ(menuJoinStep(false, true, false, false, -1, false).action,
               MenuAction::Back);
     // The 开始's click = the join's connect (the parse is the loop's).
-    EXPECT_EQ(menuJoinStep(true, false, true, false).action,
+    EXPECT_EQ(menuJoinStep(true, false, true, false, -1, false).action,
               MenuAction::JoinGame);
     // The 返回's click = the back.
-    EXPECT_EQ(menuJoinStep(true, false, false, true).action,
+    EXPECT_EQ(menuJoinStep(true, false, false, true, -1, false).action,
               MenuAction::Back);
     // A click in the air / nothing pressed = nothing.
-    EXPECT_EQ(menuJoinStep(true, false, false, false).action,
+    EXPECT_EQ(menuJoinStep(true, false, false, false, -1, false).action,
               MenuAction::None);
-    EXPECT_EQ(menuJoinStep(false, false, false, false).action,
+    EXPECT_EQ(menuJoinStep(false, false, false, false, -1, false).action,
               MenuAction::None);
 }
 
@@ -421,4 +422,116 @@ TEST(MenuOpenTest, PageVocabulary) {
     EXPECT_FALSE(menuOpenPage("join").has_value());  // the sub-page's
     EXPECT_FALSE(menuOpenPage("bogus").has_value());
     EXPECT_FALSE(menuOpenPage("demo").has_value());
+}
+
+// ---------------------------------------------------------------------------
+// V3-22: the menu's keyboard's navigation (the arrows' + WASD's
+// selection's move, the Enter's activation — the pure step's twin's
+// face: the Input's edge's semantics are the loop's, the test feeds
+// the raw booleans).
+// ---------------------------------------------------------------------------
+
+TEST(MenuKeyboardTest, MoveSel) {
+    // The first press's entry (down = 0, up = the last).
+    EXPECT_EQ(menuMoveSel(-1, false, true, 5), 0);
+    EXPECT_EQ(menuMoveSel(-1, true, false, 5), 4);
+    EXPECT_EQ(menuMoveSel(-1, false, false, 5), -1); // no move's no-op
+    // The wrap's both directions.
+    EXPECT_EQ(menuMoveSel(0, true, false, 5), 4);
+    EXPECT_EQ(menuMoveSel(4, false, true, 5), 0);
+    EXPECT_EQ(menuMoveSel(2, false, true, 5), 3);
+    EXPECT_EQ(menuMoveSel(2, true, false, 5), 1);
+    // The count's belt (0 = the no-row's no-op, the over's clamp).
+    EXPECT_EQ(menuMoveSel(-1, false, true, 0), -1);
+    EXPECT_EQ(menuMoveSel(7, false, true, 5), 0);
+    EXPECT_EQ(menuMoveSel(7, true, false, 5), 3);
+}
+
+TEST(MenuKeyboardTest, TitleEnterActivatesSelection) {
+    // The keyboard's Enter (no hover — the mouse's (10,10) twin): the
+    // selection's activate.
+    EXPECT_EQ(menuStepTitle(false, true, false, -1, 2).page,
+              MenuPage::Settings);
+    EXPECT_EQ(menuStepTitle(false, true, false, -1, 3).page,
+              MenuPage::Tutorial);
+    EXPECT_EQ(menuStepTitle(false, true, false, -1, 4).action,
+              MenuAction::Quit);
+    // No selection = no Enter's no-op (the mouse's face unchanged).
+    EXPECT_EQ(menuStepTitle(false, true, false, -1, -1).action,
+              MenuAction::None);
+    // The click's hover's face (the sel's independent — the old's
+    // bit-line).
+    EXPECT_EQ(menuStepTitle(true, false, false, 2, -1).page,
+              MenuPage::Settings);
+}
+
+TEST(MenuKeyboardTest, SettingsLeftRightAdjustsSelectedRow) {
+    // The step row's (0 = 视图距离): left = Dec, right = Inc.
+    EXPECT_EQ(menuSettingsStep(false, false, false, -1, 0, true, false).kind,
+              MenuSettingsStep::Kind::Dec);
+    EXPECT_EQ(menuSettingsStep(false, false, false, -1, 0, true, false).row, 0);
+    EXPECT_EQ(menuSettingsStep(false, false, false, -1, 0, false, true).kind,
+              MenuSettingsStep::Kind::Inc);
+    // The toggle row's (2 = 天气): the either direction = the Toggle.
+    EXPECT_EQ(menuSettingsStep(false, false, false, -1, 2, true, false).kind,
+              MenuSettingsStep::Kind::Toggle);
+    EXPECT_EQ(menuSettingsStep(false, false, false, -1, 2, false, true).kind,
+              MenuSettingsStep::Kind::Toggle);
+    // No selection = no adjust's no-op (the Enter's Save's face
+    // unchanged).
+    EXPECT_EQ(menuSettingsStep(false, false, false, -1, -1, true, false).kind,
+              MenuSettingsStep::Kind::None);
+}
+
+TEST(MenuKeyboardTest, TutorialKeyboard) {
+    // tier 1: the Enter / Right's chapter's open (the selection's
+    // index).
+    EXPECT_EQ(menuTutorialStep(false, false, false, -1, false, 1, true, false,
+                               false, 5)
+                  .kind,
+              MenuTutorialStep::Kind::OpenChapter);
+    EXPECT_EQ(menuTutorialStep(false, false, false, -1, false, 1, false, false,
+                               true, 5)
+                  .index, 1);
+    // tier 2: the Left's back (the sel's independent), the Enter /
+    // Right's launch (the selection's index).
+    EXPECT_EQ(menuTutorialStep(false, false, false, -1, true, 0, false, true,
+                               false, 4)
+                  .kind,
+              MenuTutorialStep::Kind::Back);
+    EXPECT_EQ(menuTutorialStep(false, false, false, -1, true, 2, true, false,
+                               false, 4)
+                  .kind,
+              MenuTutorialStep::Kind::LaunchDemo);
+    EXPECT_EQ(menuTutorialStep(false, false, false, -1, true, 2, false, false,
+                               true, 4)
+                  .index, 2);
+    // The click's row's face (the old's bit-line, the rowCount's
+    // belt: the out-of-range's no-op).
+    EXPECT_EQ(menuTutorialStep(true, false, false, 5, false, -1, false,
+                               false, false, 5)
+                  .kind,
+              MenuTutorialStep::Kind::None);
+}
+
+TEST(MenuKeyboardTest, MultiplayerAndJoinEnter) {
+    // The multiplayer's buttons' selection's Enter (0 = 创建, 1 = 加入,
+    // 2 = 返回).
+    EXPECT_EQ(menuMultiplayerStep(false, false, false, false, false, 0, true)
+                  .action,
+              MenuAction::HostGame);
+    EXPECT_EQ(menuMultiplayerStep(false, false, false, false, false, 1, true)
+                  .action,
+              MenuAction::JoinGame);
+    EXPECT_EQ(menuMultiplayerStep(false, false, false, false, false, 2, true)
+                  .action,
+              MenuAction::Back);
+    EXPECT_EQ(menuMultiplayerStep(false, false, false, false, false, -1, true)
+                  .action,
+              MenuAction::None);
+    // The join's 开始's parse's caller's belt (the action's raise only).
+    EXPECT_EQ(menuJoinStep(false, false, false, false, 0, true).action,
+              MenuAction::JoinGame);
+    EXPECT_EQ(menuJoinStep(false, false, false, false, 1, true).action,
+              MenuAction::Back);
 }

@@ -48,6 +48,12 @@ std::optional<GameKey> Input::mapKey(std::uint32_t sdlKeycode) {
         case SDLK_9: return GameKey::Digit9;
         // V3-11a: the creative mode toggle (the C-key's game-mode twin).
         case SDLK_G: return GameKey::G;
+        // V3-22: the menu's keyboard's arrows (the menu's navigation's
+        // face — the gameplay's zero consumer).
+        case SDLK_UP: return GameKey::Up;
+        case SDLK_DOWN: return GameKey::Down;
+        case SDLK_LEFT: return GameKey::Left;
+        case SDLK_RIGHT: return GameKey::Right;
         case SDLK_RETURN:
         case SDLK_KP_ENTER:
             return GameKey::Enter; // V3-12c1: the chat's send

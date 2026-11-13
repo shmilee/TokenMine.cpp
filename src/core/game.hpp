@@ -1799,6 +1799,12 @@ std::optional<MobHit> targetMob() const;
     bool m_menuActive = false;
     int m_menuFrame = 0;
     MenuPage m_menuPage = MenuPage::Title;
+    // V3-22: the menu's UNIFIED selection (the keyboard's arrows/WASD
+    // move it, the mouse's hover syncs it, the bar renders it — the
+    // 17c's m_menuHovered's re-introduction as STATE: -1 = unselected
+    // = the no-keyboard's zero-pixel's face, the S1 anchor's belt).
+    // Page-scoped: the page's / the tutorial tier's change resets it.
+    int m_menuSel = -1;
     // V3-20: the menu's panorama background (the committed strip's
     // lazy load — the menu's path only: the demo/net/--new's boots
     // never render the menu = the asset's zero cost there).
