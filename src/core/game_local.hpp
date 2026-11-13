@@ -65,6 +65,43 @@ constexpr int kPanoramaViewHeight = 360;
 // views' 27.7-degree overlap = the every-boundary's scene-cut's root
 // (the grass's / the tree's misalignment the user saw).
 constexpr float kPanoramaHfovDegrees = 360.0f / kPanoramaViews;
+// V3-23: the OVERLAP capture's belt (the user's 11-13 third report:
+// the seam's still-visible = the tile's EDGE columns sit ON the
+// frustum's clip plane — the partial-coverage's AA's per-boundary's
+// 1-2px vertical line, the gradient probe's 1.7x's face). Each view
+// renders 2·kPanoramaEdgeMarginDegrees WIDER and the stitch trims
+// the margin: every strip column comes from the frustum's INTERIOR
+// (the clip plane's artifact's structural elimination). The margin's
+// 1.5 degrees = 20 px (640·1.5/48), the kept width's 600 =
+// 640·45/48 — the exact integer's belt (a non-integer keep = the
+// sub-pixel's resample's seam).
+constexpr float kPanoramaEdgeMarginDegrees = 1.5f;
+constexpr float kPanoramaHfovRenderDegrees =
+    kPanoramaHfovDegrees + 2.0f * kPanoramaEdgeMarginDegrees; // 48
+constexpr int kPanoramaKeepWidth =
+    kPanoramaViewWidth * kPanoramaHfovDegrees /
+    kPanoramaHfovRenderDegrees; // 600 (the static_assert's belt)
+static_assert(kPanoramaKeepWidth * kPanoramaHfovRenderDegrees ==
+                  kPanoramaViewWidth * kPanoramaHfovDegrees,
+              "the keep's width must be the integer-exact's trim (the "
+              "sub-pixel's resample = the seam's recurrence)");
+constexpr int kPanoramaStripWidth = kPanoramaKeepWidth * kPanoramaViews;
+// V3-23: the boundary's BLEND zone (the seam's structural
+// elimination — the user's third report: the still-visible seam =
+// the boundary's half-pixel PHASE: the two tiles sample the
+// boundary's rays at different sub-pixel positions, so a hard
+// scene edge crossing a boundary reads as a 1-px step; the yaw's
+// minimax offset's first draft moved the edge off one boundary
+// onto another (the foreground's parallax breaks the cyclic-shift's
+// cost model — the 64/88th-percentile's gate-catch)). Each
+// boundary (the 7 interior's + the wrap) blends a kPanoramaBlend-
+// Half-column zone on EACH side: the strip's original column (the
+// on-grid sample) with the NEIGHBORING tile's render of the same
+// ray (the overlap margin's half-phase sample): a hard edge's 1-px
+// step becomes a proper anti-alias, and a feature-free zone is a
+// no-op (the alpha's 0/1 ends = the original's column, the C0's
+// belt). No per-asset tuning — structural for any scene.
+constexpr int kPanoramaBlendHalf = 12;
 
 inline double nowSeconds() {
     return static_cast<double>(SDL_GetPerformanceCounter()) /

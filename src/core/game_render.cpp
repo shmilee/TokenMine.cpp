@@ -1497,7 +1497,11 @@ Result<void> Game::renderPanorama() {
     // V3-21 → V3-22: the tile-exact's HORIZONTAL FOV for the whole
     // capture (the warm-up's render + the views; restored before the
     // return).
-    m_panoramaHfovDegrees = kPanoramaHfovDegrees;
+    // V3-23: the OVERLAP capture — render 48 degrees wide, keep the
+    // central 45 (the margin's edge columns' discard — the frustum's
+    // clip plane's partial-coverage AA = the user's still-visible
+    // seam's root).
+    m_panoramaHfovDegrees = kPanoramaHfovRenderDegrees;
     m_camera.position = cameraPos;
     m_camera.pitch = kPanoramaPitch;
     // The warm-up render (the first swap's capture races the GL's first
@@ -1518,6 +1522,10 @@ Result<void> Game::renderPanorama() {
         // 45 degrees — the user's still-visible wrap seam's root). Read
         // BEFORE the swap: the back buffer then holds exactly the frame
         // just drawn, the presentation's race is out of the capture.
+        // V3-23: the FULL tile is kept (the margin's 20 px per side
+        // are the blend zone's half-phase samples — see the stitch's
+        // belt below; the frustum's clip plane's edge column is the
+        // margin's outermost, never used).
         PngImage tile;
         MC_TRY(readFrontBuffer(tile));
         m_window.swapBuffers();
@@ -1540,22 +1548,95 @@ Result<void> Game::renderPanorama() {
     m_camera.position = basePos;
     m_camera.yaw = baseYaw;
     m_camera.pitch = basePitch;
-    // The stitch (view i's columns at [i*w, (i+1)*w) — the pan's wrap
-    // point falls between views, never inside one).
+    // The stitch (view i's KEPT columns — the exact 45 degrees, every
+    // column from the frustum's interior — at [i*keep, (i+1)*keep);
+    // the pan's wrap point falls between views, never inside one).
     PngImage strip;
-    strip.width = kPanoramaViewWidth * kPanoramaViews;
+    strip.width = kPanoramaStripWidth;
     strip.height = kPanoramaViewHeight;
     strip.rgba.resize(static_cast<std::size_t>(strip.width) * strip.height *
                       4);
+    const std::size_t keepMargin =
+        (kPanoramaViewWidth - kPanoramaKeepWidth) / 2; // 20
     for (int i = 0; i < kPanoramaViews; ++i) {
         const PngImage& tile = tiles[static_cast<std::size_t>(i)];
         for (int y = 0; y < tile.height; ++y) {
             std::memcpy(strip.rgba.data() +
                             (static_cast<std::size_t>(y) * strip.width +
-                             static_cast<std::size_t>(i) * tile.width) * 4,
-                        tile.rgba.data() + static_cast<std::size_t>(y) *
-                                               tile.width * 4,
-                        static_cast<std::size_t>(tile.width) * 4);
+                             static_cast<std::size_t>(i) *
+                                 kPanoramaKeepWidth) *
+                            4,
+                        tile.rgba.data() +
+                            (static_cast<std::size_t>(y) *
+                                 static_cast<std::size_t>(tile.width) +
+                             keepMargin) *
+                                4,
+                        static_cast<std::size_t>(kPanoramaKeepWidth) * 4);
+        }
+    }
+    // V3-23: the boundary's BLEND zone (the seam's structural
+    // elimination — see kPanoramaBlendHalf's belt in game_local.hpp).
+    // Each boundary (the 7 interior's + the wrap) gets a 24-column
+    // zone: the strip's on-grid column blended with the NEIGHBORING
+    // tile's render of the same ray (the overlap margin's half-phase
+    // sample — the two renders share the camera, only the sub-pixel
+    // phase differs): a hard edge's 1-px step becomes a proper
+    // anti-alias, a feature-free zone is a no-op (the alpha's 0/1
+    // ends = the original's column, the C0's belt).
+    const auto blendCol = [&](int dstX, int y, const std::uint8_t* srcL,
+                              const std::uint8_t* srcR, float a) {
+        std::uint8_t* d = strip.rgba.data() +
+                          (static_cast<std::size_t>(y) * strip.width +
+                           static_cast<std::size_t>(dstX)) *
+                              4;
+        for (int c = 0; c < 4; ++c) {
+            d[c] = static_cast<std::uint8_t>(
+                srcL[c] * (1.0f - a) + srcR[c] * a + 0.5f);
+        }
+    };
+    for (int b = 0; b <= kPanoramaViews; ++b) {
+        const int tileL = (b - 1 + kPanoramaViews) % kPanoramaViews;
+        const int tileR = b % kPanoramaViews;
+        const int bx = (b * kPanoramaKeepWidth) % strip.width;
+        const PngImage& L = tiles[static_cast<std::size_t>(tileL)];
+        const PngImage& R = tiles[static_cast<std::size_t>(tileR)];
+        for (int j = 0; j < kPanoramaBlendHalf; ++j) {
+            // The left zone (dst bx-12+j): the on-grid original (L's
+            // full column keep+keep-12+j = 608+j) blended toward the
+            // boundary with R's margin (full column 8+j); the alpha
+            // ramps 0.02..0.48.
+            const float aL = (static_cast<float>(j) + 0.5f) /
+                             (2.0f * kPanoramaBlendHalf);
+            // The right zone (dst bx+j): L's margin (full column
+            // 620+j) blended toward the on-grid original (R's full
+            // column 20+j); the alpha ramps 0.52..0.98.
+            const float aR =
+                (static_cast<float>(kPanoramaBlendHalf) + j + 0.5f) /
+                (2.0f * kPanoramaBlendHalf);
+            for (int y = 0; y < strip.height; ++y) {
+                const std::size_t yl =
+                    static_cast<std::size_t>(y) * L.width;
+                const std::size_t yr =
+                    static_cast<std::size_t>(y) * R.width;
+                blendCol((bx - kPanoramaBlendHalf + j + strip.width) %
+                             strip.width,
+                         y,
+                         L.rgba.data() +
+                             (yl + kPanoramaKeepWidth + keepMargin -
+                                  kPanoramaBlendHalf + j) *
+                                 4,
+                         R.rgba.data() +
+                             (yr + keepMargin - kPanoramaBlendHalf + j) *
+                                 4,
+                         aL);
+                blendCol((bx + j) % strip.width, y,
+                         L.rgba.data() +
+                             (yl + kPanoramaKeepWidth + keepMargin + j) *
+                                 4,
+                         R.rgba.data() +
+                             (yr + keepMargin + j) * 4,
+                         aR);
+            }
         }
     }
     auto png = Png::encode(strip);
