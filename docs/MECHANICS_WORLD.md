@@ -1,12 +1,26 @@
-# 机制详解 · 世界与渲染（现状 v3.27.0）
+# 机制详解 · 世界与渲染（现状 v3.51.0）
 
-> 玩家/系统侧（内容总览/操作与交互/实体与 Mob/生存系统/状态效果/弓与箭/流体桶与点燃/demo 回放/合成与容器/存档/难度/确定性约定）= `docs/MECHANICS.md`（主文件；头部「来源约定」全文在主文件）。
+> 玩家/系统侧（内容总览/操作与交互/实体与 Mob/生存系统/创造模式/状态效果/弓与箭/爆炸/流体桶与点燃/demo 回放/教学 demo 族/多人/主菜单/合成与容器/存档/难度/确定性约定）= `docs/MECHANICS.md`（主文件；头部「来源约定」全文在主文件）。
 
-> 2026-11-07 增量刷新：现状 = **v3.27.0**（V3-10d2 召唤与复杀——
-> V3-10 末地全 4 相位收官：crystal_base 放置规则 + 4 晶召唤序列 +
-> 复杀 8XP + 蛋 60s 会话重生 + F3 龙态行，门 217）；其前 v3.26.0 =
-> V3-10d1 末影龙核心 + 首杀闭环（门 216）；v3.25.0 = V3-10c 末影人——End
-> 首个 mob：注视激怒 + 瞬移 + 携格，门 215；v3.24.0 =
+> 2026-11-20 刷新：现状 = **v3.51.0**（V3-23 全景 overlap
+> 混合带（周期性结构根除）+ 选中高亮加强，门 241）；其前 v3.50.0 = V3-22 全景定格布景 + 菜单键盘，
+> 门 240；v3.49.0 = V3-21 续 全景读回修复，门 239；v3.48.0 = V3-21 全景接缝
+> + 菜单 demo 返回，门 238；v3.47.0 = V3-20 demo 中文标题 + 菜单全景背景 + 主机无限等待，
+> 门 237；v3.46.0 = V3-17d 主菜单多人页 + MOTD，门 236（V3-17 全 4 相位完成
+> = 3.x 矩阵收官项）；v3.45.0 = V3-17c 主菜单登陆 + 教学两级，门 235；v3.44.0 =
+> V3-17b 主菜单设置页，门 234；v3.43.0 = V3-17a 主菜单标题页（S1 重锚 base20），
+> 门 233；v3.42.0 = V3-18 存档扩展名 .json.gz，门 232；v3.41.0 = V3-19 死亡屏
+> 计时，门 231；v3.40.0 = V3-16h② 末影龙，门 230；v3.39.0 =
+> V3-16h① 下界门，门 229；v3.38.0 = V3-16g 黑夜，门 228；
+> v3.37.0 = V3-16f 河流，门 227；v3.36.0 = V3-16e 材料，门 226；
+> v3.35.0 = V3-16d 皇宫，门 225；v3.34.0 = V3-16c 房子 + 床，
+> 门 224；v3.33.0 = V3-16b ⑤⑥，门 223；v3.32.0 = V3-16a
+> 教学 demo 族：数据层 + scene + panel_click，门 222；v3.31.0 = V3-12c2 断线恢复 REJOIN + format 33
+> players[]，门 221（V3-12 全 4 相位收官）；v3.30.0 = V3-12c1 大厅/聊天/N 泛化/心跳，
+> 门 220；v3.29.0 = V3-12b 2 人多人 PoC，门 219；v3.28.0 =
+> V3-12a 多人设计定案，门 218【纯文档】；其前 v3.27.0 = V3-10d2 召唤与复杀，
+> 门 217（V3-10 全 4 相位收官）；v3.26.0 = V3-10d1 末影龙核心 + 首杀闭环，门 216；
+> v3.25.0 = V3-10c 末影人——End 首个 mob：注视激怒 + 瞬移 + 携格，门 215；v3.24.0 =
 > V3-10b 末地内容族 + 末影珍珠，门 214；v3.23.0 = V3-10a 末地
 > 维度框架 + 真传送，门 213【format 32】；v3.22.0 = V3-14d strider 骑乘，门 212；v3.21.0 =
 > V3-14c piglin 交易，门 211；v3.20.0 = V3-14b ghast，门 210；v3.19.0 =
@@ -15,25 +29,29 @@
 > 生存/表现小批，门 206；v3.15.0 = V3-13 死亡统计屏，门 205；v3.14.0 =
 > V3-8b 手柄映射，门 204【sim 2】；v3.13.0 = demo sim 版本，门 203；
 > v3.12.0 = 实机报障阴影缩尺，门 202；3.x 矩阵收官于 v3.11.0；其前
-> 2.x 两批 20 版收官 v2.0.0 → v2.19.0）、无输入基线门 **217** 次、
-> 单元测试 **2964/2964**、`-Wall -Wextra -Wpedantic -Werror` 0
-> 警告、存档 **format 32**（下界维度 format 30：player.dimension +
+> 2.x 两批 20 版收官 v2.0.0 → v2.19.0）、无输入基线门 **241** 次、
+> 单元测试 **3028/3028**、`-Wall -Wextra -Wpedantic -Werror` 0
+> 警告、存档 **format 33**（下界维度 format 30：player.dimension +
 > nether 段 + nether_entities；创造 format 31：player.creative；末地
 > format 32：dimension 词表 +end 按 format 分词 + end 段 +
-> end_entities；gzip 编码 V3-7 起；下界/末地内容 = 世界生成演进零
-> format）、base19 锚
+> end_entities；多人 format 33：players[] per-player + end_xp_entities
+> + respawn 精确 float；gzip 编码 V3-7 起；扩展名 .json.gz V3-18 起【两级探测
+> 零迁移】；下界/末地内容 = 世界生成演进零 format）、base19 锚
 > **225272 B**（重锚谱系 179116 → 178148【V2-10 门 181】→ 178676
 > 【V2-19 门 182】→ 179027【V2-11 门 183】→ 224468【V2-18 门 190，AO
 > 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x 首重锚】**；门
 > 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 = 第 72–80 次；门
-> 201–215 = 第 81–96 次免重锚（对 base19）【v3.0.0 banner = 第 71 次】）、
-> PITS **407**。上一轮全面刷新
+> 201–232 = 第 81–113 次免重锚（对 base19）【v3.0.0 banner = 第 71 次】；
+> 菜单期门 233–241 = S1 重锚 **base20** 逐版【主菜单标题页：v3.43.0 21900 B →
+> v3.47.0 全景标题 111279 B → v3.50.0 布景标题 247705 B → v3.51.0 混合带标题
+> 247594 B——标题 = 像素活面，PITS 426②】）、
+> PITS **433**。上一轮全面刷新
 > （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
-> 20 份阶段存档）并入各节；3.x 十二版（v3.1.0–v3.12.0）
+> 20 份阶段存档）并入各节；3.x 二十七版（v3.1.0–v3.51.0）
 > 同样并入（逐版见 `docs/CHANGELOG.md`，细节见 `docs/archive/
-> phase-3.x.0.md` 12 份）。
+> phase-3.x.0.md`）。
 >
 > **2026-11-03 增量（v2.1.0→v2.3.0）**：V2-1 前视角（门 172，`C` 三循环 +
 > 翻转角 + aimReach）/ V2-2 Steve 皮肤（门 173，MobBox per-face 纹理）/
@@ -57,7 +75,11 @@
 - **世界**：16×16×16 chunk，世界高度 128（y ∈ [0,128)），X/Z 无限；同一 seed
   逐块复现（`WorldGenerator` 无状态纯函数 `generateChunk`，worker 并行调用 +
   单元测试 + 像素级截图比对保证）；**演示区 = 4×4 chunk 列**（world x,z ∈
-  [−32,32)，启动同步生成）
+  [−32,32)，启动同步生成）；**三维度结构 `[V3-1]`/`[V3-10a]`**：每个维度
+  （overworld/nether/end）= 独立 World + generator + StreamingState + 网格
+  集族（NetherDim/EndDim 聚合，overworld 为既有成员），**惰性构造**（首传前
+  零 chunk/零 mesh/零流送/零内存 = 结构免疫最强形），仅 Player 跨维
+  （`Entity::setWorld` 单咽喉点）——细节见下「下界维度」/「末地维度」节
 - **流送圆盘 `[STRM-1]`**（v1.0 任务表首项）：流送环 = **圆盘**（纯整数谓词
   `dx²+dz² ≤ R²`，方形 (2R+1)² 环砍除）+ **远平面帽** `R_eff = min(view_-
   distance, 64)`（`kStreamCapRadius`；推导 = 远平面 `kFar` 1000 块——可绘制列
@@ -73,7 +95,10 @@
   view_distance+1（`kUnloadHysteresis` 1 防抖带）的列卸载（pool flush 后主
   线程单写窗口）；保留 = 演示 4×4（重生安全）+ 玩家编辑列（m_editedColumns，
   存档 diff 所在）+ 五类 per-block 状态列（炉子/营火/作物/信标/火，存档交叉
-  校验对象）+ 在途生成列；实测走路 85 s RSS 平台 **470–474 MB**
+  校验对象）+ 在途生成列；实测走路 85 s RSS 平台 **470–474 MB**；**多人
+  `[V3-12b]`（v3.29.0）跨机修正**：回退门读 **`streamPending.size()` 共享
+  账本**（旧 `pool.pendingCount()` = 本机吞吐——主机快跑时静默 desync
+  根；盘锚经 `m_player` primary 别名自动 = 每机流送盘一致）
 - **流体列保留 `[STRM-2]`**（仅流体模拟改动的列卸载后不再重置生成态）：
   驱逐时按 journal 格限域快照该列 live≠fresh diff（`retainColumnDiff` =
   `journalDiffChunk` 字节同语义，**存 diff 条目非 chunk = 内存有界**）→ 再
@@ -332,7 +357,9 @@
   15 / fire 15 / campfire 15 / torch **14**（MC 值）/ **nether portal 11
   `[V3-1]`** / **magma_block 3 `[V3-2 Part 2]`**（下界光景观 = 熔岩海自发光
   15 + magma 3 + glowstone 天花板 + portal 11；strider `spawn_max_light` 15
-  与熔岩自发光配对，见 MECHANICS.md「实体与 Mob」）/ campfire_extinguished 0 /
+  与熔岩自发光配对，见 MECHANICS.md「实体与 Mob」）/ **end_portal 11
+  `[V3-10a]`** / **end_crystal 14 `[V3-10d1]`**（末地光景观 = 出口门 11 +
+  晶 14 + dragon_egg 1，虚空无天光）/ campfire_extinguished 0 /
   beacon 0（光束不提供方块光 = 不照亮周围，`[P83]` 记档；`[LGT-4]` 后光束
   自身按上方格受光）
 
@@ -448,7 +475,8 @@
 
 - **双世界架构**（D1 增量并行成员）：overworld 代码路径零 diff；
   nether = `NetherDim` 聚合（World 惰性 + generator + StreamingState +
-  网格/集族 + MobSystem【v3.8.0 起 = 5 物种池，见 MECHANICS.md「实体与 Mob」】
+  网格/集族 + MobSystem【v3.8.0 起 = 5 物种池，v3.20.0 +ghast =
+  6 物种池，见 MECHANICS.md「实体与 Mob」】
   + entities + portals 追踪集）+ `DimCtx`
   访问器；**首传前零 chunk/零 mesh/零流送/零内存**（结构免疫最强形）。
 - **坐标映射 8:1**（MC 精确）：主世界 (x,y,z) → 下界 (floorDiv(x,8),
@@ -514,8 +542,8 @@
   火恒定不烧尽；**水蒸发 `[V3-2 Part 2]`**（下界水桶泼出 = 桶回空桶 +
   "evaporate" 音 + 日志，**零格触碰**点击恒消耗——水无下界世界语义，
   维度感知 FluidSim 范围外；熔岩桶照常放置）；床睡眠 no-op（MC 床爆炸
-  无 TNT 机制跳过）；容器面板主世界 only；**下界 Mob = 5 物种池
-  `[V3-3]`**（见 MECHANICS.md「实体与 Mob」）；**ambience 第 4 上下文
+  无 TNT 机制跳过）；容器面板主世界 only；**下界 Mob = 6 物种池
+  `[V3-3]`+`[V3-14b]`**（见 MECHANICS.md「实体与 Mob」）；**ambience 第 4 上下文
   `[V3-2 Part 2]`**（nether 优先，见「音频」）；**灵魂沙减速
   `[V3-2 Part 2]`**（`walk_speed_factor` 0.4，见「物理与碰撞」）；
   **下界原点保护圈**（MC 下界无保护 = 记档偏离，门 198）。
@@ -524,13 +552,15 @@
   段 {blocks, fluids, states} 恒写空合法 + `nether_entities`（item
   kind）恒写空合法；两维 portal 载入 rescan（孤立 → air）；nether 内
   stateful 块须 nether.states 条目（PITS 383① 孪生）；gzip 编码零
-  改动（V3-7 容器自动覆盖）。
+  改动（V3-7 容器自动覆盖）。**现状 format 33**：nether 段 schema 自 30
+  起零变更（33 增量 = players[]/end_xp_entities/respawn float + 扩展名
+  .json.gz，见 MECHANICS.md「存档」）。
 - **首访体验（D9 修订后）**：Y 映射落空气空间（53..122）= 悬浮
   portal 房间（框 + 基岩平台自足，落点安全 = 框底行 + 出框 1 格落台
   地顶无伤）；开阔空腔 + 群系表面远地平线 + stem/basalt 柱 + 天花板
   glowstone（门 195 截图观感实证）；熔岩海 = 向下 21 格（台地）可达。
 
-## 末地维度（`[V3-10a]`，v3.23.0）
+## 末地维度（`[V3-10a]`–`[V3-10d2]`，v3.23.0–v3.27.0）
 
 - **第三维度**（下界维度基建的**第二次消费**）：`EndDim` = NetherDim
   12 成员镜像聚合 + `Dimension::End` + `playerInEnd()`/`inOverworld()`
@@ -589,8 +619,10 @@
   **dragon_breath 效果**（3HP/s 玩家-only，效果 11→12）。**首杀
   闭环 = format 32 零 bump 最强形**：m_dead 帧蛋 + 升天 60f 飞 +
   180f 悬停 + **23 orb = 22×9+2 = 200 整**（D5 项目刻度）+ wail +
-  240f 延迟门移除；**重载 = 蛋在无复生**；末地 orb/云存档静默跳
-  过（format 33 后移 10d2 复议）。**血条** = renderUi 段（186×8 十
+  240f 延迟门移除；**重载 = 蛋在无复生**；末地 orb 存档 = **format 33
+  `end_xp_entities` 恒写**（10d1 后移复议兑现——首杀 23 orb + 复杀
+  8 orb 全持久化，overworld xp entry 形 verbatim）；云 = 零物理实体
+  会话态不入档（偏离记档）。**血条** = renderUi 段（186×8 十
   段 + 「末影龙」字体 +3 = 433【扩展区 528/528 满】+ 2s 淡出）。
   生成门 playerInEnd ∧ mobs ∧ 无龙 ∧ 非蛋 ∧ **未败亡**（10d2 的
   首访读）→ 60f → (0.5,58,0.5) kSaltDragon；**--dragon-damage CLI
@@ -679,7 +711,10 @@
   `end_entities`（item kind，XP 拒收）恒写空合法；pre-32 载入迁
   end 段空 dimension 不变；**末地内 stateful 块须 end.states 条目**
   （PITS 383 双向检）；入口环（OW 段）+ 出口环（end 段）载入
-  rescan（孤儿 → air）；gzip 容器自动覆盖。
+  rescan（孤儿 → air）；gzip 容器自动覆盖。**format 33 增量
+  `[V3-12c2]`**：+ `end_xp_entities` 恒写（末地 XP orb 持久化——首杀
+  23 orb/复杀 8 orb 重载仍在）+ players[]/respawn 精确 float（多人面，
+  见 MECHANICS.md「存档」）；end 段/end_entities schema 不变。
 
 ## 下界传送门（`[V3-1]` Phase A，v3.2.0；传送 = Phase B）
 
@@ -1147,7 +1182,7 @@
   headless 放完态退出需双渲染才可捕获，PITS 391）；字符串英文 = 字体
   427 字形 CJK 表无 demo 词汇（记档）
 - **F3 调试 overlay**（`[P15]`，任意指针状态可切换，**英文保持** `[PRE-1]`
-  记档）：**20 行** = `TokenMine.cpp v3.12.0`（banner）/ `%d FPS | frame %d`
+  记档）：**22 行** = `TokenMine.cpp v3.51.0`（banner）/ `%d FPS | frame %d`
   （FPS = 真实 dt 平滑取整）/ `chunks %d | draws %u | verts %llu` / `pos %.2f,
   %.2f, %.2f yaw %.2f pitch %.2f` / `col (x, z) seed N` / `time %.3f day %.2f
   locked|free` / `streaming engaged|idle pending N radius N` / `inventory
@@ -1158,11 +1193,15 @@
   kill.<name> N | ...`（无 = "(none)"；`[PRE-12]` stats 行）/ `tutorial
   off|done|<s>/<total> <id> p/c`（`[UX-7]`/`[V2-3]`：禁用 = off / 完成或
   跳过 = done / 进行中 = 系列序号（1 基）+ 步 id + 进度）/ `weather
-  clear|rain`（`[V2-4]` 天气段）/ `gamepad none|<name>`（`[V3-8]` 手柄
-  连接态 = SDL device name，F3 保持英文纪律）/ `dimension
-  overworld|nether`（`[V3-1]` 当前维度）/ `cam <Mode> D x.x[  flying]`
+  clear|rain`（`[V2-4]` 天气段）/ `cam <Mode> D x.x[  flying]`
   （`[V2-19]` 相机模式 + 滚轮缩放距离 + 飞行标记；无相机数据 = "cam
-  (none)"）
+  (none)"）/ `gamepad none|<name>`（`[V3-8]` 手柄
+  连接态 = SDL device name，F3 保持英文纪律）/ `dimension
+  overworld|nether|end`（当前维度，`[V3-10a]` 三值）/ `dragon
+  none|spawn Nf|orbit|strafe|perch|ascend N/240|summon Nf|egg|egg
+  respawn Nf`（`[V3-10d2]` boss 会话态，End only，全英文零新字形）/
+  `players <N>: <name>; ...`（`[V3-12c1]` 大厅，Latin；solo 基线 =
+  "players solo"）
 - **死亡屏**（`[P16]`/`[PRE-1]`）：「**你死了！** / **按 R 重生**」中文化（红
   字——`[P36]` 文字着色修复：ui.frag textured 分支 = `texel.rgb × u_color.rgb`
   【此前 u_color 只调制 alpha，死亡屏红字被静默忽略渲成白字】，图标/心带/白字
@@ -1223,6 +1262,86 @@
   邻剔面（纹理选择前 = merge 不见该面；glass-glass 不剔/水规则/cross·slab·
   stairs·wall·fence·pane 红线零触碰，详见 `docs/archive/v2x/phase-2.10.0.md`）
 - **窗口标题**实时显示 FPS 与 draw call 数（`[99.6]`）
+- **主菜单渲染 `[V3-17a]`（v3.43.0–v3.51.0）**：第 4 循环
+  `runMenuLoop`（window + renderer + `buildUiAssets` 后、`buildScene`
+  前——世界未建：`renderMenu` = clear + **UiBatch only，禁 render/
+  renderUi**；调色板/原语 = renderUi 文件局部 lambda 的拷贝，
+  renderUi 原文零触碰 = 游戏面位级根）；**menuEnabled 旁路**
+  （demo 三形/net 两形/--script/--new/--panorama = 结构免疫根）；六页
+  （标题/登陆/设置/教学/多人/加入）+ 选中高亮（白条 α **0.30** + 3px
+  橙 (1.0, 0.82, 0) 左缘竖条——`[V3-23]` 加强）+ 键盘导航（`[V3-22]`
+  统一 m_menuSel，4 方向键 GameKey **玩法零消费方**）+ 全景背景（下
+  节）+ 文本输入仅登陆/多人/加入期开；**菜单无输入渲染 = 纯函数**
+  （S1 ×2 RAW 逐字节 + base20 逐版重锚）+ demo Q 返回 = 进程 re-exec
+  （`execRestartToMenu`：池 drain → 音频 → 窗口/SDL → execv
+  /proc/self/exe，--config/--save 透传，save/record 跳过 = 观察红线）
+  ——系统面全文见 MECHANICS.md「主菜单」
+
+## 全景背景（菜单 Panorama，`[V3-20]`–`[V3-23]`，v3.47.0–v3.51.0）
+
+- **资产**：`assets/textures/panorama.png` = committed 确定性环带（
+  ×2 字节恒等可再生，现状 2676910 B）——**`--panorama <out>` CLI
+  seam**（管理旗，互斥全部游戏旗，main 即退不建 Game 循环）：
+  config 种子 fresh 世界 + **40 帧 fixed-dt 1/60 update 预热**
+  （地形网格在流送集成——render-only 预热 = 纯天空门内捕获 PITS
+  429②）+ 出生点瞭望 **`kPanoramaAltitude` +30 / `kPanoramaPitch`
+  −0.08 rad（−4.6°）**（帧顶 +8.5° 天空带【云 + 龙】+ 帧底 −17.7°
+  近地带【草/树/动物/Steve】）+ 首帧 discard（Mesa 首交换黑帧）+
+  **8 向 tile 水平 FOV 精确铺满 360°**：**`kPanoramaHfovDegrees` =
+  360/8 = 45°**（`[V3-22]` 根因修：`Mat4::perspective` 首参 =
+  **垂直** FOV——v3.48 把 45° 喂给垂直首参 = 实际水平 72.7° × 8 =
+  581.8° 每向重叠 27.7° = 每个拼接处场景回跳 = 用户所见割裂，PITS
+  432①；修 = 水平具名 + `effectiveRenderVFovDegrees()` 垂直孪生换算
+  2·atan(tan(h/2)·H/W) + render FOV 覆写面 `m_panoramaHfovDegrees`
+  【-1 = 游戏内 70° 垂直位级红线】投影/天空像素双消费点）；**
+  `[V3-23]` overlap 捕获 + 边界混合带 = 周期性结构根除（零调参）**：
+  a) tile 边缘列 = 视锥裁剪面 partial-coverage AA → 每向渲染
+  **48°**（`kPanoramaHfovRenderDegrees` = 45 + 2×1.5° margin）取中央
+  **600 px**（`kPanoramaKeepWidth` = 640·45/48 整除，static_assert 钉
+  ——非整数 keep = 亚像素重采样接缝复现红线）→ strip
+  **4800×360**（`kPanoramaStripWidth`）每列来自视锥内部；b) 仍可读 =
+  **亚像素相位**（同边界射线在两 tile 像素网格落点差半列，硬边缘读成
+  1px 台阶——yaw minimax 旋转调参两连否决：成本符号反 + 前景视差破
+  循环平移模型，PITS 433）→ 结构解 = **`kPanoramaBlendHalf` 12 的
+  24 列边界混合带**（8 条边界【7 内部 + wrap】两侧各 12 列：strip 原
+  列 × 邻 tile **同一射线**渲染线性混合，α 端点 0/1 = C0——同相机同
+  射线仅差相位，混合 = 硬边 1px 台阶成真抗锯齿斜坡，无特征区 =
+  no-op = 任何场景/种子/边界方位结构无缝）；**读回时序 = render →
+  read → swap**（项目零 glReadBuffer 调用——默认读缓冲 = GL_BACK，
+  swap 后读 = 上一帧 = v7 45° 缺失根，PITS 431；takeScreenshot swap
+  后「落后一帧」既有语义 PITS 391② 独立不动）+ in-code 相邻 tile
+  像素恒等 WARN 腰带 + 门臂角度覆盖断言（相邻 tile 必异）。
+- **定格布景 `[V3-22]`**：**`--panorama-scene <name>`**（单独 = 命名
+  拒收）= committed scene `assets/demos/scenes/panorama.json.gz`
+  （mk_scene **ring 面** = cheb 方盘每列 1 air 编辑强制生成
+  **±48 chunk 列**【radius = chunk 单位——初稿按块 = 3 chunk 小贴片
+  全帧纯天空捕获 PITS 432④】= 雾端 min(1000, 48×16) = **768 块地平
+  线**；center "spawn" 自引用）+ **`meshLoadedColumns` 同步列烘
+  焙**（静止相机不扩流送【kStreamTriggerDistance 1 贴边 engage——5000
+  帧预热 6 分钟零网格捕获】+ loadedColumns 镜像 ≠ 世界 chunk
+  map【49-of-9400 缺失捕获】→ 世界权威枚举 + 镜像回填 + MeshJob
+  worker 本体逐字主线程化）+ **帧 0 程序布景**（全确定性，进程一次
+  性永不入档）：**Steve = 第二玩家**（netAddPlayer(1) solo 直调——
+  非 local 才绘 body，+X 110 块 surface 锚定）/ **动物群 4 只**
+  （sheep/cow/pig/chicken，每 index 黄金比例盐流隔离，+X 120 块中距
+  锚【池锚 primary = 瞭望正下方 −90° 出帧捕获 PITS 432⑤】）/ **末
+  影龙无回调静默飞行**（spawnDragon overworld 孪生——shoot/breath/
+  growl 守卫 no-op，流契约 ambient 1 抽/帧零变化；**锚定相机** =
+  +X 150 块高 15【仰角 4.8–7.1° 天空带；初稿 feet 相对出帧捕获】）
+  + **300 帧帧锁定布景预热**（轨道弧/落位确定性）。
+- **呈现**：renderMenu **延迟加载**（仅菜单路径——游戏 boot 零成
+  本）+ **cover-fit UV**（(w/h)×(stripH/stripW) 裁宽满高等比——非等比
+  拉伸 = 树木拉尖门内捕获 PITS 429③）+ **帧锁定慢速平移**
+  （m_menuFrame % strip 宽纯函数 = S1 ×2 RAW 确定性；闭环 =
+  GL_REPEAT 无缝）+ **0.55 冷暗面纱**（kMenuPanoramaTint，文字对比
+  度）+ 缺失/失败 = named warn + 旧纯色 clear 回落（菜单不因装饰失
+  败）；`render()` +`withUi` 参数【缺省 true = 游戏面位级红线；全景
+  seam 用 false = 无 HUD 世界 pass】+ takeScreenshot 重构
+  readFrontBuffer 提取（拼接复用）。
+- **周期性门断言（spine belt）**：8 条边界列对对比度 ≤ **1.5×** 邻域
+  ±15 列中位数（局部尖峰带——绝对对比度百分位 = 假 FAIL 源：合法
+  内容边缘可近边界；v3.50 的 wrap 88 百分位硬边 = 执法对象）+ 覆盖
+  臂（相邻 tile 必异）+ 内容带断言（顶天空蓝/底绿）。
 
 ## 音频
 
@@ -1231,7 +1350,7 @@
   日志照常发——环境音 E2E 证据走日志）；音量 `audio.volume`（代码默认 0.7，
   已提交 config 同）；**`[CRAFT-3]` mono → stereo**（44100 Hz 不变；旧
   `play(name)` = mono 复制双声道 = 居中听感位级等价）
-- **63 个确定性 WAV**（`tools/generate_sounds.py` 固定种子 LCG/sine，**既有
+- **75 个确定性 WAV**（`tools/generate_sounds.py` 固定种子 LCG/sine，**既有
   wav 字节零变化 + 重跑幂等**纪律逐版 md5 实证）：17 基础事件（dig/place/
   break/pickup/step/ui_open/ui_close/craft/eat/hurt/death/shoot/bow/splash/
   milk/cloth【`[P41]` 染色布料声】+ ignite【`[P60]`】）+ **18 材质音
@@ -1259,7 +1378,12 @@
   ambience_end `[V3-10a]`**（第 5 上下文音：40 Hz 低频体 + 0.2 Hz 颤 +
   2.17× 微光 + 2 远距 whoosh 220→55 Hz，种子 0xC0DE）+ **2 珍珠族
   `[V3-10b]`**（ender_pearl_throw 320→980 Hz whoop / ender_pearl_
-  teleport 1400→240 Hz shimmer，首个投掷物的声音面）；**`[V2-16]` 音效缺陷族 13 件修复**（`_noise()`/
+  teleport 1400→240 Hz shimmer，首个投掷物的声音面）+ **1 末影人瞬移
+  `[V3-10c]`**（enderman_teleport 落点 void-shimmer——首个 mob 瞬移的
+  声音面，init 对一切瞬移能力 mob 交叉检 wav 存在）+ **4 龙族
+  `[V3-10d1]`**（dragon_ambient 翼身低鸣 / dragon_growl 吐息咆哮预告 /
+  dragon_death 升天长啸 / dragon_shoot 火球发射——boss 的声音面，
+  init 对一切 dragon_flight mob 交叉检 wav + 效果）；**`[V2-16]` 音效缺陷族 13 件修复**（`_noise()`/
   `dig()`/`break_sfx()` LCG **逐采样重建 = 常值流** → 4 件静音 + 5 件 DC 退
   化 + 2 件部分受损，跨多版本潜伏【截图/存档不录音频 = 门盲区，PITS
   382】；修复 = 单 LCG 实例推进，md5 变更恰 13 件、其余 head-identical 幂等
@@ -1278,7 +1402,10 @@
   mob 位空间化）、boom（`[V3-14a]`，爆点位空间化）、ghast_roar
   （`[V3-14b]`，发射前咆哮空间化）+ ghast 嘶鸣（ambient）、barter
   （`[V3-14c]`，交易 chime mob 位空间化）、strider_hiss 骑乘中保留
-  （`[V3-14d]`）、ambience_end（`[V3-10a]`，第 5 上下文 2D 全局）
+  （`[V3-14d]`）、ambience_end（`[V3-10a]`，第 5 上下文 2D 全局）、
+  珍珠 throw/teleport（`[V3-10b]`，发射点/落点位空间化）、enderman_
+  teleport（`[V3-10c]`，落点位空间化）、龙 ambient/growl/death/shoot
+  （`[V3-10d1]`，mob 位空间化——boss 的声音面）
 - **空间化 `[CRAFT-3]`**：块 JSON 可选 `properties.sound_material`（严格
   字符串 + 显式空串拒 = ammo 纪律）+ init 交叉校验（`block_sound.{hpp,cpp}`
   纯函数 `checkSoundMaterials`：引用材质 ⇒ `<m>_dig/_place/_break.wav` 3 件

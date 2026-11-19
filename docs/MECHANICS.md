@@ -1,27 +1,34 @@
-# 机制详解（现状 v3.27.0）
+# 机制详解（现状 v3.51.0）
 
-> 2026-11-06 报障刷新：现状 = **v3.12.0**（3.x 矩阵收官于 v3.11.0；v3.12.0 = 实机报障阴影缩尺）（3.x「世界
+> 2026-11-20 刷新：现状 = **v3.51.0**（3.x「世界
 > 扩展」期：v3.1.0 = V3-7 存档 gzip，门 191；v3.2.0 = V3-1 Phase A
 > 下界门框，门 192；v3.3.0 = V3-8 手柄，门 193；v3.4.0 = V3-1 Phase B
 > 下界世界 + 真传送，门 194【format 30】；v3.5.0 = V3-2/Phase C Part 1
-> 下界内容族 + D9 空腔带修订，门 195；v3.6.0 = V3-4 netherite 材料链，门 196【零核心代码】；v3.7.0 = V3-2 Part 2 下界深化，门 197【全 nether-scoped】；v3.8.0 = V3-3 下界 mob，门 198【neutral/walks_on_lava 旗 + 下界池】；v3.9.0 = V3-5 建筑内容族，门 199【水底 sediment 生成】；v3.10.0 = V3-6 世界边缘雾，门 200【填充感知 fog end，base19 重锚】；v3.11.0 = V3-9 demo 回放，门 201【注入内核 + 双 Input 路由，3.x 矩阵收官】；v3.12.0 = 实机报障阴影缩尺，门 202；v3.13.0 = demo sim 版本，门 203；v3.14.0 = V3-8b 手柄习惯映射，门 204【sim 2】；v3.15.0 = V3-13 死亡统计屏，门 205；v3.16.0 = V3-15 生存/表现小批，门 206；v3.17.0 = V3-11a 创造基础，门 207【format 31】；v3.18.0 = V3-11b 创造物品栏，门 208；v3.19.0 = V3-14a 爆炸机制，门 209；v3.20.0 = V3-14b ghast，门 210；v3.21.0 = V3-14c piglin 交易，门 211；v3.22.0 = V3-14d strider 骑乘，门 212；v3.23.0 = V3-10a 末地维度框架 + 真传送，门 213【format 32】；v3.24.0 = V3-10b 末地内容族 + 末影珍珠，门 214；v3.25.0 = V3-10c 末影人，门 215；**v3.26.0 = V3-10d1 末影龙核心 + 首杀闭环，门 216**；**v3.27.0 = V3-10d2 召唤与复杀，门 217（V3-10 全 4 相位收官）**；其前 2.x 两批 20 版收官
-> v2.0.0 → v2.19.0）、无输入基线门 **217** 次、单元测试
-> **2964/2964**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
-> **format 32**（下界维度 format 30：player.dimension + nether 段 +
+> 下界内容族 + D9 空腔带修订，门 195；v3.6.0 = V3-4 netherite 材料链，门 196【零核心代码】；v3.7.0 = V3-2 Part 2 下界深化，门 197【全 nether-scoped】；v3.8.0 = V3-3 下界 mob，门 198【neutral/walks_on_lava 旗 + 下界池】；v3.9.0 = V3-5 建筑内容族，门 199【水底 sediment 生成】；v3.10.0 = V3-6 世界边缘雾，门 200【填充感知 fog end，base19 重锚】；v3.11.0 = V3-9 demo 回放，门 201【注入内核 + 双 Input 路由，3.x 矩阵收官】；v3.12.0 = 实机报障阴影缩尺，门 202；v3.13.0 = demo sim 版本，门 203；v3.14.0 = V3-8b 手柄习惯映射，门 204【sim 2】；v3.15.0 = V3-13 死亡统计屏，门 205；v3.16.0 = V3-15 生存/表现小批，门 206；v3.17.0 = V3-11a 创造基础，门 207【format 31】；v3.18.0 = V3-11b 创造物品栏，门 208；v3.19.0 = V3-14a 爆炸机制，门 209；v3.20.0 = V3-14b ghast，门 210；v3.21.0 = V3-14c piglin 交易，门 211；v3.22.0 = V3-14d strider 骑乘，门 212；v3.23.0 = V3-10a 末地维度框架 + 真传送，门 213【format 32】；v3.24.0 = V3-10b 末地内容族 + 末影珍珠，门 214；v3.25.0 = V3-10c 末影人，门 215；v3.26.0 = V3-10d1 末影龙核心 + 首杀闭环，门 216；v3.27.0 = V3-10d2 召唤与复杀，门 217（V3-10 全 4 相位收官）；v3.28.0 = V3-12a 多人设计定案，门 218【纯文档】；v3.29.0 = V3-12b 2 人多人 PoC，门 219；v3.30.0 = V3-12c1 大厅/聊天/N 泛化/心跳，门 220；v3.31.0 = V3-12c2 断线恢复 REJOIN + format 33 players[]，门 221（V3-12 全 4 相位收官）；v3.32.0–v3.40.0 = V3-16a–h 教学 demo 族 10 主题，门 222–230（V3-16 全完成）；v3.41.0 = V3-19 死亡屏计时，门 231；v3.42.0 = V3-18 存档扩展名，门 232；v3.43.0 = V3-17a 主菜单：标题页，门 233【S1 重锚 base20】；v3.44.0 = V3-17b 主菜单：设置页，门 234；v3.45.0 = V3-17c 主菜单：登陆 + 教学两级，门 235；v3.46.0 = V3-17d 主菜单：多人页 + MOTD，门 236（V3-17 全 4 相位收官 = 3.x 矩阵收官项）；v3.47.0 = V3-20 demo 中文标题 + 菜单全景背景 + 主机无限等待，门 237；v3.48.0 = V3-21 全景接缝 + 菜单 demo 返回，门 238；v3.49.0 = V3-21 续 全景读回修复，门 239；v3.50.0 = V3-22 全景定格布景 + 菜单键盘，门 240；**v3.51.0 = V3-23 全景混合带 + 选中高亮，门 241**）；其前 2.x 两批 20 版收官
+> v2.0.0 → v2.19.0）、无输入基线门 **241** 次、单元测试
+> **3028/3028**、`-Wall -Wextra -Wpedantic -Werror` 0 警告、存档
+> **format 33**（下界维度 format 30：player.dimension + nether 段 +
 > nether_entities；创造 format 31：player.creative；末地 format 32：
-> dimension 词表 +end + end 段 + end_entities；gzip 编码 V3-7 起；
-> 下界/末地内容 = 世界生成演进零 format）、base19 锚 **225272 B**（重锚谱系 179116 → 178148【V2-10
+> dimension 词表 +end + end 段 + end_entities；多人 format 33：
+> players[] per-player + end_xp_entities + respawn 精确 float；gzip 编码 V3-7 起；
+> 扩展名 .json.gz V3-18 起【两级探测零迁移】；
+> 下界/末地内容 = 世界生成演进零 format）、base19 锚 **225272 B**（游戏视图：重锚谱系 179116 → 178148【V2-10
 > 门 181】→ 178676【V2-19 门 182】→ 179027【V2-11 门 183】→ 224468
 > 【V2-18 门 190，AO 世界光照】→ **225272【V3-6 门 200，填充感知雾 = 3.x
-> 首重锚】**；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
-> 第 72–80 次；门 201–202 = 第 81–82 次免重锚（对 base19）【v3.0.0
-> banner = 第 71 次】）、PITS **401**。上一轮全面刷新
-> （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条），本次把
+> 首重锚】**）+ **base20 = 菜单期 S1 锚**（主菜单标题页——标题 = 像素活
+> 面逐版重锚【PITS 426②】：v3.43.0 21900 B → … → v3.47.0 全景标题
+> 111279 B → v3.50.0 布景标题 247705 B → **v3.51.0 混合带标题
+> 247594 B**）；门 184–189 = 结构免疫第 65–70 次免重锚；门 191–199 =
+> 第 72–80 次；门 201–232 = 第 81–113 次免重锚（对 base19）【v3.0.0
+> banner = 第 71 次；菜单期门 233–241 = 游戏视图结构冷【canary 4 EXACT
+> 执法】+ base20 逐版重锚】、PITS **433**。上一轮全面刷新
+> （2026-11-02）止于 v2.0.0、2026-11-03 增量止于 v2.3.0（下条）、
+> 2026-11-06 报障刷新止于 v3.12.0，本次续刷 v3.13.0 → v3.51.0，把
 > v2.11.0 → v2.19.0 的机制（提前项 `[V2-19]` + 第二批 `[V2-11]`~`[V2-18]`，
 > 逐版见 `docs/archive/v2x/CHANGELOG.md`，细节证据见 `docs/archive/v2x/`
-> 20 份阶段存档）并入各节；3.x 十二版（v3.1.0–v3.12.0）
+> 20 份阶段存档）+ 3.x 二十七版（v3.1.0–v3.51.0）
 > 同样并入（逐版见 `docs/CHANGELOG.md`，细节见 `docs/archive/
-> phase-3.x.0.md` 12 份）。
+> phase-3.x.0.md`）。
 >
 > **2026-11-03 增量（v2.1.0→v2.3.0）**：V2-1 前视角（门 172，`C` 三循环 +
 > 翻转角 + aimReach）/ V2-2 Steve 皮肤（门 173，MobBox per-face 纹理）/
@@ -49,46 +56,54 @@
 > `world.day_length_seconds` 600【代码默认 240】/ `ui.scale` 1.5【代码默认 1.0】/
 > `world.seed` 123456789 + `player` 节全默认值）——文档与行为以代码默认为准，
 > 实际运行以已提交 config 为准。
-**本文 = 玩家/系统侧；世界/渲染侧（世界与流送/物理/光照/流体/火/下界维度/下界传送门/世界生成/渲染与表现/音频）= `docs/MECHANICS_WORLD.md`**
+**本文 = 玩家/系统侧；世界/渲染侧（世界与流送/物理/光照/流体/火/下界维度/末地维度/下界传送门/世界生成/渲染与表现/全景背景/音频）= `docs/MECHANICS_WORLD.md`**
 
 ## 内容总览（现状）
 
 - **技术栈**：C++20 / SDL3 / OpenGL 3.3 core；自研 `Result`/JSON/PNG；
   **内容全数据驱动**（加方块/物品/配方/Mob = JSON + 纹理，不改核心代码，注册表
   严格校验）；**确定性是一级要求**（无输入运行逐帧字节可复现）
-- **方块**：**127** 个数据方块（`assets/data/blocks/`）+ 内置 air 哨兵（非数据，
-  `BlockID{0}`，注册表从 id 1 分配）。模型形状分布：full cube（多数——87，其中
-  47 无 shape 字段缺省 + 40 显式 `full_cube`，含 leaves/cactus 等透明或实心块
-  + 3.x 下界族/建筑族）/
-  cross 17（wheat_1..7、3 花、3 sapling、torch、fire、campfire 家族）/ stairs
+- **方块**：**135** 个数据方块（`assets/data/blocks/`）+ 内置 air 哨兵（非数据，
+  `BlockID{0}`，注册表从 id 1 分配）。模型形状分布：full cube（多数——94，其中
+  47 无 shape 字段缺省 + 47 显式 `full_cube`，含 leaves/cactus 等透明或实心块
+  + 3.x 下界族/建筑族/末地族）/
+  cross 18（wheat_1..7、3 花、3 sapling、torch、fire、campfire 家族 + chorus_plant
+  `[V3-10b]`）/ stairs
   4 / slab 16（stone_slab `state_count 3` `[V2-17]` + 15 床块 `[V2-13]`）/
   wall 1 / fence 1 / glass_pane 1；3 个 sapling 另带 `tree` 对象（shape 词汇
-  {oak, spruce, birch} = 落树形状）。3.x 新增 34 块：nether_portal `[V3-1]`
+  {oak, spruce, birch} = 落树形状）。3.x 新增 42 块：nether_portal `[V3-1]`
   （state_count 2 axis，full-cell 半透盒）/ netherrack `[V3-1]` / 下界内容族
   12 块 `[V3-2]`（nylium×2 / stem×2 / basalt / soul_sand / soul_soil /
   magma_block / nether_brick / 矿脉×3）/ 建筑内容族 20 块 `[V3-5]`（clay /
   mossy_cobblestone / bricks / stone_bricks / mossy_stone_bricks / terracotta
-  15 色染色族）
-- **物品**：**224** = 127 个隐式 block item（与方块同名，无独立 JSON——注册表拒
-  显式同名物品文件，「block items are defined by their block」）+ **97 个显式
+  15 色染色族）/ **末地族 8 块 `[V3-10a]`/`[V3-10b]`/`[V3-10d1]`**（endstone /
+  end_portal / end_portal_frame + end_portal_frame_eyed【A-lite 双 stateless
+  块】/ end_stone_bricks / chorus_plant / end_crystal / dragon_egg）
+- **物品**：**236** = 135 个隐式 block item（与方块同名，无独立 JSON——注册表拒
+  显式同名物品文件，「block items are defined by their block」）+ **101 个显式
   物品**（`assets/data/items/`，`[ENT-9]` 起**全部**带 1..16 box 的 3D `model`
   段 = 三上下文渲染全覆盖；含 pork/cooked_pork `[V2-5]` / string·spider_eye
   `[V2-7]` / shears `[V2-15]` / quartz `[V3-2]` / hoglin_meat·cooked_
   hoglin_meat `[V3-3]` / netherite_scrap·ingot·工具×3·护甲×4 `[V3-4]` /
-  clay_ball·brick `[V3-5]`）
+  clay_ball·brick `[V3-5]` / **ghast_membrane `[V3-14b]`** /
+  **ender_eye `[V3-10a]`**（32×32 独立 icon + 单盒 model）/
+  **chorus_fruit·ender_pearl `[V3-10b]`**（珍珠 = 首个投掷物））
 - **状态效果**：**12**（`assets/data/effects/`，+ dragon_breath
   `[V3-10d]`，见「状态效果」）；**Mob**：**16**
   （主世界 8 = zombie/skeleton/spider + cow/sheep/chicken/pig `[V2-5]`/bat
   `[V2-14]` + 下界 6 `[V3-3]`/`[V3-14b]` = zombified_piglin/piglin/
   hoglin/magma_cube/strider/ghast + **末地 2 `[V3-10c]`/`[V3-10d1]`** =
   enderman + **ender_dragon（boss，单例非池生成）**，
-  `assets/data/mobs/`，见「实体与 Mob」）；**配方**：**114**（shaped 58 /
-  shapeless 56，+ end_crystal `[V3-10d]`，`assets/data/recipes/`）；**生物群系**：9（主世界 4 = desert/
+  `assets/data/mobs/`，见「实体与 Mob」）；**配方**：**114**（shaped 59 /
+  shapeless 55，+ end_stone_bricks 2×2 `[V3-10b]` + end_crystal `[V3-10d]`，
+  `assets/data/recipes/`）；**生物群系**：10（主世界 4 = desert/
   forest/plains/snowy_taiga `[V2-16]` + 下界 5 `[V3-2]` = nether_wastes/
   crimson_forest/soul_sand_valley/basalt_deltas/warped_forest，
-  `assets/data/biomes_nether/` 独立池）
-- **食物**：14 种（`restore_hunger`，见「生存系统」，含 pork/cooked_pork
-  `[V2-5]` / hoglin_meat·cooked_hoglin_meat `[V3-3]`）；**染料**：15 色；**护甲**：
+  `assets/data/biomes_nether/` 独立池 + **末地 1 `[V3-10b]`** = end_plains，
+  `assets/data/biomes_end/` 单群系池）
+- **食物**：15 种（`restore_hunger`，见「生存系统」，含 pork/cooked_pork
+  `[V2-5]` / hoglin_meat·cooked_hoglin_meat `[V3-3]` / **chorus_fruit 2
+  `[V3-10b]`**【saturation 0.0】）；**染料**：15 色；**护甲**：
   16 件（+netherite×4 `[V3-4]`）；**耐久**：36 件（12 工具 + shears + 6 弓 +
   燧石与钢 + 16 护甲，`[SURV-3]` 首批 27 件 + `[SURV-5]` poison_bow +
   `[V2-15]` shears 238 + `[V3-4]` netherite 7 件）
@@ -118,11 +133,18 @@
   dragon_face，[14..15,6..7] + [0,12] 零移位），
   `assets/data/textures/block_atlas.json` 数据驱动布局——加纹理 = 加 PNG + 加一行
   JSON，不改代码；**atlas 空位**纪律 = 不重锚基线）；物品图标 = 每物品独立
-  32×32 PNG；字体 **256×2112**（ASCII 16×16 字形 + **433 个 CJK glyph**
+  32×32 PNG；字体 **256×2272**（71 行；ASCII 16×16 字形 + **469 个 CJK
+  glyph**
   `[PRE-1]` 33 → `[CRAFT-4]` 34 → `[UX-6]` 392 → `[UX-8a]` 395 → `[UX-9b]` 401
   → `[V2-3]` 422 → `[V2-5]` 423 → `[V2-12]` 427 → `[V3-13]` 428（于）→
   `[V3-14a]` 430（爆/炸）→ `[V3-10d1]` 433（影/末/龙——boss 血条名，
-  **扩展区 528/528 恰好满**），顶 512 行位级不变）；health/hunger 48×16
+  **扩展区 528/528 恰好满**）→ `[V3-17a]` 454（菜单五页 + 5 章标题全字核证，
+  atlas 2112→2208）→ `[V3-17b]` 457（屏宽项 3 字，2208 headroom 承接零增长）
+  → `[V3-20]` 469（戏/植/血/房/宫/皇城/河/黑/传送/讨 12 字，atlas 2208→
+  2272；**字形安全 fail-fast**：demo 中文标题/菜单显示名缺字 = init 命名
+  拒收不静默回退问号——`[V3-20]` 起菜单显示面的输入纪律）；**top-512 红线
+  131072 px 逐字节恒等** = 既有字形 UV 位级不变 + 代码点序插入 + 后缀重格
+  纪律【「尾部追加」否决：glyphUv lower_bound 有序不变量】；health/hunger 48×16
   条带、oxygen 16×16、effects **192×16**（12 tile，+ dragon_breath
   `[V3-10d1]`）、cracks 80×16、mob 图集（+ `[UX-3]` 玩家占位皮肤 64×64 + 4 派生
   16×16 tile 尾部追加）
@@ -135,10 +157,20 @@
   （帧边界截图）/ `--save slot` / `--new`（忽略现有存档开新档）/ `--seed N` /
   `--time 0..1` / `--config path` / `--log-level` / `--save-full-diff`（`[PIPE-2]`
   oracle 旗）/ `--weather clear|rain`（`[V2-4]`，仅覆盖初始天气态）/
+  `--explode x y z [r]`（`[V3-14a]`，帧 0 局域爆炸，r 缺省 3——管理旗/demo 三重
+  互斥）/ `--dragon-damage N`（`[V3-10d1]`，龙每次生成施加 N 伤害——龙战斗
+  demo 不可手编 = 耦合移动目标；管理旗互斥）/
   `--list-saves` / `--copy-save S D` / `--rename-save S D` /
-  `--delete-save S`（`[SAVE-3]` 管理旗，独占）/ `--demo <file>` /
-  `--demo-author <t>` / `--demo-record [o]`（`[V3-9]` demo 回放三旗互斥，
-  见「demo 回放」）
+  `--delete-save S`（`[SAVE-3]` 管理旗，独占）/ `--list-demos`（`[V3-16a]`
+  索引表无头旗，独占）/ `--panorama <out>`（`[V3-20]` 菜单全景环带生成器，
+  管理旗互斥全部游戏旗）/ `--panorama-scene <name>`（`[V3-22]` 全景布景世界，
+  单独 = 命名拒收）/ `--demo <file>` / `--demo-author <t>` /
+  `--demo-record [o]`（`[V3-9]` demo 回放三旗互斥，见「demo 回放」）/
+  `--demo-force`（`[V3-13]` sim 门逃生）/ `--listen <port>` /
+  `--connect <host:port>` / `--script <file>`（`[V3-12b]` 多人三旗，见
+  「多人」）/ `--menu-open <page>`（`[V3-21]` 菜单深链：
+  title/login/multiplayer/settings/tutorial，× 九形菜单旁路旗互斥拒收，
+  见「主菜单」）
 
 ## 操作与交互
 
@@ -285,7 +317,9 @@
   `F3` 切换调试 overlay（任意指针状态，英文 = 开发者工具记档 `[PRE-1]`）；
   `F5` 立即存档（`--save` 槽激活时，日志记录结果）；`C` 切换第一/第三人称
   （`[UX-4]`，见上）；`T` 跳过**当前教程系列**（`[UX-7]`/`[V2-3]`，仅指针
-  锁定且教程未结束时；末系列 = 效果等同完成 + toast）；`ESC` 释放指针 /
+  锁定且教程未结束时；末系列 = 效果等同完成 + toast；**多人下 `T` = 聊天
+  切换，教程跳过 = solo only** `[V3-12c1]`，见「多人」）；`G` 切换创造模式
+  （`[V3-11a]`，locked pointer + 仅存活 = C 键范式，见「创造模式」）；`ESC` 释放指针 /
   未锁定时
   退出（干净退出自动写回）；`R` 死亡后重生
 - **背包面板操作**（`[CRAFT-7]` = MC 操作面 3/4 项 + 数字键）：左键 = 取整堆/
@@ -397,9 +431,9 @@
   affects_mobs 效果 / mob 侧要求 shoot_range；init 双向点名；Projectile 尾部
   effectId/effectDuration 默认 −1 位级恒等）——skeleton 箭 = **wither 10 s**
   （玩家侧）/ poison_bow 箭 = **poison 60 s**（mob 侧可毒死）= MC 值
-- **15 种 mob**（`assets/data/mobs/`，全数据驱动 `MobEntity`/`MobRegistry`；
-  数值 = normal 基线；下界 6 种 = `[V3-3]`/`[V3-14b]` + 末地 1 种 =
-  `[V3-10c]` v3.25.0，主世界池/下界池/末地池隔离生成）：
+- **16 种 mob**（`assets/data/mobs/`，全数据驱动 `MobEntity`/`MobRegistry`；
+  数值 = normal 基线；下界 6 种 = `[V3-3]`/`[V3-14b]` + 末地 2 种 =
+  `[V3-10c]`/`[V3-10d1]`（enderman + ender_dragon boss），主世界池/下界池/末地池隔离生成）：
   - **zombie**（敌对）：20 HP / speed 0.8 / 探测 16 / 近战 1.6 / 伤害 3 /
     冷却 1.0 / 掉 rotten_flesh ×1 / `undead: true`
   - **skeleton**（敌对，远程）：20 HP / 0.8 / 探测 16 / `shoot_range` 14 /
@@ -589,7 +623,8 @@
      `[V3-10d1]` v3.26.0，**矩阵唯一真大项首相位 D1/2**）：200 HP /
      0.7 / 探测 16（detect_vertical 8 放宽纵带）/ 8×4 **八盒双翼
      swing**（atlas [14..15,6..7] + [0,12] 零移位）/ **单例非池生
-     成**——门 = playerInEnd ∧ mobs ∧ 无龙 ∧ (0,54,0) 非蛋 → 60f →
+     成**——门 = playerInEnd ∧ mobs ∧ 无龙 ∧ (0,54,0) 非蛋 ∧ 未败亡
+     （10d2 的首访读）→ 60f →
      (0.5,58,0.5)，seed = worldSeed ^ kSaltDragon（不走池 spawn-
      Counter）；**三免疫旗**（fire_exempt 穿晶火 / effect_exempt
      状态不落地 / knockback_exempt 无击退）+ **contact_damage 5**
@@ -610,14 +645,27 @@
      差）+ 升天 60f 直线飞 + 180f 悬停 + **23 orb = 22×9+2 = 200
      整**（D5 项目 XP 刻度）+ wail + 240f 延迟门移除（despawn 对
      任何 dead-boss 保持，记账单收口 game pass）；**重载 = 蛋在无
-     复生**（生成门蛋检）；**末地 orb/云存档静默跳过**（format 33
-     后移 10d2 复议，偏离记档）；**血条** = renderUi 段（186×8 十段
+     复生**（生成门蛋检）；**末地 XP orb 存档 = format 33
+     `end_xp_entities` 恒写**（10d1 后移复议兑现，overworld xp entry
+     形 verbatim；云 = 零物理实体会话态不入档，偏离记档）；**血条** =
+     renderUi 段（186×8 十段
      + 「末影龙」字体 +3 = 433【扩展区 528/528 恰好满】+ 2s 升天淡
      出）；声音 4 件 71→75（ambient/growl/death/shoot，init 对一切
      dragon_flight mob 交叉检 wav + 效果）；**--dragon-damage CLI
      seam**（--explode 孪生——龙战斗 demo 不可手编 = 耦合移动目标
-     定案，管理旗互斥）；后移 10d2：召唤序列 + 复杀 8XP + 蛋 60s
-     重生
+     定案，管理旗互斥；10d2 起每次生成施加 = 同跑可走全循环）；
+     **10d2 召唤与复杀（v3.27.0）**：`crystal_base` 块旗（obsidian/
+     bedrock/出口双帧 4 块）+ `requires_crystal_base`（晶独占）=
+     placeBlock 数据门——**持晶贴基座面放置**（end_crystal 生存可放
+     置，10d1 配方闭环）；**4 出口面晶**（±X = arena 出口晶算数 +
+     ±Z worldgen 缺席）∧ 无蛋 ∧ 无龙 → 60f 倒计时（任一损失取消）
+     → 4 晶引爆【相邻爆波及 = MC 同爆读】+ 蛋计时清除 + 缺位塔晶回
+     写 + 显式 60f 复生（**败亡旗**封闭首访门——破蛋 ≠ 复生，只有
+     召唤复生）；**蛋 60s 会话重生**（玩家破蛋 → 3600f 回写 (0,54,0)，
+     重载复位 D7；蛋 blast_resistance 3 = 晶爆 r3 存活）；**复杀 XP =
+     8**（单 8 值 orb，D5 比例；首杀 200 burst 不变）；F3 第 21 行
+     dragon（全英文零新字形）——细节见
+     MECHANICS_WORLD.md「末地维度」
 - **生成**（`data/mob_spawning.json` + 帧节奏驱动，纯函数 = 同一运行必生成
   同一只）：每 `check_every_frames` **30** 帧尝试一次（难度节奏缩放：easy 60 /
   normal 30 / hard 20，见「难度」）、`first_spawn_frame` **60** 之前不生成、
@@ -952,14 +1000,60 @@
   （采挖/放置/击杀/行走格/存活分钟——采挖·放置·击杀 = 会话级
   `SessionStats`【**不存档** = 记档偏离：MC scoreboard 持久，本项目
   随进程重置】；行走 = Player 水平位移累计【传送阈值守卫】；存活 =
-  帧锁定 m_frameCount/60）+「按 R 重生」；固定物理偏移行距（fScale
+  **死亡帧快照**（下条 V3-19））+「按 R 重生」；固定物理偏移行距（fScale
   仅 font_scale 不含 ui.scale = PITS 397）。**Game Over 屏 = 死亡屏
   本身**（无 hardcore 模式，R 重生既有 = 记档偏离 MC 双屏）。
-- **潜行**（`LeftControl`）
+  **V3-19 存活行快照修（v3.41.0）**：11-08 实机报障「死亡界面存活时间
+  不停增加」——根因 = 存活行活读 `m_frameCount`（死亡后世界模拟照跑、
+  帧继续推进）；修 = `PlayerSession.deathFrame`（-1 回落 = 旧活读位级）+
+  alive→dead 转移块钉帧 + 死亡屏读改快照 `Player::survivalStatsLine
+  (deathFrame, frameCount)` **纯函数**（deathCauseLine 孪生——cause 行读
+  死亡的 DAMAGE INFO，此行读死亡的 FRAME）；两帧臂门断言 = 存活行跨帧
+  逐像素冻结（旧树 = 秒位字形差爬升复现）。
 - **潜行**（`LeftControl`）：身高 1.8→1.6（脚底不动）、眼高 1.62→1.42、移动
   速度 ×0.3（水中除外）；潜行时**不**触发 1 格自动台阶；其它用途：营火坐姿
   （见「营火」）、楼梯/sapling 旋转键（潜行 + 右键，见「BlockState」）、
   低顶陷阱
+
+## 创造模式（`[V3-11a]`/`[V3-11b]`，v3.17.0/v3.18.0）
+
+- **切换与存档**：`G` 键切换（locked pointer + 仅存活 = C 键范式，零新
+  面板）；**存档 flag**（format 31 `player.creative` strict bool 恒写——
+  pre-31 载 → false 迁移 / format 30 携键 = version lie 点名 / 非 bool
+  点名 = dimension 恒写先例；MC per-player /gamemode 语义）——进入即
+  填饱饥饿 + **入场飞行**（`setFlying(true)`），关闭回生存（飞行关、
+  饥饿自满条起衰减）。**零 format 增量 = 31 一次性**；sim 不 bump
+  （canary 4 demo 回放 EXACT 实证——survival 路径位级不变）。
+- **语义**（全在 Player/Game 侧门控，数据零字段）：**全源伤害 no-op**
+  （`damage` 单收口 `if (m_creative) return false`——lava/fire/fall/mob/
+  arrow/starve/void 一律免疫 = 不死；爆炸/龙息同款经 damage 收口自动
+  覆盖）+ **饥饿静态满**（衰减/饥饿 tick `if (!m_creative)` 包裹，非
+  early return 保护 lava 段）+ **即挖**（creative 强制 break duration
+  0 = 复用 data-driven instant path）+ **无掉落/无 XP/无挖掘耐久**
+  （breakBlock gate 只包 4 段 drops/chance/XP——粒子音效保留）+
+  **放置不消耗**（3 点）。
+- **创造物品栏 `[V3-11b]`（v3.18.0）**：创造下 E 面板 = **双 tab**（标题行
+  「物品栏/背包」按钮，激活橙框；**生存 E 面板位级不变** = 门 208 旧≡新
+  字节恒等实证）。物品栏 tab = **前缀搜索框**（项目首个打字面：
+  `SDL_StartTextInput` 仅创造 Inventory 面板期开启【SDL3 文本输入默认关
+  = 无输入运行结构性免疫根】，Input 帧态 `frameText` +
+  `frameBackspace`【wheel delta 孪生，frameBegin 重置；**不入 tap 词
+  表** = demo 录制 schema 不变【panel_click 为 author 面独占第 9 型】，
+  录制的 demo 永不打字，记档偏
+  离】，词表 [a-z0-9_] 小写归一 + 24 上限 + 光标帧锁定闪烁）→
+  **236 物品（全注册表）name 升序前缀过滤** + **6×4 网格滚轮翻页**
+  （1 tick = 1
+  项，双向夹紧；搜索缩表重夹）+ **左键 = 满组授予 / 右键 = 单个**
+  到**选中热栏位**（同物品有隙 = 合并并清 damage/enchants【创造授予不
+  带耐久附魔 = 新栈规则】，异物品 = 替换；满同物品 = no-op；授予播放
+  pickup 音）+ **搜索焦点数字语义**（物品栏 tab 开时数字键 = 文本入搜
+  索，不切热栏 = MC 搜索焦点——槽位须在开面板前选）；背包 tab = 既有
+  E 面板内容位级（+标题行 tab）。面板 = **会话态零 format**（搜索串/
+  滚动/激活 tab 均不落盘）；sim 不 bump（授予经既有 Inventory 公开操
+  作，canary EXACT 实证）。**demo author 面扩展 `[V3-11b]`**：timeline
+  `mouse_move` 可选 `x`/`y` 绝对位【文件 schema 既有 mouse_move x/y，
+  author 面补齐 = 面板点击坐标；缺省 0 = 既有 4 canary 位级恒等】+
+  键词表 `+g`（V3-11a 的 G 键）。
 
 ## 状态效果
 
@@ -1221,8 +1315,9 @@
   3.x 矩阵收官项。
 - **三 CLI 入口互斥**（同时给 >1 = rc 2 点名）：
   - `--demo <file>` = 回放（**开窗前** headless `loadDemoFile` 版本/schema
-    拒收；**world spec = 起点权威**：文件 `world` 段定 fresh seed 或存档
-    槽——`--demo` + `--new`/`--seed` 点名拒【记档偏离 4】；`--demo(fresh)`
+    拒收；**world spec = 起点权威**：文件 `world` 段定 fresh seed / 存档
+    槽 / scene 资产（第三形 `[V3-16a]`，见「教学 demo 族」）
+    ——`--demo` + `--new`/`--seed` 点名拒【记档偏离 4】；`--demo(fresh)`
     + `--save` 允许 = 退出写回放结果；**save-spec 引用槽 init 后 reset
     永不回写**【观察红线：槽 md5 回放前后逐字节不变，门 201 实证】）
   - `--demo-author <t>` = JSON 动作时间线展开为 `.dmo` 即退出（**standalone
@@ -1251,14 +1346,18 @@
   「demo sim X != this build sim Y (recorded with Z) - the simulation
   semantics differ」+ `--demo-force` 逃生门（**仅 bypass sim 门**，
   schema 严格性保留，WARN 点名；无 `--demo` 带 force = rc 2 点名）；
-  `world` 双键 fresh{seed}|save{slot}【双键·缺键·槽字符集拒】/ `dts`
-  【负 / > `kDemoMaxDt` 0.25 拒】/ `events` **封闭 8 型词表**
-  （key_down/key_up/mouse_down/mouse_up/mouse_move/wheel/gamepad_
-  button/gamepad_axis——未知 type 带 8 词表点名）+ per-type payload 面
-  严格（意外键拒）；乱序/悬空帧/gzip 损坏全点名 rc=1 带路径（门 201
-  S6 七面实证）；**零 format** = 独立文件族，存档 schema 30 零触碰；
+  `world` 三形 fresh{seed}|save{slot}|**scene{name}**【scene =
+  committed 确定性存档资产，见「教学 demo 族」；双键·缺键·槽字符集·
+  scene 存在性拒】/ `dts`【负 / > `kDemoMaxDt` 0.25 拒】/ `events`
+  **封闭 9 型词表**（key_down/key_up/mouse_down/mouse_up/mouse_move/
+  wheel/gamepad_button/gamepad_axis + **panel_click `[V3-16a]`**
+  【author 面独占，record tap 永不产生】——未知 type 带 9 词表点名）
+  + per-type payload 面严格（意外键拒）；乱序/悬空帧/gzip 损坏全点名
+  rc=1 带路径（门 201 S6 七面实证）；**零 format** = 独立文件族（存档
+  schema 33 零触碰）；
   **canary 纪律**（见 PROTOCOL.md E2E 协议）：4 个 shipped demo = 模拟
-  语义金丝雀，每版门内回放 savenorm EXACT——核心改动破坏 canary =
+  语义金丝雀，每版门内回放 savenorm EXACT（+ 10 教学 demo 每版门内
+  RAW/savenorm EXACT，见「教学 demo 族」）——核心改动破坏 canary =
   必须 bump sim + 重新 author（时间线 JSON 字节可复现）。**v3.14.0 =
   首个实际 bump（1 → 2）**：V3-8b 手柄输入语义变更（B 疾跑 → 飞行专用
   钮 / L3 → 蹲伏 / RT → 疾跑——录制的 gamepad 事件按**当前解释**重放
@@ -1301,14 +1400,262 @@
   可复现，玩法见 GAMEPLAY.md「demo 回放」节速查表）——**4 件全 = canary
   家族**（每版门内回放 savenorm EXACT）。
 
+## 教学 demo 族（`[V3-16]`，v3.32.0–v3.40.0）
+
+- **scene 世界 spec 第三形 `[V3-16a]`（v3.32.0）**：demo 的 `world` 段 =
+  fresh{seed} / save{slot} / **scene{name}**——scene → committed 确定性
+  存档资产 `assets/demos/scenes/<name>.json.gz`（**只读 = 观察红线结构
+  根**；`--save` 可组合 = 退出写回放结果）；11 个 committed scene = 10
+  guide 场景（guide_mining 复用 `pilot_mine`）+ `panorama`（菜单布景，
+  见 MECHANICS_WORLD.md「全景背景」）。
+- **panel_click 事件 `[V3-16a]`**（demo 事件封闭 8 型 → 9 型，author 面
+  独占）：**几何无关格地址**（panel id + slot id + button 词表严格：
+  0..35 三面板共享 + 100..103 E 2×2 + 110 out + 120..122 furnace +
+  200..208 table 3×3 + 300..323 creative）——resolver = 开面板检查 +
+  layout rect 中心（**当前窗口几何孪生** = uiScale/窗口任意值鲁棒）+
+  真实 Input closure 合成点击；record tap 永不产生 = author 面独占；
+  **net `--script` 拒收**（FrameState 40B 无 panel 字段 = 边界）；**sim 2
+  不 bump**（增量事件型，canary 4 EXACT 执法）。
+- **索引数据层 `[V3-16a]`**：`assets/demos/index.json` 四轴 schema
+  {category, seq, mode, tags, file, length_frames} + **可选 `title`
+  中文标题 `[V3-20]`**（absent = 文件名回落；10 条：挖矿打造工具/种植
+  与进食/受伤与回血/房子与床/建造皇宫/材料收集/引水成河/黑夜历险/
+  下界传送门/末影龙讨伐）+ **字形安全 fail-fast**（title 每码点 = 可
+  打印 ASCII 或 kCjkGlyphs 成员，否则 init 命名拒收——缺字不静默回退
+  问号，门 236「创建游？」门盲点的反转为输入纪律）+ **5 章封闭词表**
+  （day1 第一天基础 / build 建造与大地 / dimension 维度远征 / survival
+  生存历险 / coop 多人协作 = 4+1 定案，`kDemoCategories` 单源 = 显示
+  标题孪生）+ **init 每次 boot 全量交叉检查**（文件存在 + strict load
+  + SIM 门 + length 匹配 + scene 存在——nether 池 fail-fast 传统）+
+  `--list-demos` 独立无头旗（mm:ss 逐字公式 = `total/3600`、
+  `(total%3600)/60`，**非 ceil**）。
+- **10 个 3–10 分钟教学 demo**（zero-kernel 为常态 = 16a 基建全复用，
+  内容 + 工具链增量；仅 `[V3-16e]` = 内核 1 行 ×10 的 demo 恒锁定
+  门控——12 处 relativeMouseMode() 读取审计全表，2 处有意不门控；
+  shipped 于 `assets/demos/`，canary 家族 + 逐版门内
+  RAW/savenorm EXACT）：
+  - **day1**：`guide_mining` 挖矿打造工具（11387f 03:09——砍树→木板→
+    工作台→木镐→逐格挖矿→熔炉环→熔砂玻璃）/ `guide_food` 种植与进食
+    （18262f 05:04——6×4 麦田收割 + 面包 ×5 + 进食 ×2）/ `guide_regen`
+    受伤与回血（18344f 05:05——5 落差台 + 进食 + 10s 门 2×4s 自然回血）/
+    `guide_house` 房子与床（18875f 05:14——二段墙 18 + 脚手架 + 屋顶 12 +
+    床预制成 + Slept at the bed）
+  - **build**：`guide_palace` 建造皇宫（19536f 05:25——100 块 = 92 双层
+    围墙 + 8 四角塔，creative 飞行 B 单按 toggle，内圈地板 38 块 CUT
+    记偏离）/ `guide_materials` 材料收集（25383f 07:03——7 biome 床 33
+    标本 SURVIVAL 收集）/ `guide_river` 引水成河（19841f 05:30——挖河 +
+    舀/倒水双向梯度 + 火把水火对比 + 游泳横渡）
+  - **survival**：`guide_night` 黑夜历险（18301f 05:05——弓箭 combat【弓
+    = 短程 v²/g 11.25-m 射程 + release 发射 + hold=100 满力 + knockback
+    定点迭代】+ 火把环 ×4 + 黑夜巡视 + 黎明，seed 7 猎定）
+  - **dimension**：`guide_nether` 下界传送门（10865f 03:01——obsidian 4×5
+    框预置 + flint_and_steel 点火 + 站入 8:1 传送 + 观下界；返程不做
+    记偏离）/ `guide_dragon` 末影龙讨伐（15214f 04:13——嵌 12 眼 + 传送
+    + **`--dragon-damage 200` 必带**（龙战不可手编）+ 珍珠 28° 弧 40-m
+    一掷 + 破 2 出口水晶 + 返程 exit portal；xp 92 终态钉 = 12 早落 orb
+    沉基岩洋持久记偏离）
+- **工具链**：`tools/mk_scene.py`（场景手术幂等：fresh 基线 + spec 变异
+  + gzip_pin 重序列化双跑字节恒等；ring/fluids/campfires/tables/
+  furnaces strict 面）+ `tools/demo_author.py`（Guide DSL：track 状态 +
+  capture/look_at/place_ahead/open_ahead/walk 轴对齐/mine/panel/
+  panel_collect/tap/click/select + FLY 7.12 实测 + walk_leg y/hold 尾
+  参 + entry-aware 向量行走模型）+ `tools/scenes/` beat 脚本 +
+  `arrow_sim.py`/`aim_from_log.py` 弓箭弹道 aim pin 探针族；**分段前缀
+  验证**（用户定案 ≤30 段——前缀 = 全跑逐帧恒等，段 PASS 可传递）；
+  门内捕获 PITS 413（19 坑）→ PITS 422（八坑）族 = guide authoring 全
+  史。
+- **宿主 = 主菜单教学两级**（`[V3-17c]`，见「主菜单」）+ `--demo` CLI
+  位级孪生（`applyDemoArgs` 共享单源）。
+
+## 多人（`[V3-12]`，v3.29.0–v3.31.0）
+
+- **架构（`[V3-12a]` 设计定案，`docs/V3-12-MULTIPLAYER-DESIGN.md`）**：
+  **主机权威 lockstep**——项目确定性纪律 = 锁步免费午餐：demo 内核 =
+  客户端循环形状 + 输入中继 = `Input handle*` 第二消费方 + **世界传输
+  零**（worldgen 纯函数同 seed 位级）；时间源 = 主机广播 clamped wall
+  dt raw f64 位（real-dt 结构性零 desync，2 处 simTime 化 solo 位级）；
+  **无 net 线程**（POSIX TCP，主线程轮询 = 零新依赖 `net/` ~1200 行）；
+  设计稿约束 R1–R20 / 偏离 D1–D25（逐版 CHANGELOG 记档）。
+- **协议**：小端固定头 {magic, type, len} + 流重组（粘包/截断缝）：
+  **HELLO 四指纹握手** {TM_VERSION, sim, assetFNV（assets 树排序 FNV）,
+  simConfigHash（sim 键固定表——**world.seed 豁免**【WELCOME 种子 = 主
+  机权威】+ render.* 豁免【dt 广播归一】）}= 混版先拒，schema 增长兼
+  容性免费；**WELCOME**（fresh = 仅 seed 零字节世界传输；REJOIN = save
+  形快照，下条）+hostName str8 ≤12（空 = CLI 旧形 "host" 回落）+motd
+  str16 ≤ `kNetMotdMax` 64；**INPUT** {frame, FrameState, hash}
+  客户端→主机每帧；**FRAME** {frame, dtBits raw f64, states×N, hash}
+  主机→客户端；**CHAT** type 7（slot, u16 len, ≤256B，客户端→主机重
+  广播）；**CTRL**（REJECT 点名 / Join / Renumber）；**FrameState
+  40B** = keys u64×2 + buttons + **mouseDx/Dy raw f32 零量化** + Ax/Ay
+  （面板落格）+ wheel + locked（表现层 textLen 恒 0 预留位不入哈希）；
+  **D = `kNetInputDelay` 2，无预测**（38–42 ms）；**状态哈希字段清单**
+  （frame/day/weather/每玩家全态 + 会话计时器 + 36 格库存 + 效果 / 每维
+  实体插入序含 mob rng / 每维 journal 全集 / spawnCounter×3 / 粒子 /
+  fires）**每 30 帧双向交换** + 不符点名退出 = 确定性门。
+- **player 多人化（双别名最小方案）**：`m_players` + `m_localSlot` +
+  `m_player` raw pointer primary 别名（354 处零改动）+ `PlayerSession`
+  吸收 10 成员族 + 14 引用别名绑 session 0（~430 处零改动）+ **pass
+  归属二分**（primary 锚不动：mob 目标/生成/教程 actor 门/龙/portal；
+  ×N 循环化全 sim 覆盖：物理/生存/效果/骑乘/珍珠/交互 17 函数/拾取
+  磁吸三拾取/眼接触/箭扫掠/面板/渲染 local 化）+ per-player aim
+  （solo 相机路径位级 / net 第一人称形 D17）+ R2 simTime 2 处 + R10
+  xpSeed 盐 + R9 出生点 i；**streaming 跨机 2 处修正**（回退门读
+  `streamPending.size()` 共享账本——本机吞吐读 = 静默 desync 根；盘锚
+  经 primary 别名自动）。
+- **主机/客户端双循环**：单 `runGameplayLoop` + net 钩子——主机 poll +
+  **lockstep 屏障**（等客户端 INPUT[N−D] 水印；无头主机快跑吃未发输入
+  = 门内捕获 desync 根）+ accept 窗 N 定形（首客 = 无限等待 `[V3-20]`，见 N 条
+  + 附加客 3s 窗 250ms 截止重试【单次静默 break = PITS 411①】+ WELCOME 窗后统一 flush 同 N = lockstep 前提；窗内拒收 = REJECT 点名续窗）/ 客户端 waitPacket 等包阻塞
+  模拟 + 帧号失序点名；**断线移除** EOF/RST 同形（client 干净退出 =
+  RST 非 FIN）：**主机 = 库存 100% 掉落 + 落乘 + solo 续跑** /
+  **客户端见主机 EOF = 全体退**（D2）；**心跳 = 屏障 stall min 水印
+  10s 点名移除最滞后**（anyProgress 健康同伴遮死者 = 死锁形门内修；
+  移除后重基准）+ 客户端 waitPacket 10s 超时点名退。
+- **大厅（`[V3-12c1]`）**：第三人称**名牌**（world→screen 投影，三相机
+  常量 game_local.hpp 共享单源，本地玩家无牌）+ **F3 第 22 行
+  players**（Latin，solo 基线 "players solo"）+ **聊天**：`T` 切换
+  （net 下 T = 聊天，教程跳过 = solo only D12 延伸）+ frameText 活 pump
+  本地面 + 8 行环浮层 300f 淡出（左下）+ Latin only 零字形 + **打字抑
+  制**（Input 可打印域 0x20..0x7e 在 owner 机 FrameState 捕获前本地吞
+  ——typed 'e' 开面板截断消息的门内捕获修；ESC/Enter/Backspace/功能键
+  存活）+ **E 面板中继修**（边沿 = 主机物理按键经捕获中继全机对称 =
+  E/ESC 边沿全玩家处理 + 窗口/声音动作 localOwner 自门——isLocal 门 =
+  主机玩家面板 desync 根）。
+- **REJOIN（`[V3-12c2]`，断线恢复）**：主机**持久 listener** + 中会话
+  非阻塞 accept + WELCOME startFrame 采纳 + **重连者 = 新体 D25**
+  （原体物品 100% 掉落仍在 entities 可捡回）；**REJOIN 快照 = save 形
+  WELCOME** 携主机当前文档【磁盘档 + 会话计数族 {weather 5 字段含双
+  splitmix 流 / spawnCounter×3 / particleBreakCounter} + 活粒子 +
+  per-player 会话计时器族——全 presence-gated，on-disk 格式不变】；
+  **mob-quiet 合同 D24**（活 mob 在场 = 中会话 rejoin 点名拒收，全 mob
+  快照传输后移）+ Join/Renumber CTRL 广播（slot 重编号，行随玩家移）+
+  net 主机抑制幽灵（载多玩家档 = stale 幽灵 segfault 修）。
+- **N = `kNetMaxPlayers` 8**（协议形，u8 计数走；12b PoC 恒 2）；
+  **主机首客无限等待 `[V3-20]`**（10s 硬超时用户报障修）：250ms accept
+  轮询 + **1s 重渲染节拍**（等待期窗口显示天空 + HUD——黑窗改善）+
+  10s 心跳日志 + **ESC/关窗 = 命名取消**（输入泵）；附加客 3s 窗不变；
+  **模拟冻结 = fresh WELCOME 零字节权威不变**（等待期无 update → 世界
+  静态）。
+- **MOTD `[V3-17d]`**：主机 config `net.motd`（默认 "TokenMine.cpp"，
+  键缺省不写用户 config = P32 纪律；latinOnly + 64 cap）→ 客户端世界
+  建成后**首聊行** `displayChat(0, motd)` + 日志点名（12c1 大厅 MOTD
+  意念最小形——服务器列表 ping 不做记偏离；表现层不入哈希 D21 先例）。
+- **CLI**：`--listen <port>`（1..65535 严格；菜单主机默认端口
+  `kNetDefaultPort` **5555** 具名）/ `--connect <host:port>`（单冒号严
+  格）/ `--script <file>`（demo 时间线**第四消费方** = 确定性输入——
+  门臂零 xdotool 输入；× demo 族互斥 + panel_click 拒收）；`--connect`×
+  `--save` 点名拒（R7——客机不写档）。
+- **零 format 30→32 不变 / sim 2 不 bump**（canary 4 EXACT 执法——solo
+  路径 net 面全冷 = 结构免疫根）+ **format 33 players[]**（见「存档」）；
+  性能 = net 自成本 +~0.07–0.26 ms/帧（per-player sim pass + 屏障 +
+  socket，sub-ms 同档），solo 零成本（S1 ≡ base19 + 终档跨树
+  savenorm EXACT 逐版实证）。
+
+## 主菜单（`[V3-17]`–`[V3-23]`，v3.43.0–v3.51.0）
+
+- **架构（`[V3-17a]`）**：交互 boot 进**主菜单** = 第 4 循环
+  `runMenuLoop`（window + renderer + `buildUiAssets` 后、`buildScene`
+  前）；`renderMenu` = clear + UiBatch only，**禁 render/renderUi**
+  （世界未建；调色板/原语 = renderUi 文件局部 lambda 的拷贝，renderUi
+  原文零触碰 = 游戏面位级根）；**menuEnabled 旁路**（demo 三形 /
+  net 两形 / `--script` / `--new` / `--panorama` = 结构免疫根——
+  headless-shape boot 永不进菜单；管理旗 main 即退；世界塑造旗
+  --seed/--time/--explode/--weather/--dragon-damage 与菜单**组合** =
+  应用于单人启动所建世界）；`buildUiAssets` = buildScene 头提取幂等
+  （菜单 init 建一次，单人启动 buildScene 重入跳过 = GL 资源单加
+  载）；菜单退出（无世界）= **save 写跳过**（`--save` 槽不创建——S1 断
+  言面）；`--menu-open <page>` 封闭词表深链（title/login/multiplayer/
+  settings/tutorial；Join = 多人页内部态永不 boot 页）× **九形菜单旁路
+  旗互斥命名拒收**（`--demo`/`--demo-record`/`--demo-author`/`--listen`/
+  `--connect`/`--script`/`--new`/`--panorama`/`--list-demos`）。
+- **六页**：
+  - **标题**（17a）：logo「TokenMine.cpp」scale 2.0 + 版本行 +
+    单人/多人/设置/教学/退出 5 项（hover 白条 + click/Enter 激活 +
+    ESC 返回/退出，零新 GameKey）。
+  - **登陆**（17c）：标题→单人经此页；名字标题 + 300×40 输入框 +
+    「（可选）」hint + 开始/返回；**文本输入生命周期** = m_textInputOn
+    页入开/页出关（`SDL_StartTextInput` 仅登陆/多人/加入期开 = 创造
+    搜索/聊天先例）+ latinOnly 净化 + **12 cap**（net HELLO name 载体
+    域）+ 默认 "player" **会话态零 format**（名字不入存档）。
+  - **设置**（17b）：8 行表单——视图距离 4..64 ±4 / 白天长度
+    60..86400s ±60 / 天气 toggle / 声音 0..10 ±1 / 界面缩放 1.0..4.0x
+    ±0.5 / 全屏 toggle / 窗口宽 640..2560 ±64 / 窗口高 480..1440 ±64 +
+    保存钮 + 「部分项重启后生效」hint——**零文本输入**（数值全
+    stepper/toggle）+ ESC 返回 / Enter 保存；**ui.scale = 唯一运行时
+    生效面**（m_uiScale 每帧读 = 菜单 reflow 活体证明，世界启动 buildScene
+    重读同值；其余 = 世界启动/下次启动生效）；**写回 = 既存
+    `Config::save`**（保存 confirm 后整档 dump——std::map 键序字母归一 +
+    2-space 缩进 = 记录偏离，值全保 = 未动键存活；整值出整数 80 非
+    80.0）；纯布局 + 状态机 = `menu_layout.hpp` test 孪生（gate 点击同
+    源公式）。
+  - **教学**（17c）：**两级**——tier 1 = 5 章标题 +「· N 个」计数（init
+    缓存 m_demoIndex 零额外 IO）/ tier 2 = 章内 demo「中文标题 · mm:ss」
+    （.dmo 剥除 + scale 1.0 防溢出）+ coop 行「需联机」badge + **coop
+    拒收**（mode 检查 = net×demo 互斥同款——solo boot 跑不了 coop
+    demo）；**菜单驱动 demo = `startDemoFromMenu`**（main.cpp --demo
+    parse 复刻：loadDemoFile **严格永不 force** + world spec→args +
+    **applyDemoArgs = init --demo 块原文提取共用单源**）→ menuExit 2 →
+    buildScene → runDemoReplay = **CLI --demo 位级孪生**（门臂 savenorm
+    EXACT 实证）；mm:ss = --list-demos 逐字公式。
+  - **多人**（17d）：名字字段 = m_menuName 共享（文本输入生命周期扩至
+    Login/Multiplayer/Join，每页单字段隐式焦点）+ **创建游戏**（fresh
+    世界 + `kNetDefaultPort` 5555 默认端口，CLI --listen 显式面不变）+
+    **加入游戏** → 加入子页（host:port 字段 + **menuParseHostPort 纯
+    函数**【host [A-Za-z0-9.-]{1..255} + 单冒号 + port 1..65535——7 合
+    法/10 拒收 test 钉】+ 拒收行）；**网络接线 = init 块原文提取**
+    （netClientStart = --connect 块【握手 + WELCOME 种子覆写】/
+    netPostScene = --listen 块 + REJOIN 快照 + 客户端全玩家体 + MOTD 首
+    聊行——CLI init 原位调用位级不变，菜单 run() menuExit 3/4 共用，
+    17c applyDemoArgs 范式；host = buildScene 后【HELLO 比对需世界种
+    子】/ client = buildScene 前【WELCOME 种子权威】）。
+- **选中与键盘**（17a 鼠标面 + **`[V3-22]` 菜单键盘**）：统一
+  `m_menuSel`——**4 新方向键 GameKey**（G 后插入、FlyToggle 保枚举尾；
+  **玩法零消费方** = demo/net/sim 位级根——FrameState u64 掩码宽度不
+  变）+ `menuMoveSel` 纯函数（wrap + 首按进入 + clamp）+ 鼠标 hover 每
+  帧同步 sel + 页/tier 切重置 −1（零像素腰带 = S1 锚）+ 六页 sel 驱动
+  渲染 + Settings Left/Right = Dec/Inc/Toggle 行调节 + Tutorial
+  tier1 Enter/Right 进章 / tier2 Left 回章 + Login/多人/加入 Enter 激
+  活 sel（既有 Enter 语义全保留）+ **WASD 文本期门控 / 方向键恒可
+  用**（打字 'w' 不移动）；click 面 = hover 原样鼠标路径位级。
+  **`[V3-23]` 选中高亮加强**：白条 α 0.12→**0.30** + **3px 橙色
+  (1.0, 0.82, 0) 左缘竖条**（addHoverBar 单点六页全生效，零字体）。
+- **全景背景**（`[V3-20]`–`[V3-23]`，v3.47.0–v3.51.0）：`--panorama`
+  生成的 committed 环带资产（生成器/周期性/混合带细节 = 世界侧，见
+  MECHANICS_WORLD.md「全景背景」）+ renderMenu **延迟加载**（仅菜单路
+  径——游戏 boot 零成本）+ **cover-fit 等比填充**（非等比拉伸 = 树木
+  拉尖门内捕获修）+ **帧锁定慢速平移**（m_menuFrame 纯函数 = S1 ×2 RAW
+  确定性；闭环 = GL_REPEAT 无缝）+ **0.55 冷暗面纱**（文字对比度）+
+  缺失/失败 = named warn + 旧纯色 clear 回落（菜单不因装饰失败）。
+- **demo Q 返回教学菜单（`[V3-21]`，v3.48.0）**：回放 Q 键 →
+  **`execRestartToMenu` 进程干净 re-exec**（~2s 重载形：池 drain → 音频
+  → 窗口/SDL → execv /proc/self/exe；--config/--save 透传 + --frames 丢
+  弃；save/record 跳过 = 观察红线；架构裁决：就地重建世界 = 无先例大
+  重构超诉求批——回放恒得 fresh 场景）+ m_menuDemoReturn /
+  m_demoQuitByAudienceKey 双旗【窗口关闭 = 进程退出形不变 + **CLI
+  --demo Q 行为零变化 = 位级红线**（m_menuDemoReturn 缺省 false）】→
+  重启菜单深链回教学页（--menu-open tutorial）。
+- **S1 重锚 base20（`[V3-17a]` 起）**：菜单期无输入锚 = 标题页
+  （f60 无输入 ×2 RAW 逐字节——**菜单无输入渲染纯函数**【17a 全静态无
+  墙钟入像素，fps_cap 只 pacing】+ defined mouse (10,10) no-hover warp
+  纪律【hover = 首个鼠标位置入像素的无输入锚面，PITS 425②】+ 槽不创
+  建断言）；**标题 = 像素活面 = 逐版重锚**（PITS 426②：版本行/背景变
+  更有界 diff 断言；最新 v3.51.0 = 247594 B）。
+- **R7 菜单面写档守卫（`[V3-17d]`）**：`writeSave` 收口 +
+  `connectHost.empty()` 门——菜单加入运行时设 connectHost 绕过 argv
+  拒收 = 客机写档可覆主机槽（门内定案捕获 PITS 428②）；**click 臂
+  单人 ≡ --new savenorm EXACT = 菜单零模拟贡献最强形**（17a 实证，逐版
+  回归）。
+
 ## 合成与容器
 
-- **配方系统**（`assets/data/recipes/*.json`，**112** = shaped 58 + shapeless
-  54【含 `[V2-7]` 金/钻块 ×2 / `[V2-12]` 附魔台 + 书架 ×2 / `[V2-13]` 床 ×15 /
+- **配方系统**（`assets/data/recipes/*.json`，**114** = shaped 59 + shapeless
+  55【含 `[V2-7]` 金/钻块 ×2 / `[V2-12]` 附魔台 + 书架 ×2 / `[V2-13]` 床 ×15 /
   `[V2-15]` shears ×1 / `[V3-2]` nether_brick 2×2 自压缩 ×1 / `[V3-4]`
   netherite ×8（ingot shapeless 4 scrap + 4 gold_ingot + 工具 3 直接
   crafted + 护甲 4 升级 shapeless）/ `[V3-5]` 建筑族 ×17（stone_bricks /
-  bricks / mossy_stone_bricks + terracotta 染色 14 shapeless），
+  bricks / mossy_stone_bricks + terracotta 染色 14 shapeless）/
+  `[V3-10b]` end_stone_bricks 2×2 shaped count 4 MC 精确 ×1 /
+  `[V3-10d1]` end_crystal（glass 10 + ender_eye + ghast_membrane）×1，
   `[P12]`/`[P17]` 起全数据驱动；v1.34.0 起含炉子配方
   `8 cobblestone 围圈 → furnace`）：shapeless = 原料袋（无 `type`，
   `ingredients`）/ shaped = `"type": "shaped"` + `pattern`（行字符串，1..3 行 ×
@@ -1427,37 +1774,6 @@
   无锻造台 / model 克隆钻石系 记档偏离 3）；icon 9 件暗红铜色板（记档偏离
   4，既有 84 张 md5 逐一不变）；附魔面：工具 pick/axe/shovel 类
   enchantability 14、护甲 10（可附魔 22 → **29 件**，见下条）；
-  **创造模式 `[V3-11a]`（v3.17.0）**：`G` 键切换（locked pointer +
-  仅存活，C 键范式）；**存档 flag**（format 31 `player.creative`，
-  MC per-player /gamemode 语义）——进入即填饱饥饿 + 开飞行，关闭回
-  生存（飞行关、饥饿自满条起衰减）。语义（全在 Player/Game 侧门控，
-  数据零字段）：**全源伤害 no-op**（damage 单收口 `if (m_creative)
-  return false`——lava/fire/fall/mob/arrow/starve/void 一律免疫 = 不
-  死）+ **饥饿静态满**（衰减/饥饿 tick `if (!m_creative)` 包裹，非
-  early return 保护 lava 段）+ **即挖**（creative 强制 break
-  duration 0 = 复用 data-driven instant path）+ **无掉落/无 XP/无
-  挖掘耐久**（breakBlock gate 只包 4 段 drops/chance/XP——粒子音效
-  保留）+ **放置不消耗**（3 点）；sim 不 bump（canary 4 demo 回放
-  EXACT 实证）。**创造物品栏 `[V3-11b]`（v3.18.0）**：创造下 E
-  面板 = 双 tab（标题行「物品栏/背包」按钮，生存 E 面板位级不变 =
-  门 208 旧≡新字节恒等实证）——物品栏 tab = **前缀搜索框**（SDL 文
-  本输入新面：`SDL_StartTextInput` 仅创造 Inventory 面板期开启【SDL3
-  文本输入默认关 = 无输入运行结构性免疫根】，Input 帧态 frameText +
-  frameBackspace【wheel delta 孪生，frameBegin 重置；**不入 tap 词
-  表** = demo 录制 schema 8 型不变，录制的 demo 永不打字，记档偏
-  离】，词表 [a-z0-9_] 小写归一 + 24 上限 + 光标帧锁定闪烁）→
-  **224 物品 name 升序前缀过滤** + **6×4 网格滚轮翻页**（1 tick =
-  1 项，双向夹紧；搜索缩表重夹）+ **左键 = 满组授予 / 右键 = 单个**
-  到**选中热栏位**（同物品有隙 = 合并并清 damage/enchants【创造
-  授予不带耐久附魔 = 新栈规则】，异物品 = 替换；满同物品 = no-op；
-  授予播放 pickup 音）；**搜索焦点数字语义**（物品栏 tab 开时数字
-  键 = 文本入搜索，不切热栏 = MC 搜索焦点，槽位须在开面板前选）；
-  背包 tab = 既有 E 面板内容位级（+标题行 tab）；面板 = 会话态零
-  format（搜索串/滚动/激活 tab 均不落盘）；sim 不 bump（授予经既
-  有 Inventory 公开操作，canary EXACT 实证）。**demo author 面扩展
-  `[V3-11b]`**：timeline `mouse_move` 可选 `x`/`y` 绝对位【文件
-  schema 既有 mouse_move x/y，author 面补齐——面板点击坐标；缺省
-  0 = 既有 4 canary 位级恒等】+ 键词表 `+g`（V3-11a 的 G 键）。
   **火·熔岩免疫 `[V3-15]`（v3.16.0）**：物品可选属性 `fire_resistant`
   （strict bool，armor-only = parseArmor 守卫，shears tool-only 孪生）
   4 件 netherite 护甲 = true——**任一件穿在身上**（setArmorSlot 单收口
@@ -1601,10 +1917,12 @@
   固定自旋 Ry 0.6 + Rx −0.35，**弓拉/进食举到嘴变换零额外代码继承**，block
   立方手路径位级不动）/ 世界掉落（`drawItemEntities` model 分支替代**原不可见
   非 block 掉落**，blending pass only【icon PNG 带 alpha】，帧锁定 bob+spin）/
-  进食举到嘴。**shipped = 全 97 件非 block 物品**（79 件 1.x 基线 +
+  进食举到嘴。**shipped = 全 101 件非 block 物品**（79 件 1.x 基线 +
   `[V2-5]` pork 链 2 + `[V2-7]` string/spider_eye 2 + `[V2-15]` shears = 83
   + `[V3-2]` quartz 1 + `[V3-3]` hoglin 肉链 2 + `[V3-4]` netherite
-  9 + `[V3-5]` clay_ball·brick 2 = 97；
+  9 + `[V3-5]` clay_ball·brick 2 = 97 + `[V3-14b]` ghast_membrane 1 +
+  `[V3-10a]` ender_eye 1 + `[V3-10b]` chorus_fruit·ender_pearl 2 = 101；
+  4 新件全 1 box 模型
   `[CRAFT-2]` 16 件【工具 9
   + 弓 5【上臂+下臂+弦，中部开口 C 弧近似，master_bow 无 model 共用】+ 苹果
   2【果体圆近似+柄】，纹理 = 既有图标 PNG，零新纹理免重锚】→ `[ENT-9]` 其余 63
@@ -1849,7 +2167,7 @@
     102/128、字体 423 零新字、既有 184 纹理 PNG md5 零变化（5 新 1 删普
     查实证）
 - **物品与背包**（`[P11]`/`[P12]`，`Item`/`ItemStack`/`Inventory`，全数据
-  驱动）：物品 = 纯数据（`ItemRegistry`，176 种 = 93 隐式 block item + 83
+  驱动）：物品 = 纯数据（`ItemRegistry`，236 种 = 135 隐式 block item + 101
   显式：`type: "tool"` 带 `tool.break_speed` / `type: "material"` 通用非方块
   物品——锭/木棍/染料/桶/药水/护甲/弓等，作为配方原料/产物和方块掉落）；
   **背包 36 格** = 9 hotbar + 27 背包（**4 行** `[UX-8f]`，`kTotalSize`
@@ -1887,12 +2205,19 @@
   目录 `.tmp` + flush/close + `std::filesystem::rename` POSIX 原子，**F5/退出/
   自动三路共用**增强；任一步失败删 tmp + 原 MC_FAIL 语义——**失败写永不毁旧
   档**，陈旧 tmp 复用清理；kill -9 中途实证 = 零 `.tmp` 残留，半写档不可达）+
-  日志行可区分（`World auto-saved to` vs `World saved to`）
-- **文件**：`data/saves/<slot>.json` = **seed + 与生成态的 diff + 完整游戏
-  状态**——不重复存储地形，只存「和这个 seed 生成的世界不同的格子」（
-  `blocks`/`fluids` 编辑列表，破坏 = `"air"`）+ 玩家全状态 + 昼夜时间 + **36
-  格背包 `[UX-8f]`** + 选中格 + 掉落物/经验球实体（含 120 s 寿命与拾取延迟
-  计时器，经验球 `[V2-11]`）
+  日志行可区分（`World auto-saved to` vs `World saved to`）+ **`[V3-17d]`
+  R7 菜单面写档守卫**：`writeSave` 收口 + `connectHost.empty()` 门——
+  客机（含菜单加入）永不写档 = 防客机覆主机槽（同 slot 名形，门内定案
+  捕获 PITS 428②）
+- **文件**：`data/saves/<slot>.json.gz`（**`[V3-18]` v3.42.0 起新写形** =
+  确定性 gzip 容器 + 可见扩展名；读 = **两级探测**（.json.gz 先、legacy
+  .json 后 = **零迁移**——legacy 槽可读，下次写自动换名温和迁移，V3-7 魔数
+  探测同款先例；路径族单源 `slotWritePath`/`slotReadPath`（save_slot.hpp），
+  writeSave/autosave/exit 共享写恒新形））= **seed + 与生成态的 diff + 完
+  整游戏状态**——不重复存储地形，只存「和这个 seed 生成的世界不同的格
+  子」（`blocks`/`fluids` 编辑列表，破坏 = `"air"`）+ 玩家全状态 + 昼夜时
+  间 + **36 格背包 `[UX-8f]`** + 选中格 + 掉落物/经验球实体（含 120 s 寿命
+  与拾取延迟计时器，经验球 `[V2-11]`）
 - **diff = journal 增量 `[PIPE-2]`（O(会话编辑数)）**：World 写收口位置集
   **journal**（observer，含位移陷阱双上报）+ 退出**按 journal 触及 chunk
   重算 fresh**、仅 live≠fresh 输出（**与 diffWorld 字节等价**，进程内 oracle =
@@ -1908,16 +2233,32 @@
 - **`[SAVE-3]` 槽位管理 CLI**（headless 四操作，管理跑不启动游戏 = 无窗口无
   世界无资产）：`--list-saves`（名序确定性列表 = 摘要纯读文件内容【format/
   seed/昼时/位置/血量】**无 mtime 无墙钟** = 列表体 ×2 逐字节一致；损坏文件
-  浮现 UNREADABLE + 点名而非隐藏）+ `--copy-save S D`（**字节保真**分支存档 =
-  MC Save Copy；D 已存在点名拒；原子写 = `[SAVE-1]` 同款失败零半写）+
-  `--rename-save S D`（POSIX 原子改名）+ `--delete-save S`（点名）；槽名 =
+  浮现 UNREADABLE + 点名而非隐藏；**`[V3-18]` 双扩展名**：list 两形枚举
+  去重【.json.gz 赢摘要】）+ `--copy-save S D`（**字节保真**分支存档 =
+  MC Save Copy；D 已存在点名拒；原子写 = `[SAVE-1]` 同款失败零半写；
+  **`[V3-18]` = 探测读 + 新形写【复制即 legacy 槽名迁移】**）+
+  `--rename-save S D`（POSIX 原子改名）+ `--delete-save S`（点名；
+  **`[V3-18]` rename + delete = 消费全槽**【双形皆存在删孪生 = 不残留
+  旧形污染 list】）；槽名 =
   `--save` 字符集（字母/数字/_/-，天然杀路径穿越）；**管理旗标独占**（每跑
   至多一个 + 与游戏旗标互斥 = rc 2 点名）；**记档偏离**：无游戏内选档面板/
   会话内换档（游戏无标题画面，会话内载档 = 世界重建级架构变更矩阵外；多槽
   切换 = CLI `--save` 既有面；「保存并退出」= 既有 ESC/退出存档路径）
-- **format 32**（`kSaveFormat` 32 / `kSaveFormatMin` 1；**1..32 全部可加载**，
+- **format 33**（`kSaveFormat` 33 / `kSaveFormatMin` 1；**1..33 全部可加载**，
   各按字段集 + 逐 format 白名单，规则式迁移——「未知字段 = 报错」
-  rejectUnknownFields 保持；**32 = `[V3-10a]` 末地维度时代**：`player.
+  rejectUnknownFields 保持；**33 = `[V3-12c2]` 多人时代**：root `player` +
+  root `inventory`/`inv_grid` 迁入 **per-player `players[]` 数组**（entry
+  0 = primary 镜像，applySave 主路径零改；entries 1.. = 远程玩家；
+  **`kSavePlayerCap` 8** = net 协议 cap；三面 version lie【≤32 携
+  players / ≥33 缺 players / ≥33 携 root player·inventory·inv_grid】全
+  点名 + 序列化 fallback【players 空 = 从 legacy 主字段派生单条】）+
+  **`end_xp_entities` 恒写**（末地 XP orb 持久化——10d1 后移复议兑现：
+  overworld xp entry 形 verbatim，parseXpEntry 单源；format-32 携键 =
+  version lie 点名；10d1「120 s fuse 限损失」偏离闭合）+ **`player.respawn` 精确 float**（≤32 int cell 对非
+  cell-center 值丢 0.5-y 的门内捕获修）+ **net 快照段**
+  {particles/weather 5 字段/spawn_counters×3/particle_break_counter/
+  net_players} **仅 WELCOME 文档携、on-disk 省略**（REJOIN 面，格式零
+  增长）；schema 其余与 32 一致（**32 = `[V3-10a]` 末地维度时代**：`player.
   dimension` 词表 **按 format 分词**（30/31 = `overworld`|`nether`
   二词——31 携 "end" = version lie 点名；≥32 = 三词 + `end`）+ `end`
   段 `{blocks, fluids, states}` **恒写**（空合法 = 末地 journal；end
@@ -1940,7 +2281,8 @@
   on-disk = 确定性 gzip 容器（固定 10B 头 `1f 8b 08 00 00 00 00 00 00 03`
   【MTIME=0/FLG=0/XFL=0/OS=3】+ raw deflate level 6 + CRC32/ISIZE 尾，
   同世界逐字节可复现）；加载按魔数 `1f 8b` 自动探测 = **旧明文档零迁移
-  直读**（唯一编码判据，扩展名恒 .json）；解码严格（头 10B 逐字节全钉 /
+  直读**（唯一编码判据——扩展名 `.json.gz`/`.json` 皆合法，编码以魔数
+  为准）；解码严格（头 10B 逐字节全钉 /
   截断 <20B / 半体 / CRC·ISIZE 不符全点名带路径，系统 gzip CLI 产物点名
   拒收 = 机器生成文件纪律）；`save.compression: "gzip"|"none"` 严格读
   （absent = gzip 代码默认 = 11-04 用户定案 / "none" = 明文 = 旧行为位级
@@ -1974,9 +2316,16 @@
     不在该系列 = 重置上报、count 越界损坏点名、≤22 读入免迁、23-24 载入
     series 缺省 0 值保真）** / **`xp`（26+，恒写，单个整数 = 累计经验总点
     数，等级永不存储 `[V2-11]`）** / **`xp_seed`（27+，恒写，16 位小写 hex
-    串，成功附魔后推进 `[V2-12]`）** / **`respawn`（28+，恒写，int 三元组
-    = 重生点，验床回退世界出生点 `[V2-13]`）** / **`dimension`（30+，
-    恒写，严格词表 `overworld`|`nether` = 当前维度 `[V3-1]`）**
+    串，成功附魔后推进 `[V2-12]`）** / **`respawn`（28+，恒写 = 重生点，
+    int cell 形；**33+ = 精确 float**【≤32 对非 cell-center 值丢 0.5-y
+    的门内捕获修】，验床回退世界出生点 `[V2-13]`）** / **`dimension`（30+，
+    恒写，严格词表 `overworld`|`nether` = 当前维度 `[V3-1]`；32+ =
+    +`end` 三词【按 format 分词，见上】）** / **`creative`（31+，恒写，
+    strict bool，见「创造模式」）**
+  - **players[]（33+ `[V3-12c2]`）**：**per-player 数组**（entry 0 =
+    primary 镜像——root `player`/`inventory`/`inv_grid` 迁入各 entry，
+    applySave 主路径零改；entries 1.. = 远程玩家；`kSavePlayerCap` 8）；
+    单机档 = 恰 1 entry
   - **inventory**：**36 槽**（`[UX-8f]`，24+ 写恒 36；per-format 尺寸检查
     **双向点名**——24 须恰 36 / ≤23 须恰 27，错计数 = "exactly 36 entries"
     式版本谎报拒绝；**23→24 迁移 = 尾部补 9 空槽**原 27 槽逐槽值保真
@@ -1995,8 +2344,11 @@
     **箭不入存档** = 保存守卫对已知瞬态种类跳过，其他未知种类仍报错）/
     **`nether`（30+，`{blocks, fluids, states}` 恒写空合法——下界维度
     journal `[V3-1]`，states 全量含默认值 = states 段同款纪律）+
-    `nether_entities`（30+，item kind 恒写空合法——下界掉落物；mob 恒
-    不入存档）**
+     `nether_entities`（30+，item kind 恒写空合法——下界掉落物；mob 恒
+     不入存档）+ **`end`（32+，`{blocks, fluids, states}` 恒写空合法——末地
+     journal `[V3-10a]`，states 同款纪律）+ `end_entities`（32+，item kind
+     恒写空合法——末地掉落物）+ `end_xp_entities`（33+，恒写——末地 XP orb
+     持久化 `[V3-12c2]`，overworld xp entry 形 verbatim）**
   - **校验严格**：format 号 / seed 与生成 seed 一致 / 物品方块名已注册 / 数量
     ≤ max_stack / y ∈ [0,128) / 位置不重复 / **键纪律**（每 format 新 section
     键必需【空数组/对象合法】，低版本携新键 = 版本谎报拒绝——如 22 必 velocity
@@ -2067,7 +2419,14 @@
     `[V2-6]` / 月相（累计天 index 帧函数）`[V2-6]` / 传送门站入倒计时
     60 帧 + 传送冷却 900 帧 `[V3-1]` / 下界 ambience roll（300 帧同节
     奏）`[V3-2 Part 2]` / demo 回放 dt 序列 + 倍率帧边界切换 + 0.5×
-    render-only 保持 `[V3-9]`
+    render-only 保持 `[V3-9]` / 骑乘承载 snap + 落乘 6 条件检查
+    `[V3-14d]` / 末影珍珠落点 2.5 球面偏移（particle counter 流 2 抽帧锁定）
+    `[V3-10b]` / 末影人瞬移（8 候选 × 3 抽 + 1 重掷 = 25 抽/尝试固定）
+    `[V3-10c]` / 末影龙流契约（每帧 ambient 1 抽 + 跨圈恰 2 抽，纯函数
+    rollDragonLapDecision）+ 升天 60f/悬停 180f/240f 延迟门 `[V3-10d]` /
+    demo 恒锁定门控（12 处 relativeMouseMode() 审计全表，2 处有意不门控）
+    `[V3-16e]` / 菜单无输入渲染 = 纯函数（全景平移 m_menuFrame 帧锁定）
+    `[V3-17a]`/`[V3-22]`
   - **real-dt（真实墙钟，生存计时器类）**：饥饿衰减/星饥伤害/自然回复 / 进食
     饮用通道 / 破坏进度 / 弓蓄力 / 坠落伤害结算（fallStartY 记录）/ 熔岩灼烧 /
     火块燃尽（m_fires remaining）/ 效果 remaining 与 tick 累加 / 实体 age /
@@ -2082,19 +2441,20 @@
     `[V2-12]`）；sheep 出生毛色 = per-mob 流**首抽**、bat bob 初相 = 构造
     流首抽（**flying/wool 才消费，其余 mob 零消费 = 位级红线**，
     `[V2-14]`/`[V2-15]`）
-- **无输入运行逐字节可复现**：截图只在**帧边界**字节一致；**202 次无输入基线
-  门**（新 ×2 RAW 字节一致 + vs `/tmp/opencode/base19.png` 字节一致，或论证
+- **无输入运行逐字节可复现**：截图只在**帧边界**字节一致；**241 次无输入基线
+  门**（新 ×2 RAW 字节一致 + vs base19（游戏视图）/ base20（菜单视图）字节一致，或论证
   「无输入下零活动」= **结构性免疫**免重锚【变更在无输入路径永不执行——如
   炉子永不生成 = m_furnaces 空双结构惰性 / 无掉落 = 零 item draw / 无效果 =
   count 0 fast-exit / 音频 = 无事件 / 3.x 门 191–199 = 第 72–80 次 + 门
-  201–202 = 第 81–82 次免重锚（对 base19）】，或**重锚记档**【渲染基线本
+  201–232 = 第 81–113 次免重锚（对 base19）+ 菜单期门 233–241 =
+  游戏视图结构冷【canary 4 EXACT】+ base20 逐版重锚（标题 = 像素活面，PITS 426②）】，或**重锚记档**【渲染基线本
   身变更——
   LGT-2 门 83 / PRE-4 门 111 云入基线 / PRE-5 门 112 cutout 入基线 / **UX-9a
   门 168 云 shader 化（168140 → 179116 B）** / 重锚谱系 179116 →
   178148【V2-10 门 181 叶冠剔除】→ 178676【V2-19 门 182 时钟】→ 179027
   【V2-11 门 183 XP 条】→ 224468【V2-18 门 190 AO 世界光照】→ **225272
   【V3-6 门 200 填充感知雾】**】；
-  base19
+  base19/base20
   锚随环境态（WM 平铺/机器态）刷新有先例 = PITS 265/315 类，非回归）
 - **指针锁定协议**（硬规则 5）：yaw 0 = -Z、正 = 左转；pitch 正 = 上、clamp
   ±~89°；**鼠标转向仅在指针锁定时生效**（无输入运行字节复现的保证；物理光标
@@ -2112,7 +2472,7 @@
   最短可往返精度（位精确）；worldgen 演进 = 旧存档未编辑列按**当前**生成器
   重建（洞穴/矿/树/基岩/路径演进先例：P86/88/93、GEN-1..8——编辑权威、零
   format）
-- **质量门**：**2777/2777 单元测试**（`./build/bin/tokenmine_tests`）+
+- **质量门**：**3028/3028 单元测试**（`./build/bin/tokenmine_tests`）+
   `-Wall -Wextra -Wpedantic -Werror` **0 警告**；机制逻辑一律上提**纯函数**
   （campfire 范式：`Result<T>` 显式传播 + 游戏与单测共享同一文件），像素/
   存档证据 = E2E 门（`docs/PROTOCOL.md` E2E 协议）；**禁止** TODO/伪代码/魔法

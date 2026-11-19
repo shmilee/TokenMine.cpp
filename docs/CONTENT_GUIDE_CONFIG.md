@@ -1,6 +1,6 @@
 # 内容添加指南 · 配置 / 存档 / 资产纪律（数据驱动）
 
-> 数据布局与校验策略总览 + 全部「新增一个 X」how-to 节（生物群系 / worldgen 完整参考 / hotbar·物品 / 方块 / 配方 / 附魔 / 染料 / 床 / Mob / 状态效果 / 流体桶 / 熔岩场景 / 可生长作物 / 树种 / 块音效材质）= `docs/CONTENT_GUIDE.md`（主文件）；本文 = 调节玩家参数（config `player.*`）+ 其它游戏设置（config 全键参考）+ 使用存档（format 30 布局）+ 纹理 / 图集 / 字体 / 声音资产纪律（重锚红线）。
+> 数据布局与校验策略总览 + 全部「新增一个 X」how-to 节（生物群系 / worldgen 完整参考 / hotbar·物品 / 方块 / 配方 / 附魔 / 染料 / 床 / Mob / 状态效果 / 流体桶 / 熔岩场景 / 可生长作物 / 树种 / 块音效材质 / demo 指导族·全景）= `docs/CONTENT_GUIDE.md`（主文件）；本文 = 调节玩家参数（config `player.*`）+ 其它游戏设置（config 全键参考）+ 使用存档（format 33 布局）+ 纹理 / 图集 / 字体 / 声音资产纪律（重锚红线）。
 
 ## 调节玩家参数（config/config.json `player.*`）
 
@@ -47,14 +47,15 @@ fire_duration_seconds ≤ 100。已提交 `config/config.json` 的 player 节 =
 
 **纪律**：`getBool/getString/getDouble/getInt` 读键——缺键 = 代码默认，
 类型失配 = **静默回退默认**（player./save. 两例外 + render.weather /
-render.night_sky_level / render.cave_ambient / render.ao 四个严格读键
-= 现严格读取点名，见上、存档节与下表）。已提交 `config/config.json`
-（**用户调值，不还原**）现含：
+render.night_sky_level / render.cave_ambient / render.ao / ui.scale /
+ui.font_scale 严格读键 = 现严格读取点名，见上、存档节与下表）。已提交
+`config/config.json`（**用户调值，不还原**）已提交现含：
 window{title/1280×720/fullscreen false}、**ui.scale 1.5**、render{vsync
 true, fps_cap 0}、world{**seed 123456789, view_distance 80,
 day_length_seconds 600**, start_time_of_day 0.25}、player{9 键}、
-audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
-不写也开 = 代码默认**（fire.particles 先例，config.json 零改动纪律）。
+audio{volume 0.7}——**render 其余特性键 / mobs / fire / beacon / portal /
+net / save 均不写也开 = 代码默认**（fire.particles 先例，config.json 零
+改动纪律）。
 
 | 键 | 类型 | 代码默认 | 说明（引入 phase） |
 |---|---|---|---|
@@ -86,11 +87,15 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 | `fire.particles` | bool | true | P66 火焰余烬粒子（E2E 对照组） |
 | `beacon.range_blocks` | int | 50 | P83 信标效果范围（玩家脚到信标格 Chebyshev；>0 点名） |
 | `beacon.beam` | bool | true | P83 半透明光束（E2E 对照） |
+| `portal.anim` | bool | **true** | V3-15（v3.16.0）传送门漩涡 UV 动画（纹理水平 2 周期重写 + 帧锁定相位 `m_frameCount % 120` 纯函数；**off = pre-v3.16.0 位级恒等**） |
+| `portal.steam` | bool | **true** | V3-15（v3.16.0）传送门蒸汽粒子（每 6 帧 8×8×9 盒 1/10 确定性 roll，玩家 4 块内才扫描 = 性能纪律；**off = 零发射位级**） |
 | `save.auto_save_seconds` | number | **120.0**（代码默认，SAVE-1） | 自动存档节奏（**真实 dt**，`--save` 槽门控）；**严格读取**：缺 = 默认、present 须有限数 ≥ 0（**0 = 关闭**、负数/非有限/非数字点名拒）；成功归零、失败不清零下帧重试；日志 "World auto-saved to" 区别于 F5/退出 "World saved to" |
 | `save.compression` | string | **"gzip"（absent = gzip，V3-7 用户定案）** | 存档编码（**严格读**：`"gzip"` / `"none"` = 明文旧行为位级恒等；非 string/空串/未知词 init 点名拒）——与 format 号正交（魔数 `1f 8b` 探测唯一判据），见「使用存档」 |
-| `ui.scale` | number | 1.0 | P34 屏幕空间 UI 缩放，**[1.0, 4.0]** 越界/非数值点名；**已提交 = 1.5（用户调值）**。全部屏幕空间 UI（字体/hotbar/心饥饿带/面板/F3/死亡屏/手持/准星）在 "UI 像素" 空间（窗口逻辑 ÷ scale）正交投影拉伸——世界渲染与截图尺寸不受影响 |
+| `net.motd` | string | **"TokenMine.cpp"（代码默认）** | V3-17d（v3.46.0）：多人页主机 MOTD——**键缺省不写用户 config**（P32 纪律）；读 = latinOnly + 64 cap（kNetMotdMax）；消费 = WELCOME 包 str16 → 客户端世界建成后**首聊行**（表现层，不入 sim 哈希 = 12c1 D21 先例）；CLI `--listen` 同款消费 |
+| `ui.scale` | number | 1.0 | P34 屏幕空间 UI 缩放，**[1.0, 4.0]** 越界/非数值点名（严格读）；**已提交 = 1.5（用户调值）**。全部屏幕空间 UI（字体/hotbar/心饥饿带/面板/F3/死亡屏/手持/准星）在 "UI 像素" 空间（窗口逻辑 ÷ scale）正交投影拉伸——世界渲染与截图尺寸不受影响；**菜单期 = 唯一运行时即时生效面**（v3.44.0 设置页保存后菜单当场 reflow） |
+| `ui.font_scale` | number | 1.0（kFontScaleDefault） | UX-8e：文本独立缩放（**只放大文字、不动图标和面板** = `ui.scale` 的孪生但正交；`ui.font_scale` × `ui.scale` 合成 fScale），**严格读**（absent = 位级基线；present = 有限数 (0, 4.0]，越界/非数点名）；中文 HUD 调大小用它 |
 
-## 使用存档（Phase 13 框架 → format 30）
+## 使用存档（Phase 13 框架 → format 33）
 
 ```bash
 ./build/bin/tokenmine --save myworld        # 首次：新游戏；此后：读档
@@ -105,7 +110,9 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
 启动游戏）。
 
 - 存档槽名只允许字母/数字/`_`/`-`（防路径穿越）；文件在 `data/saves/
-  <slot>.json.gz`（git 忽略）。**V3-7 起 on-disk = 确定性 gzip(JSON) 容器
+  <slot>.json.gz`（git 忽略）——**V3-18（v3.42.0）起写形 = `.json.gz`**
+  （名字体现压缩内容）；读 = **两级探测零迁移**（`.json.gz` 先、legacy
+  `.json` 后，下次写自动换名）。**V3-7 起 on-disk = 确定性 gzip(JSON) 容器
   （默认开）**：JSON 格式化输出、`gunzip` 后可直接阅读；加载按魔数
   `1f 8b` 自动探测编码——**旧明文档（format 28 及更早）零迁移直读**；
   `config` 键 `save.compression: "gzip"|"none"` 严格读（absent = gzip
@@ -123,9 +130,9 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
   旧档）。写失败只记 ERROR 日志、退出码仍 0。**三路共用原子写**（同目录
   `.tmp` + flush/close + `rename` POSIX 原子——kill 中途最多留陈旧 tmp，
   失败写永不毁旧档）
-- 存档是机器生成的：字段集由 format 号锁定（**当前 format 30**），加载器
+- 存档是机器生成的：字段集由 format 号锁定（**当前 format 33**），加载器
   对未知字段一律报错（与用户手写数据文件的"警告但容忍"策略相反）。
-  **25→30 谱系**（一句话）：25 = 教程（V2-3）/ 26 = XP 三向键（player.xp
+  **25→33 谱系**（一句话）：25 = 教程（V2-3）/ 26 = XP 三向键（player.xp
   + entities 第二 kind xp）/ 27 = 附魔（player.xp_seed + 物品 enchants）/
   28 = 床（player.respawn 恒写）/ **29 = gzip 时代（V3-7：schema 与 28
   完全一致，format 号仅标记写入构建开始默认 gzip 编码；编码与 format
@@ -133,21 +140,32 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
   严格词表恒写 + nether 段 {blocks, fluids, states} 恒写 + nether_
   entities 恒写 + 派生 seed 不落盘【worldSeed ^ kSaltNether parse 重
   建】+ 两维 portal 载入 rescan + 交叉检；29 缺 dimension = overworld
-  迁移 / 29 携 = version lie 点名）**；完整 layout 与逐版证据见
+  迁移 / 29 携 = version lie 点名）**/ **31 = 创造（V3-11a：player.creative
+  strict bool 恒写；pre-31 载迁 false；30 携键 = version lie 点名）**/
+  **32 = 末地（V3-10a：dimension 词表按 format 分词【30/31 二词，31
+  携 "end" = version lie；≥32 三词 overworld|nether|end】+ end 段
+  {blocks, fluids, states} 恒写 + end_entities 恒写 + endSeed 不落
+  盘）**/ **33 = 多人玩家态（V3-12c2：root `player` + `inventory`/
+  `inv_grid` 迁入 per-player `players[]` 数组【entry 0 = primary 镜像，
+  applySave 主路径零改】+ 三面 version lie + kSavePlayerCap 8 + **
+  end_xp_entities 恒写**【末地 XP orb 持久化】+ respawn 精确
+  float【≤32 int cell 0.5-y 丢失修】）；schema 其余与 32 一致**；
+  完整 layout 与逐版证据见
   `docs/archive/v2x/CHANGELOG.md` 各版条目 + `phase-2.x.0.md` 档（29 →
-  `docs/archive/phase-3.1.0.md`，30 → `docs/archive/phase-3.4.0.md`），
+  `docs/archive/phase-3.1.0.md`，30 → `docs/archive/phase-3.4.0.md`，
+  31 → phase-3.17.0.md，32 → phase-3.23.0.md，33 → phase-3.31.0.md），
   不在此重抄全文
 - **PITS**：`--save slot` 第二次运行会加载第一次写的存档（E2E 对跑每拍
   从源副本 `cp` 新鲜存档）
 
-### format 30 完整布局（on-disk = gzip 容器，JSON 内容 = 明文 payload）
+### format 33 完整布局（on-disk = gzip 容器，JSON 内容 = 明文 payload）
 
 ```json
 {
-  "format": 30,
+  "format": 33,
   "seed": 123456789,
   "time": 0.2541666,
-  "player": {
+  "players": [ {
     "pos": [22.5, 53.0, 0.5],
     "velocity": [0, 0, 0],
     "yaw": 0.0, "pitch": -0.25,
@@ -160,41 +178,52 @@ audio{volume 0.7}——**render 各特性键 / mobs / fire / beacon / save 均
     "xp": 1395,
     "xp_seed": "5eed1a2b3c4d5e6f",
     "respawn": [0, 54, -3],
-    "dimension": "overworld"
-  },
-  "nether": { "blocks": [], "fluids": [], "states": [] },
-  "nether_entities": [],
-  "inventory": { "selected": 0,
-                 "slots": [ { "item": "stone", "count": 64 },
-                            { "item": "iron_axe", "count": 1, "damage": 2.0,
-                              "enchants": { "efficiency": 1 } },
-                            { "item": "", "count": 0 } ] },
-  "inv_grid": [ { "item": "", "count": 0 } ],
+    "dimension": "overworld",
+    "creative": false,
+    "inventory": { "selected": 0,
+                   "slots": [ { "item": "stone", "count": 64 },
+                              { "item": "iron_axe", "count": 1, "damage": 2.0,
+                                "enchants": { "efficiency": 1 } },
+                              { "item": "", "count": 0 } ] },
+    "inv_grid": [ { "item": "", "count": 0 } ] } ],
   "furnaces": [ { "pos": [0, 53, 0], "input": { "item": "", "count": 0 },
-                 "fuel": { "item": "", "count": 0 }, "output": { "item": "", "count": 0 },
-                 "progress_substeps": 0, "fuel_substeps": 0 } ],
+                  "fuel": { "item": "", "count": 0 }, "output": { "item": "", "count": 0 },
+                  "progress_substeps": 0, "fuel_substeps": 0 } ],
   "fires": [ { "pos": [0, 53, 0], "remaining": 3.2 } ],
   "campfires": [ { "pos": [0, 53, 0], "slots": [ { "item": "", "count": 0, "progress_substeps": 0 } ] } ],
   "states": [ { "pos": [0, 54, 0], "state": 2 } ],
   "tables": [ { "pos": [0, 53, 0], "slots": [ { "item": "", "count": 0 } ] } ],
   "entities": [ { "type": "item", "item": "dirt", "count": 1, "damage": 2.0,
-                  "pos": [0.5, 52.5, 0.5], "age": 12.5, "pickup_delay": 0.25 },
-                { "type": "xp", "xp": 5, "pos": [1.5, 52.5, 0.5],
-                  "age": 12.5, "pickup_delay": 0.25 } ],
+                   "pos": [0.5, 52.5, 0.5], "age": 12.5, "pickup_delay": 0.25 },
+                 { "type": "xp", "xp": 5, "pos": [1.5, 52.5, 0.5],
+                   "age": 12.5, "pickup_delay": 0.25 } ],
+  "nether": { "blocks": [], "fluids": [], "states": [] },
+  "nether_entities": [],
+  "end": { "blocks": [], "fluids": [], "states": [] },
+  "end_entities": [],
+  "end_xp_entities": [],
   "blocks": [ [0, 53, 0, "air"] ],
   "fluids": [ [4, 50, 4, 5, "water"] ]
 }
 ```
 
-（上方 campfires/inv_grid/tables 数组为示意——实际各恰 4 / 9 / 9 个槽
-条目。顶层各段**恒写**（空 = 空数组/空对象，含 `tables`/`states`/`fires`/
-`campfires`/`furnaces`/`inv_grid`——新格式必键纪律）；player 的
+（上方 furnaces/campfires/tables/entities 数组为示意——实际各恰 4 / 4 /
+9 槽 / 世界实况。顶层各段**恒写**（空 = 空数组/空对象，含 `tables`/
+`states`/`fires`/`campfires`/`furnaces`/`players`/`end`/`end_entities`/
+`end_xp_entities`——新格式必键纪律）；player entry 的
 health/hunger/saturation/absorption/oxygen/xp/xp_seed/respawn = 游戏恒有
-值故实际恒写（−1"未指定" = 省略字段，仅老 format 读入语义）。）
+值故实际恒写（−1"未指定" = 省略字段，仅老 format 读入语义）。**format 33
+变更面 = root `player` + root `inventory`/`inv_grid` 迁入 `players[]`
+每 entry 嵌套**（entry 0 = primary 镜像 = 主玩家逐字段同旧 root 形，
+applySave 主路径零改；entries 1.. = 远程玩家 = 多人档 per-player
+态；kSavePlayerCap 8）。net 快照段 `{particles, net_players, weather,
+spawn_counters, particle_break_counter}` **仅 WELCOME 文档携、on-disk
+省略**（REJOIN 快照面，V3-12c2）。）
 
-**player 段**（键纪律：format 30 必键 = pos/**velocity**/yaw/pitch/health/
-absorption/hunger/saturation/effects/armor/**stats**/**oxygen**/**xp**
-/**xp_seed**/**respawn**/**dimension**；低版本带新键 = 版本谎报点名）：
+**players[] entry**（键纪律：format 33 必键 = pos/**velocity**/yaw/
+pitch/health/absorption/hunger/saturation/effects/armor/**stats**/
+**oxygen**/**xp**/**xp_seed**/**respawn**/**dimension**/**creative**/
+**inventory**/**inv_grid**；低版本带新键 = 版本谎报点名）：
 
 | 键 | 引入 | 纪律 |
 |---|---|---|
@@ -211,21 +240,31 @@ absorption/hunger/saturation/effects/armor/**stats**/**oxygen**/**xp**
 | `xp` | 26（V2-11） | **必键**，整数 ≥ 0 **恒写**（累计经验池；HUD 条/等级 = 池派生，**等级永不存储** = 单源真值，core/xp_curve 全整数 MC 现代公式）；pre-26 载 = 迁 0（velocity 零化迁移同款）；≤25 文件携 = 版本谎报点名 |
 | `xp_seed` | 27（V2-12） | **必键**，**16 位小写 hex 串恒写**（附魔 offer 去相关种子；存档 JSON number = double 53 位容不下 64-bit = hex 串记档偏离）；26 载 = worldSeed ^ kXpSeedInit 迁移；pre-27 文件携 = 版本谎报点名 |
 | `respawn` | 28（V2-13） | **必键**，int 三元组 **恒写**（重生点 = 记忆位置的格分量 floor；新档 = 世界出生点 init 写入）；分量非整数 / y ∉ [0,128) 点名拒（x/z 无界）；27 载 = 哨兵 -1 → `applySave` 覆写世界出生点（parse 无法知世界出生点 = game 侧迁移）；pre-28 文件携 = 版本谎报点名 |
-| `dimension` | **30（V3-1）** | **必键**，严格词表 overworld\|nether **恒写**（当前维度；下界死亡重生回主世界 = 维度换绑既有语义）；29 载 = overworld 迁移（免迁）；29 携 = version lie 点名；未知词点名 |
+| `dimension` | **30（V3-1）** | **必键**，严格词表**按 format 分词**：30/31 = overworld\|nether 二词（**31 携 "end" = version lie**），≥32 = overworld\|nether\|end 三词 **恒写**（当前维度；下界/末地死亡重生回主世界 = 维度换绑既有语义）；29 载 = overworld 迁移（免迁）；低 format 携高词表 = version lie 点名；未知词点名 |
+| `creative` | **31（V3-11a）** | **必键**，strict bool **恒写**（创造模式 = 存档态，装载 creative 档自动飞行）；pre-31 载迁 false；30 携键 = version lie 点名；非 bool 点名 |
+| `inventory` | 1（**33 迁入 entry**） | `{selected 0..8, slots[27]}`——format 33 起**不再在 root**（见 entry 说明）；slot 纪律不变（{item, count, **damage? >0**, **enchants? 27+（omit-when-empty，{id: level} 对象，载时交叉校验：未知 id / level > max / 类不兼容 / incompatible 对全点名**）} 严格白名单） |
+| `inv_grid` | 19（**33 迁入 entry**） | E 面板 2×2 的 9 格恒 9 条目——format 33 起**不再在 root**；grid 槽不携 damage = 18 范围记档偏离不变 |
 
 **nether 段（30+）**：`nether = {blocks, fluids, states}` 三子段恒写（空
 合法）= 下界维度的 journal 同款结构（blocks 位置序 / fluids 五元组 /
 states 全量含默认值）；`nether_entities`（item kind 掉落物）恒写空合法；
-**mob 与箭不存**（两维同款瞬态纪律）；两维 portal 载入 rescan（孤立 →
+**mob 与箭不存**（三维度同款瞬态纪律）；两维 portal 载入 rescan（孤立 →
 air，双向交叉检）；nether 内 stateful 块须 nether.states 条目（PITS 383①
-孪生）。派生 seed 不落盘 = parse 重建（单源真值）。gzip 编码零改动
-（V3-7 容器自动覆盖两维）。
+孪生）。派生 seed 不落盘 = parse 重建（单源真值）。
 
-**世界段**：`inventory`（27 格 `slots`：{item, count, **damage? >0**,
-**enchants? 27+（omit-when-empty，{id: level} 对象，载时交叉校验：未知
-id / level > max / 类不兼容 / incompatible 对全点名**）} 严格白名单——
-grid 槽不携 damage = 18 范围记档偏离；`selected` 0..8）+
-`inv_grid`（E 面板 2×2 的 9 格，恒 9 条目）+ `furnaces`（7+，**每炉子块
+**end 段（32+）**：`end = {blocks, fluids, states}` 三子段恒写（nether
+段逐字镜像，末地维度 journal 同款）；`end_entities`（item kind 掉落物）
+恒写空合法（**末影龙/末影人 = mob 不存**——重载 = 蛋在则无复生，仪式
+态由世界态自洽）；**末地传送门 / 出口门 = 世界生成常活 + journal 块
+编辑**（入口环 frame 玩家编辑持久；exit 门环 worldgen 每次重载重建）；
+**龙蛋 = 仪式 m_dead 帧写的世界态**（重载「蛋在 = 无复生」唯一自洽
+源）；末地内 stateful 块须 end.states 条目（PITS 383① 孪生）；endSeed
+不落盘 = parse 重建（worldSeed ^ kSaltEnd，单源真值）。
+**`end_xp_entities`（33 恒写）**：末地 XP orb 持久化（120s 燃尽前重载
+不丢——10d1 记档偏离消除；overworld entities xp-kind 严格形复用）。
+gzip 编码零改动（V3-7 容器自动覆盖三维）。
+
+**世界段**：`furnaces`（7+，**每炉子块
 一条目**位置序，空态含；双向交叉校验 = 块编辑 ⇔ 条目）+ `fires`（10+，
 每火块一条目，remaining > 0 = **real-dt** 燃尽倒计时）+ `campfires`（13+，
 每营火**家族**块（点燃 + 未点燃）一条目，**恰 4 槽**，每槽进度不变量
@@ -243,24 +282,30 @@ pos, age, pickup_delay}**（球不携堆叠，无 item/count/damage；item 条�
 
 **键纪律三向**（与用户数据文件相反）：① 新版本**必键**（effects/fires/
 campfires/armor/oxygen/stats/tables/states/velocity/**xp/xp_seed/respawn**
-等，缺 = 拒）；② 低版本**带新键 = 版本谎报点名**（如 fmt14 带 states、
+/**players（33）/end·end_entities（32）/end_xp_entities（33）** 等，缺
+= 拒）；② 低版本**带新键 = 版本谎报点名**（如 fmt14 带 states、
 pre-21 带 stats、pre-22 带 velocity、pre-26 带 player.xp 或 xp 实体、
 pre-27 带 xp_seed 或堆栈 enchants、pre-28 带 respawn、**pre-30 带
-dimension/nether/nether_entities**）；③ 未知字段一律报错。**迁移先例**：值保真（14 stairs
+dimension/nether/nether_entities、pre-31 带 creative、30/31 带 "end"
+词或 end/end_entities 段、pre-33 带 players[] 或 end_xp_entities**）；
+③ 未知字段一律报错。**迁移先例**：值保真（14 stairs
 → 15 states facing→state）/ 免迁（tier 0 omit-when-default ⇒ f19 文件 f20
 直接读）/ sole 归属（f18 table_grid 非空 ∧ 恰 1 表 → 归属，0/多 → 丢弃，
 P44 furnace 先例）/ 系统不存在 = 默认（f11 无吸收 → 共享 health 拆分、
 f16 无甲 → 空、f17 无氧 → 满、f20 无 stats → 空、pre-22 无 velocity → 0、
 pre-26 无 xp → 0 且无 xp 实体、pre-27 无 xp_seed → worldSeed ^
 kXpSeedInit、pre-28 无 respawn → 哨兵覆写世界出生点、**pre-30 无
-dimension → overworld + nether 段空**）。
+dimension → overworld + nether 段空、pre-31 无 creative → false、
+pre-32 无 end 词/段 → overworld + end 段空、pre-33 无 players[] →
+root player + inventory/inv_grid 迁为 entry 0（值保真）**）。
 
 ## 纹理 / 图集 / 字体 / 声音资产纪律（重锚红线）
 
 **块图集**（单纹理多 tile）：tile 源 = `assets/textures/blocks/*.png`
-（块，**130 件**，3.x 增 nether portal/netherrack/下界内容 12/建筑 20 族
-等）+ `assets/textures/mobs/*.png`（mob/玩家，**35 件**，V3-3 下界 mob
-9 件：per-face 脸 4 + 身体 4 + magma blob 1），均
+（块，**138 件**，3.x 增 nether portal/netherrack/下界内容 12/建筑 20 族/
+末地 8 等）+ `assets/textures/mobs/*.png`（mob/玩家，**41 件**，V3-3 下界 mob
+9 件：per-face 脸 4 + 身体 4 + magma blob 1，**V3-14b ghast 1 + V3-10c
+enderman 2 + V3-10d1 dragon 3**），均
 16×16 RGBA；
 布局 = `assets/data/textures/block_atlas.json` `{columns, rows, tiles:
 {name: [col, row]}}`——**显式格子，非计算排布**。解析纪律（纯函数，
@@ -268,11 +313,12 @@ init 双向交叉）：columns/rows 必须**2 的幂**（UV 角 = 精确二进�
 管线永不跨界采样）；tile 格须在网格内；**两 tile 不得共格**；PNG 无布局
 条目 / 条目无 PNG = 数据错误点名。
 
-- **shipped = 16 × 16 = 256 格，已用 165，空 91**（3.x 增长谱系：
-  122【v2.19.0】→ 136【V3-2】→ 145【V3-3】→ 165【V3-5】；全部既有格
-  坐标 JSON 逐字不变，新增 = 尾部空格）。
+- **shipped = 16 × 16 = 256 格，已用 179，空 77**（3.x 增长谱系：
+  122【v2.19.0】→ 136【V3-2】→ 145【V3-3】→ 165【V3-5】→
+  170【V3-10a】→ 172【V3-10b】→ 174【V3-10c】→ 179【V3-10d1】；
+  全部既有格坐标 JSON 逐字不变，新增 = 尾部空格）。
 - **空位添加 = 无既有 UV 移位 = base19 免重锚**（绝大多数内容相走的路；
-  3.x 三次空位增长全实证）。
+  3.x 七次空位增长全实证）。
 - **网格扩容 = u = col/列数 全部既有 UV 移位 = 无输入基线门必须重锚**
   （P41 4×8→8×8、P59 8×8→16×8 先例）——**例外先例 = 幂二增长零移位
   【V3-2：16×8→16×16，行数 ×2 时 u 不变 = 既有像素行恒等，门 195 S1
@@ -283,31 +329,36 @@ atlas**；可多物品共享同一文件——block item 不用 2D 图标，以 
 立方呈现）。物品 `model.texture` 惯例 = 复用 icon 文件（CRAFT-2 零新纹理
 免重锚）。
 
-**effects.png**：16 px/tile 条带（当前 176×16 = 11 tile）；新效果 =
-**尾部 append**（既有 tile 逐像素零变化验证——SURV-4/SURV-5 先例）。
+**effects.png**：16 px/tile 条带（当前 192×16 = **12 tile**：+ dragon_
+breath【V3-10d1】尾部 append）；新效果 = **尾部 append**（既有 tile
+逐像素零变化验证——SURV-4/SURV-5 先例）。
 
-**font.png**（256×2112，32 px 格 = 8 列 × 66 行）：rows 4..15 = ASCII
+**font.png**（256×2272，32 px 格 = 8 列 × 71 行）：rows 4..15 = ASCII
 32..126；rows 0..3 = **32 个 ASCII 控制字符死格复用** = PRE-1 的 32 个
 CJK 字形（18 UI 字 + 10 中文标点 + 4 余量）；cell 127（ASCII DEL 死格）
 = CRAFT-4 补的「作」（U+4F5C——PRE-1"18 UI 字"实为 19 字误计，工作台
 标题 v0.25.0 起渲染"工?台"）= legacy **CJK 33 字形**。**UX-6 扩展 +
-V2-12 附魔 4 字（锋利限魔，魔 re-cell 鸡麦黄默 +1）= 现
-`kCjkGlyphs[427]`**（码点序）：legacy 33 保 PRE-1/CRAFT-4 格 0..31/127
-位级不变；394 扩展字形占 cells 128..521 = rows 16..65（row 65 = 部分
-余量，cells 522..527）；未知 CJK 落 `?` 格。**加 CJK 字形 = 重新生成
-脚本**：glyph 静态表（font.hpp / generate_font.py 双份）加条目 +
-font.png 重跑——**顶 512 px（rows 0..15 = ASCII + legacy CJK 33 格）
-逐字节不变红线**（测试钉），新字形追加尾部 cell；rows 16..65 余量耗尽
-= 字体布局再扩展（按重锚纪律处理）。ASCII 区位级不变红线 + 既有 CJK
-格逐位复现自校验 + FNV-1a 64 字节钉在测试里；TTF 仅工具期输入，游戏
-构建不依赖。
+V2-12 附魔 4 字（锋利限魔，魔 re-cell 鸡麦黄默 +1）+ 3.x 菜单/内容批
+扩展 = 现 `kCjkGlyphs[469]`**（码点序）：legacy 33 保 PRE-1/CRAFT-4
+格 0..31/127 位级不变；436 扩展字形占 cells 128..563 = rows 16..70
+（row 70 = 部分余量，cells 564..567）；未知 CJK 落 `?` 格。**加 CJK
+字形 = 重新生成脚本**：glyph 静态表（font.hpp / generate_font.py 双份）
+加条目 + font.png 重跑——**顶 512 px（rows 0..15 = ASCII + legacy CJK
+33 格）逐字节不变红线**（测试钉），新字形**码点序插入 + 后缀重格**
+（尾部追加否决 = lower_bound 有序不变量，PITS 425③；v3.43.0 +21 /
+v3.44.0 +3 不增行 / v3.47.0 +12 = 2112→2208→2272 先例）；rows 16..70
+余量耗尽 = 字体布局再扩展（按重锚纪律处理）。ASCII 区位级不变红线 +
+既有 CJK 格逐位复现自校验 + FNV-1a 64 字节钉在测试里；TTF 仅工具期
+输入，游戏构建不依赖。
 
-**声音**：`assets/sounds/` **63 件** 16-bit mono 44.1 kHz WAV
+**声音**：`assets/sounds/` **75 件** 16-bit mono 44.1 kHz WAV
 （SoundBank 载入时转 stereo 居中，CRAFT-3；2.x 增 thunder【V2-4】/
 sleep【V2-13】/ squeak【V2-14】/ shear【V2-15】/ snow×3【V2-16】；
 3.x 增 portal×3【V3-1】/ 下界族 11 = nether·nylium·stem 9 + evaporate +
 ambience_nether【V3-2 Part 2】/ 下界 mob 氛围 3 = piglin_whisper/
-hoglin_grunt/strider_hiss【V3-3】）。
+hoglin_grunt/strider_hiss【V3-3】/ boom【V3-14a】/ ghast×2【V3-14b】/
+barter【V3-14c】/ ambience_end【V3-10a】/ pearl 双音 2【V3-10b】/
+enderman_teleport【V3-10c】/ dragon×4【V3-10d1】）。
 `tools/generate_sounds.py` 确定性生成（固定
 种子 LCG/sine；**重跑后既有文件字节零变化 = md5 实证 + 幂等**）；材质 3
 件见 CONTENT_GUIDE.md「块音效材质」节。

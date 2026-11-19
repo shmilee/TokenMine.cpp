@@ -7,7 +7,7 @@
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
 确定性是一级要求——无输入运行逐帧字节可复现。<br>
-当前 v3.19.0（V3-14a 爆炸机制：衰减伤害/破块/点火 + blast_resistance 数据属性 + --explode seam；3.x 矩阵推进中）· tag `v3.19.0` · 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
+当前 v3.51.0（V3-23 全景 overlap 混合带 + 菜单选中高亮加强；3.x 矩阵 21 项 + 用户实机诉求系列全收官）· 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -36,7 +36,7 @@
 | 构建 | CMake + Ninja | |
 | 窗口/输入 | SDL3 | |
 | 图形 | OpenGL 3.3 Core (GLEW) | |
-| 音频 | SDL3 Audio（`SoundBank`，SDL 内置音频后端） | 63 个程序化 WAV（确定性生成，含材质音效 + 4 上下文环境音 + 下界音效族） |
+| 音频 | SDL3 Audio（`SoundBank`，SDL 内置音频后端） | 75 个程序化 WAV（确定性生成，含材质音效 + 5 上下文环境音 + 下界/末地音效族） |
 | 图像 | 内置 PNG 编解码器（`src/core/png.hpp`，zlib） | 8/16 位 RGB/RGBA/灰度/调色板，全 filter，CRC 校验 |
 | 测试 | GoogleTest | |
 | JSON | 内置实现（`src/core/json.hpp`） | 无外部依赖 |
@@ -103,8 +103,8 @@ cmake --build build
 - **v0.1.0**：可玩的 3D 体素沙盒（世界生成 / 昼夜光照 / 流体 / Mob 战斗 / 合成 / 存档）
 - **v1.0.0**（1.x）：十大系统完成，生存玩法闭环——火与工具分类、护甲耐久、药水效果、第三人称、教程
 - **v2.0.0**（2.x）：上手与体验补全——XP 与 7 种附魔、染色床睡觉跳夜、蝙蝠/染色羊/雪原、AO 环境光遮蔽、天气、飞行与滚轮缩放
-- **v3.0.0**（3.x，当前）：**世界扩展**——下界维度（传送门 / 5 群系 / 熔岩海 / 5 专属 mob）+ netherite 材料链 + 建筑内容族（黏土/石砖/陶瓦）+ 存档 gzip + 手柄 + **demo 回放（录屏式只观察教程，含 4 个预设教程 demo + 独立 sim 版本号）**；v3.12.0 矩阵后报障修复 + v3.14.0 手柄习惯映射定案
-- 方向项（末地 / 创造 / 多人 / 死亡统计屏）待立项
+- **v3.0.0**（3.x，当前）：**世界扩展**——下界维度（传送门 / 5 群系 / 熔岩海 / 5 专属 mob / ghast 火球爆炸 / strider 骑乘）+ netherite 材料链 + 建筑内容族（黏土/石砖/陶瓦）+ **末地维度**（嵌眼传送门 / 末影珍珠投掷 / 末影人 / **末影龙 boss**：水晶 + 首杀闭环 + 召唤复杀）+ 创造模式 + 死亡统计屏 + **多人**（主机权威 lockstep 2–8 人：聊天 / 名牌 / 断线重连【存档 format 33 per-player】）+ 存档 gzip（`.json.gz`）+ 手柄 + **demo 回放（录屏式只观察教程，含 4 个预设教程 demo + 独立 sim 版本号）+ 10 个 3–10 分钟级教学 demo 族**（挖矿 / 进食 / 回血 / 房子+床 / 皇宫 / 材料 / 河流 / 黑夜 / 下界门 / 末影龙）+ **主菜单系统**（标题 / 登陆 / 设置 / 教学 / 多人五页 + 中文 demo 标题 + 全景背景 + 键盘操作）；3.x 矩阵 21 项 + 用户实机诉求系列（V3-16~V3-23）全完成（至 v3.51.0）
+- 发布政策（11-13 用户定案）：逐版只 commit + push，无逐版 tag/release；仅 v3.31.0 / v3.40.0 两节点保留 tag + release（v3.40.0 = GitHub Latest）
 
 逐版明细与发布历史：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)（当前时
 代）+ `docs/archive/*/CHANGELOG.md`（历史时代）+ GitHub Releases。
@@ -120,7 +120,7 @@ cmake --build build
 |---|---|---|
 | [AGENTS.md](AGENTS.md) | 代理快速接收：现状/命令/硬性规则/E2E 协议/阶段流程/坑位速览 | 新会话第一件事 |
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | 玩法指南（操作/生存循环/下界/netherite/建筑材料/**demo 回放教程**；2026-11-06 全量刷新） | 玩法问题 |
-| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v3.16.0，17 子系统分节含下界维度/demo 回放/死亡统计屏/传送门动画；2026-11-06 全量刷新；世界/渲染侧 = `docs/MECHANICS_WORLD.md`） | 改玩法逻辑前 |
+| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状见 MECHANICS.md 头部；世界/渲染侧 = `docs/MECHANICS_WORLD.md`） | 改玩法逻辑前 |
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/下界群系/方块/配方/Mob/下界池/附魔/sediment/worldgen 全参考）+ 配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |

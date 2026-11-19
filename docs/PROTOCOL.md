@@ -11,7 +11,14 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构
 ctest --test-dir build --output-on-failure                                  # 测试
 ./build/bin/tokenmine --frames 60 --screenshot /tmp/opencode/shot.png       # 自动化验证（退出码 0）
 ./build/bin/tokenmine --seed 999 ...                                        # 换种子
-./build/bin/tokenmine --demo assets/demos/example.dmo                       # demo 回放（V3-9；--demo-author / --demo-record 互斥三旗，--help 看全部）
+./build/bin/tokenmine --demo assets/demos/example.dmo                       # demo 回放（V3-9；--demo-author / --demo-record 互斥三旗，--demo-force 逃生门，--help 看全部）
+./build/bin/tokenmine --list-demos                                          # demo 索引无头列（V3-16：5 章 + 中文标题 + mm:ss；管理旗孪生，游戏旗全拒）
+./build/bin/tokenmine --explode 10 60 10 3                                  # 帧 0 爆炸 seam（V3-14a，--weather 孪生；与 demo 互斥）
+./build/bin/tokenmine --demo assets/demos/guide_dragon.dmo --dragon-damage 200  # 龙战 seam（V3-10d1：--demo 消费方，不可手编）
+./build/bin/tokenmine --listen 5555     # / --connect host:5555     # / --script in.dmo  # 多人（V3-12：host/client 互斥；script 须配 net；--connect × --save 拒）
+./build/bin/tokenmine --panorama /tmp/pano.png --panorama-scene panorama    # 全景资产再生成（V3-20~23 管理旗；与全部游戏旗互斥；--panorama-scene 单独 = 拒）
+./build/bin/tokenmine --menu-open tutorial                                 # 菜单深链（V3-21；九形菜单 bypass 旗互斥拒）
+./build/bin/tokenmine --save myworld --new --time 0.75 --log-level debug   # 其它参数（--save 槽 = <slot>.json.gz 写形 + .json 旧形两级探测零迁移；--help 看全部）
 magick shot.png -format "%[pixel:p{x,y}]" info:                             # 像素采样
 ```
 
@@ -99,7 +106,7 @@ C++20、CMake+Ninja、SDL3、OpenGL 3.3 core（GLEW）、GTest、zlib。**无网
 ```bash
 ctest --test-dir build --output-on-failure
 # 或直接运行
-./build/bin/tokenmine_tests
+./build/bin/tokenmine_tests   # 3028（v3.51.0，-Wall -Wextra -Wpedantic -Werror 恒 0 警告）
 ```
 ## E2E 协议（截图/确定性验证）
 
@@ -110,8 +117,11 @@ ctest --test-dir build --output-on-failure
   指针未锁定时 SDL 仍投递 mouse motion 事件，P5 条）；每拍截图前 `unmap_covers`
   解映射覆盖游戏区（(0,60) 1280×720 邻域）的已映射窗口（P27 用户鼠标污染教训）。
 - **无输入运行**：×2 全帧字节一致 + skygate（FRESH = 天空模式色正午 (120,181,242) /
-  黄昏 (130,63,38)，采样中心区像素众数）+ **base 门** `/tmp/opencode/base19.png`（3.x 后锚 = 填充感知雾重锚；
-  base18 224468 B 留档）
+  黄昏 (130,63,38)，采样中心区像素众数）+ **base 门**：游戏锚
+  `/tmp/opencode/base19.png`（3.x 后锚 = 填充感知雾重锚 225272 B；base18
+  224468 B 留档）/ **菜单期锚 base20**（v3.43.0 起交互启动 = 标题页——
+  标题无输入 ×2 逐字节，标题含版本行 = **逐版重锚** PITS 426②，
+  defined mouse (10,10) no-hover 纪律 PITS 425②）
   字节一致（无输入基线；新系统需论证"无输入下零活动 = 结构性免疫"，P26 起惯例）。
   **notblack 判别必须用 PNG 字节尺寸**（PITS 286）：环境窗口态把截图打成
   均色时文件 ~22 KB（有效帧 300-430 KB），`fx:mean` 探针不可信（均色值不

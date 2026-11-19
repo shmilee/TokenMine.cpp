@@ -104,8 +104,8 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 
 ## 存档（Phase 13）
 
-- **存档是 opt-in（`--save <slot>`），无默认世界** — 不带 `--save` 时不读不写（保持既有运行行为与基线截图不变）；没有"上次世界"的隐式恢复。**槽管理面 `[SAVE-3]` 已解决**：CLI headless 四操作 `--list-saves`（名序确定性，摘要纯读文件内容无 mtime；损坏文件浮现 UNREADABLE 点名）/ `--copy-save`（字节保真分支，原子写）/ `--rename-save`（原子）/ `--delete-save`（槽名 = `--save` 字符集 = 路径穿越死）；**游戏内选择 UI/会话内换档保留不立项** = 游戏无标题画面，会话内载档 = 世界重建级架构变更（矩阵外记档偏离；多槽切换 = CLI `--save <slot>` 既有面）。`[Phase 13]`（管理面 `[SAVE-3]` 已解决）
-- **无周期性自动存档** — 崩溃/断电丢失自上次写入以来的全部修改；`F5` 立即存档（Phase 15，`--save` 槽激活时游戏内随时手动保存）已补上"会话中手动保存"，但仍无周期性 autosave/无"保存并退出"流程。`[Phase 13]`（手动保存热键 `[Phase 15]` 已解决；**`[SAVE-1]` 周期性 autosave + 崩溃韧性已解决**：`save.auto_save_seconds` 代码默认 120 s（0 = 显式关闭，config.json 零改动）真实 dt 计时器（`--save` 槽门控 = 无槽结构惰性，失败下帧重试）+ **原子写**（同目录 `.tmp` + rename，F5/退出/自动三路共用 = 崩溃时目标文件恒为完整旧档或完整新档，半写档不可达，kill -9 实证）；残余**`[SAVE-3]` 已解决**：多槽轮转 = `--copy-save` 分支 + `--rename-save` + `--delete-save`（CLI 管理面，headless 确定性）；"保存并退出" = 既有 ESC/退出存档路径（本已存在，无菜单流 = 无标题画面记档偏离））
+- **存档是 opt-in（`--save <slot>`），无默认世界** — 不带 `--save` 时不读不写（保持既有运行行为与基线截图不变）；没有"上次世界"的隐式恢复。**槽管理面 `[SAVE-3]` 已解决**：CLI headless 四操作 `--list-saves`（名序确定性，摘要纯读文件内容无 mtime；损坏文件浮现 UNREADABLE 点名）/ `--copy-save`（字节保真分支，原子写）/ `--rename-save`（原子）/ `--delete-save`（槽名 = `--save` 字符集 = 路径穿越死）；**游戏内选择 UI/会话内换档保留不立项** = ~~游戏无标题画面~~（**`[V3-17]` v3.43.0 起主菜单已落地**——单人入口 = 恒 fresh 新世界形，菜单内选档仍不做）+ 会话内载档 = 世界重建级架构变更（矩阵外记档偏离；多槽切换 = CLI `--save <slot>` 既有面）。`[Phase 13]`（管理面 `[SAVE-3]` 已解决）
+- **无周期性自动存档** — 崩溃/断电丢失自上次写入以来的全部修改；`F5` 立即存档（Phase 15，`--save` 槽激活时游戏内随时手动保存）已补上"会话中手动保存"，但仍无周期性 autosave/无"保存并退出"流程。`[Phase 13]`（手动保存热键 `[Phase 15]` 已解决；**`[SAVE-1]` 周期性 autosave + 崩溃韧性已解决**：`save.auto_save_seconds` 代码默认 120 s（0 = 显式关闭，config.json 零改动）真实 dt 计时器（`--save` 槽门控 = 无槽结构惰性，失败下帧重试）+ **原子写**（同目录 `.tmp` + rename，F5/退出/自动三路共用 = 崩溃时目标文件恒为完整旧档或完整新档，半写档不可达，kill -9 实证）；残余**`[SAVE-3]` 已解决**：多槽轮转 = `--copy-save` 分支 + `--rename-save` + `--delete-save`（CLI 管理面，headless 确定性）；"保存并退出" = 既有 ESC/退出存档路径（本已存在；`[V3-17]` v3.43.0 起主菜单已落地但菜单期退出 = 进程结束不写档【槽不创建】，"菜单流保存并退出"仍无 = 偏离不变））
 - **实体 `age` 按真实 dt 累积（墙钟）** — 与玩家/物理一致（非固定步长），所以含实体的存档文件在 age 字段上跨运行差 ±1-2 帧；渲染不依赖 age（掉落物动画由帧计数器驱动），截图确定性不受影响。昼夜 `time` 是固定步长（位精确）。`[Phase 13]`
 - **`DayCycle::setTimeOfDay` 至多 1 ulp 偏差** — 存 timeOfDay [0,1)，恢复时解出 totalSeconds；对远离配置 start_time 的值，`startTime + delta` 的浮点往返可能差 1 ulp（~1e-16）。昼夜渐变段是常量/平滑的，呈现无影响。`[Phase 13]`
 - **演示区外的编辑会带上"生成的 chunk"** — 在演示区外放置方块会同步生成该 chunk（既有行为），存档 diff 覆盖它；读档时 `setBlock` 重建同样生成该 chunk——一致，但读档后的世界含全新世界没有的 chunk（读档后 `propagateAll` 全量重传播，之后新出现的 chunk 由 Phase 14 的 worker 光照 job 处理）。`[Phase 13]`
@@ -137,7 +137,7 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 
 ## 渲染 / 网格化（Phase 18）
 
-- **无输入基线重拍（base3 → base18）** — Greedy Meshing 有意改变了无输入渲染：合并 quad 的纹理 UV 插值与逐面片在浮点层不同（数学上同一映射），GL_NEAREST 下少数纹素边界翻转；合并 quad 的剪影边缘线（远世界边界山脊）亚像素偏移 1-2 px。实测与 base3 差 3593 px（0.39%），全部为剪影边缘/纹理重采样（几何覆盖集经逐 chunk 对比 100% 相等）。`/tmp/opencode/base18.png` 为新基线，后续阶段对它字节门控。单面片（1×1）quad 保持 Phase 17 的 legacy atlas UV + `tiled=0` 路径，逐位精确不变。`[Phase 18]`
+- **无输入基线重拍（base3 → base18）** — Greedy Meshing 有意改变了无输入渲染：合并 quad 的纹理 UV 插值与逐面片在浮点层不同（数学上同一映射），GL_NEAREST 下少数纹素边界翻转；合并 quad 的剪影边缘线（远世界边界山脊）亚像素偏移 1-2 px。实测与 base3 差 3593 px（0.39%），全部为剪影边缘/纹理重采样（几何覆盖集经逐 chunk 对比 100% 相等）。`/tmp/opencode/base18.png` 为新基线，后续阶段对它字节门控（**锚后续演进**：`[V3-6]` 门 200 重锚 **base19 225272 B** = 游戏无输入锚；**`[V3-17a]` v3.43.0 起交互启动 = 标题菜单**，菜单期无输入跑 = 独立锚 **base20**（标题页含版本行 = 逐版重锚，PITS 426②）——base18 留档）。单面片（1×1）quad 保持 Phase 17 的 legacy atlas UV + `tiled=0` 路径，逐位精确不变。`[Phase 18]`
 - **合并不跨 chunk 边界** — 每个 chunk 独立合并：相邻 chunk 的同质地形产生相邻的两个 quad 而非一个大 quad（边界处少合并）。标准做法（Minecraft 同样逐 chunk 合并）；跨 chunk 合并需要边界交换，留待需要时。`[Phase 18]`
 - **流体表面仍逐面片** — 水面是 level 缩放的几何（顶面在 level/8 高度、侧壁随 level），合并规则与整格面片不同，Phase 18 刻意不合并（保持逐面片 + 原有 culling）。`[Phase 18]`
 - **两个相邻非 opaque 方块之间仍双向出面** — 每平面两个独立 slice（+normal 来自下方格、−normal 来自上方格）分别合并，叶片-叶片/玻璃-玻璃之间的双面保留（正确、略浪费；相机只看到前向一面，背面被 cull）。`[Phase 2]`（Phase 18 按设计保留）
@@ -157,7 +157,7 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **伤害来源：坠落、虚空、mob 攻击、熔岩灼烧、燃烧效果与火接触** — 无 mob 攻击与火接触以外的接触伤害（`fire` 块非 solid，玩家站火里被**点燃** = Phase 74【P70 直伤版退役】：fire 效果 1 HP/0.2 s、离开残留 8 s、水灭；Mob 站火里被点燃 = Phase 73，P58 熔岩点燃的块版）。`fallDamage = max(0, 净下落格数 − fallDamageOffset)`（offset 默认 3），从离地帧的 `fallStartY` 到落地点的净竖直距离结算；落入水中的落地取消伤害。~~无护甲/摔落缓冲机制~~ — **`[SURV-1]` 已解决（护甲 = 摔落缓冲：全源减伤含坠落）**：12 件护甲（leather/iron/diamond × helmet/chestplate/leggings/boots = MC 精确值 1/3/2/1（总 7）、2/6/5/1（总 14）、3/8/6/3（总 20），max_stack 1，材质档 = 三链；chain 无材料 = 记档偏离）+ MC 整数 floor 减伤（`Player::damage` 单收口 = **全伤害源生效**【坠落/饥饿/熔岩/虚空/mob/箭/火 tick 全走它】，次序 armor → resistance → 吸收池，pts=0 位级恒等）+ 右键穿戴/交换/脱下通道（点火器之后、潜行旋转之前；空手按 head→chest→legs→feet 固定序脱下到选中槽——10-25 修复脱下 dangling reference【物品消失，PITS 246】，逻辑上提纯函数 `item/armor.hpp` + 9 单测；脱下后手非空，连点 = 穿上/脱下震荡，脱整套须每点之间换空热栏槽）+ 存档 format 16 `player.armor`（恒写、只含占位槽、键纪律 + 槽名-物品数据交叉校验）+ HUD 心行上方护甲排（仅占位槽绘制 = 无输入结构性免疫）；~~窒息伤害未实现~~ — **`[SURV-2]` 已解决（氧气窒息：水下/熔岩扣空气 + 耗尽后每 150 帧 2 HP 豁免护甲减伤）**。`[Phase 16]`（mob 攻击 `[Phase 20]`、熔岩灼烧 `[Phase 54]`、燃烧效果 `[Phase 57]`、玩家火接触点燃 `[Phase 70]`→`[Phase 74]`、Mob 火接触点燃 `[Phase 73]`、护甲 `[SURV-1]`、氧气窒息 `[SURV-2]` 已解决）
 - **`[SURV-2]` 氧气窒息（水下/熔岩扣空气 + 耗尽每 150 帧 2 HP）** — 纯函数 `player/drown.{hpp,cpp}`（`drownStep` 帧锁定节奏 + `headInFluid` 单格眼位谓词【眼在水/熔岩里；站 1 格浅池/漂浮面 = 换气；熔岩同款溺水 = MC】，campfire 范式单测拥有）+ `Player::damage` 加 `bypassArmor=false` 默认参（**溺水 = damage(2.0f, true) 豁免护甲 floor 减伤【维基伤害表 Drowning: Armor: No effect】，resistance 与吸收池照常【Resistance: Applies】；默认参 = 既有调用点位级不变，存量伤害测试零改动**）+ Game 每帧 pass（player update 之后、传 m_frameCount、面板暂停期间照常 tick）+ 死亡/respawn 复位满空气 + **format 17 `player.oxygen` int [0,150] 恒写**（17 必需 / ≤16 带键 = 版本谎报点名 / 越界与非整数点名 / 15/16→17 迁移满空气 150）+ **HUD 氧气泡排替换饥饿排原位**（`locked && !panelOpen() && oxygen<150`；10 图标 = ceil(oxygen/15)、单 tile 无半态、出水同帧消失；`oxygen.png` 16×16 = `tools/generate_oxygen_icons.py` salt 105 起【既有 PNG 重跑零变化】）+ F3 `oxygen N` 行。**范围外（记档偏离）**：① 无气泡/喝水声（MC 气泡声本身随机 = 非确定性，项目无新 wav）② 无 mob 溺水（MC mob 不溺水；任务条 = 玩家氧气条）③ 无呼吸附魔/水肺/和平豁免（项目无这些系统）④ 无 config 键（MC 值 = `player/drown.hpp` 命名常量 kOxygenMax=150 / kOxygenDecayFrames=6 / kDrownDamageFrames=150 / kDrownDamage=2.0f，YAGNI）⑤ **drownTicks 不入档**（读档归零 = tick 相位惯例，effects 同款；MC 存 airSupply 相位 = 偏离）⑥ 气泡排空位不绘暗态（单 tile 纹理设计定案，填充数 = 绘制数）。`[SURV-2]`
 - **生命 HUD 是 10 心三态，半心按 0.5 HP 粒度渲染** — 每颗心 2 HP，填充 = `clamp(hp − 2i, 0, 2)`（2=满/1=半/0=空），贴图是 3 个固定状态（满/半/空），无更细粒度（如 0.5 HP 的四分之心）；MC 的心是 10 颗每颗 1 HP 且支持 0.5 增量。`[Phase 16]`
-- **无死亡分数/死亡统计** — 死亡只显示 "You died! / Press R"，无得分、无死亡次数、无 Game Over 统计屏；重生保留背包与全部物品（无死亡掉落）。`[Phase 16]`（**死亡次数 `[SURV-7]` 已解决**：`player.stats.deathCount` + 每 mob `kill.<name>` 计数器（帧锁定事件、format 21 存档、封闭词表校验）；统计**显示** = `[PRE-12]` 已解决：F3 `stats` 行（键序 "name N | ..."，空 = "(none)" 基线行）——独立统计屏/Game Over 屏 = 范围外记档，得分/死亡掉落 = 范围外记档，详见 phase-surv7.md + phase-pre12.md）
+- **无死亡分数/死亡统计** — 死亡只显示 "You died! / Press R"，无得分、无死亡次数、无 Game Over 统计屏；重生保留背包与全部物品（无死亡掉落）。`[Phase 16]`（**死亡次数 `[SURV-7]` 已解决**：`player.stats.deathCount` + 每 mob `kill.<name>` 计数器（帧锁定事件、format 21 存档、封闭词表校验）；统计**显示** = `[PRE-12]` 已解决：F3 `stats` 行（键序 "name N | ..."，空 = "(none)" 基线行）——独立统计屏 = **`[V3-13]` v3.15.0 已落地**（死亡统计屏：致死原因行 9 措辞 + 会话 5 行统计 + Game Over 屏 = 死亡屏本身【无 hardcore】，见 GAMEPLAY「生存循环」）；得分/死亡掉落仍 = 范围外记档，详见 phase-surv7.md + phase-pre12.md + phase-3.15.0.md）
 - **自然回复是定时 + 饥饿门控（Phase 23 起）** — 脱离受伤 `regenDelay=10s` 后每 `regenInterval=4s` 回 1 HP，且要求饥饿 ≥ 6（Minecraft 规则：低于 6 无自然回复）；门控关闭时累加器暂停（不重置），吃饱后继续累计。**`[SURV-9]` 已解决：自然回复的每半心消耗 1 点饥饿（MC 规则）**——经标准路径（隐藏饱和度 buffer 先扣、耗尽掉条 = Phase 28 衰减 tick 同款原语 `drainOneHungerPoint`；**满血时区间免费流逝** = 无回复无成本），回复门（bar ≥ 6）不变（MC 18 = 既有偏离条款）。`[Phase 16]`（饥饿门控 `[Phase 23]`，回复成本 `[SURV-9]`）
 - **V2-19 视角/移动/时间显示批（记档偏离，v2.11.0）**——① **第三视角滚轮缩放**：MC 原版无滚轮缩放（mod 惯例）：distance session 态 clamp 2.0-8.0 step 0.5（默认 4.0 = 原版距离位级不变），C 切模式不重置，不存档；② **玩家飞行**：双击 Space 0.3 s 开关（MC creative 同款手势，第二击吞跳跃）；飞行 = 重力跳过 + Space 升/Shift 降 4.0 b/s + 水平 1.6× 走路速（MC creative 量级定案值）+ 碰撞照常 + 坠落累加器飞行中每帧归零（切出帧自切换高度计坠，无爆发伤害）；**偏离**：水/熔岩中自动切出（MC creative 水下可飞，项目流体浮力模型不叠加）/ 飞行态不存档（MC 存 flying 标志，项目会话态——载档后空中自然落下无伤害）/ 死亡重生存位 / 面板开不响应；③ **24 小时 HUD 时钟**：MC 无 HUD 时钟（用户诉求新功能）——右上角恒可见 "HH:MM"，映射 `((t − kDawnStart 0.05)×24 + 6) mod 24` 与 ramp 边精确对齐（晨 06:00 / 午 12:00 / 昏 18:00 / 夜 00:00）；`clockString(0.0)` = "04:47"（double 0.05 比精确 0.05 大 2.8e-18 的 ulp 带，按实际位级行为钉单测）。三子项全 session 态 = 零 format；时钟 = 门 182 重锚 178676 B 的唯一像素源（diff 609 px 全落右上角）。`[v2.11.0]`
 - **V2-11 XP 系统（记档偏离，v2.12.0）**——① 经验球值 1..9 **无合并
@@ -316,7 +316,7 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 
 - **mob 不入存档** — 生成物是瞬态的（与 Minecraft 一致：存档只持久化玩家/物品/方块编辑）；读档后 mob 重新按帧节奏生成。zombie 死亡掉落 `rotten_flesh` 是物品实体，随存档正常保存。**下界维度同款**（V3-1：`nether_entities` 段只含掉落物 kind，mob 两维皆瞬态）。`[Phase 20]`（两维 `[V3-1]`）
 - **保护环是水平圆、不跟随玩家** — 保护中心 = 新世界出生点（读档不改变它），半径为水平距离（无垂直分量）；v1 无床/村庄，保护不随玩家移动（Minecraft 的村庄保护环未实现）。`[Phase 25]`
-- **无阴影/无咆哮声；肢体动画已实现** — `[Phase 20]` 原条三项：① 无行走摆臂 = **已修复 `[ENT-1]`（v0.10.0，详见 docs/archive/v1x/phase-ent1.md）**（纯渲染层：per-mob 整数 swing 相位 + constexpr 16.16 定点正弦表 + mob JSON `swings` 数据段 + CPU 逐帧部件顶点变换 + `checkSwingClip` 防穿模验收；chicken 2 腿 / cow·sheep 4 腿对角步态 / spider 8 腿偶奇分组；zombie/skeleton 99.7 几何无独立 arm part = 不造几何）+ 比例/摆幅/关节 `[ENT-1b]`（v0.11.0）实机校准；② 无 blob 阴影 = **已解决 `[V2-6]`（v2.6.0）**：每 mob 脚下（+ 玩家**仅第三人称**）世界空间扁 quad（双面、半透明黑 alpha 0.3、边长 = 1.5×模型宽，entity/blob_shadow.hpp 纯几何：中心 = 底心正下方**底格顶面** + 0.01 防 z-fight 抬升，贴地面而非悬浮脚边 = MC blob 观感）；纯渲染零帧状态（几何 = 实体当前位置的纯函数），blend pass 深度写关/测开（山丘遮挡、地形承托）。**记档偏离**：玩家第一人称无自身阴影（MC 同款）/ quad 为方块扁影（MC 是径向渐变软影）/ 无方块投射阴影（blob ≠ shadowmap）。**v3.12.0 修订（门 202）**：边长 **1.5× → 1.0×**（= 身体同宽足迹）——用户实机报障「阴影比 mob 大、落体瞬间阴影角压高处方块 = 看似按阴影判落」；编排者探针定案**物理 = AABB 质心规则**（失接地 = 身体中心恰过边缘 0.3000 = 半宽，MC 同款；`blobShadow*` 仅渲染消费零参与判定）→ 所见 = 1.5× 阴影的落体瞬间视觉误导，处置 = 物理不动只缩阴影（玩家第三人称阴影同共享常量收拢）；③ 无咆哮/低吼（受击 "hurt" / 死亡 "death" 复用；**下界 mob 氛围音 3 件 `[V3-3]` 部分消费**）= **仍活跃**。
+- **无阴影/无咆哮声；肢体动画已实现** — `[Phase 20]` 原条三项：① 无行走摆臂 = **已修复 `[ENT-1]`（v0.10.0，详见 docs/archive/v1x/phase-ent1.md）**（纯渲染层：per-mob 整数 swing 相位 + constexpr 16.16 定点正弦表 + mob JSON `swings` 数据段 + CPU 逐帧部件顶点变换 + `checkSwingClip` 防穿模验收；chicken 2 腿 / cow·sheep 4 腿对角步态 / spider 8 腿偶奇分组；zombie/skeleton 99.7 几何无独立 arm part = 不造几何）+ 比例/摆幅/关节 `[ENT-1b]`（v0.11.0）实机校准；② 无 blob 阴影 = **已解决 `[V2-6]`（v2.6.0）**：每 mob 脚下（+ 玩家**仅第三人称**）世界空间扁 quad（双面、半透明黑 alpha 0.3、边长 = 1.5×模型宽，entity/blob_shadow.hpp 纯几何：中心 = 底心正下方**底格顶面** + 0.01 防 z-fight 抬升，贴地面而非悬浮脚边 = MC blob 观感）；纯渲染零帧状态（几何 = 实体当前位置的纯函数），blend pass 深度写关/测开（山丘遮挡、地形承托）。**记档偏离**：玩家第一人称无自身阴影（MC 同款）/ quad 为方块扁影（MC 是径向渐变软影）/ 无方块投射阴影（blob ≠ shadowmap）。**v3.12.0 修订（门 202）**：边长 **1.5× → 1.0×**（= 身体同宽足迹）——用户实机报障「阴影比 mob 大、落体瞬间阴影角压高处方块 = 看似按阴影判落」；编排者探针定案**物理 = AABB 质心规则**（失接地 = 身体中心恰过边缘 0.3000 = 半宽，MC 同款；`blobShadow*` 仅渲染消费零参与判定）→ 所见 = 1.5× 阴影的落体瞬间视觉误导，处置 = 物理不动只缩阴影（玩家第三人称阴影同共享常量收拢）；③ 无咆哮/低吼（受击 "hurt" / 死亡 "death" 复用；**下界 mob 氛围音 3 件 `[V3-3]` 部分消费**）= **仍活跃**（3.x 后续消费面：`[V3-14b]` ghast 发射前咆哮 / `[V3-10c]` 末影人瞬移落点音 / `[V3-10d1]` 龙咆哮【吐息预兆】+ 龙氛围音 = 物种数据音；通用受击/死亡复用不变）。
 - **无 mob 间仇恨** — 每只 mob 只以玩家为对象（无群袭/目标切换/视野遮挡检查）；玩家不可被 mob 推动（P19 玩家不可推动规则，mob 在玩家脸前停下）。`[Phase 20]`（`[ENT-6]` 起原"追墙会沿墙滑"已消费 = 卡住触发 BFS 绕障寻路，chase 态专属——wander/ranged 不寻路 + 楼梯/半块地板出图 + 单格 step quirk 几何下保持夹墙【节点超时逃逸】，详见 phase-ent6.md）
 - **攻击是固定 0.25s 挥击节奏，无挥击动画/声音差异** — 按住左键对 mob 每 0.25s 一击（伤害 = 选中物品 `attack_damage` 数据）；无 swing 动画、命中音复用 "hurt"。`[Phase 20]`
 - **mob 模拟走固定帧步长（`kMobStepPerFrame`）** — 运动实体的截图可复现约定（日循环同款）：mob 每帧固定推进 1/60s，非 60FPS 帧帽下 mob 时间随帧钟变慢（玩家/掉落物/流体仍是真实 dt）；掉帧时 mob 与玩家瞬时速度差 ≤1 个子步（无输入运行无感）。`[Phase 20]`
@@ -326,7 +326,7 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   1–2（随机区间）+ `leather` 0–1（cow/sheep leather 先例、Phase 38 随机
   区间）：皮革 0–1 与 MC 猪的 leather 区间同款（MC 上限 2，本项目取 1 =
   与既有被动 mob 皮革刻度一致，记档）；pork 1–2 vs MC 猪排固定 1 = 记档
-  偏离；**猪无骑乘**（项目无骑乘系统，MC 猪可骑）；猪 = 首个 V2-2
+  偏离；**猪无骑乘**（~~项目无骑乘系统~~ **`[V3-14d]` v3.22.0 骑乘系统已落地**【strider 首/唯一骑乘物】——猪仍不可骑 = 偏离不变；MC 猪可骑）；猪 = 首个 V2-2
   per-face `faces` 消费的 mob（head front = 显式 8×8 猪脸 2× tile，其余
   五面回落 body tile）。`[V2-5]`
 
@@ -654,8 +654,8 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 
 ## netherite 材料链（V3-4，v3.6.0）
 
-- **netherite 无火/熔岩免疫、无击退抗性** — 伤害管线改造面 = 矩阵外记
-  档（Phase B 候选未立项）；穿了 netherite 护甲掉熔岩海照样烧/溺。
+- **netherite 无火/熔岩免疫、无击退抗性** — ~~伤害管线改造面 = 矩阵外记
+  档（Phase B 候选未立项）；穿了 netherite 护甲掉熔岩海照样烧/溺~~ **`[V3-15]` v3.16.0 火·熔岩免疫已落地**（`fire_resistant` armor-only 数据旗 + 三抑制【熔岩 tick 不落地/接触不点燃/火效果抑制】+ 熔岩死因覆写，见 GAMEPLAY「传送门与下界 · netherite 链」）；**击退抗性仍弃做**（无玩家击退面 = 无消费方，V3-15 定案）。
 - **无 netherite_block** — 物品族在场（ingot/scrap/工具 3/护甲 4）但无块
   （信标配基座集合 {iron, gold, diamond} 不变）。
 - **升级配方 = ingot + diamond_<slot> shapeless** — 无锻造台（记档偏离
@@ -683,10 +683,13 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **倍率切换的真实鼠标点击同触发** — 手柄 LB/RB = V3-8 映射的鼠标
   Left/Right；手柄连接时真实鼠标点击仍切倍率（v1 局限记档，倍率仅
   pacing 无害）。
-- **demo UI 字符串英文** — 字体 427 字形 CJK 表无 demo 词汇（记档：加
-  字 = 字体表扩展，偏离 1 设计稿记档）。
+- **demo UI 字符串英文** — 回放内 overlay（暂停/结束面板、速度角标）仍
+  英文（偏离 1 设计稿记档不变）；但**菜单教学页的 demo 显示名 = 中文
+  标题已落地**（`[V3-20]` v3.47.0 index `title` 字段 + 字体 +12
+  戏植血房宫皇城河黑传送讨，字形安全 fail-fast——原「CJK 表无 demo
+  词汇」已不成立，表现 469 字形）。`[V3-9]`
 - **ESC = 暂停菜单非退出** — pre-V3-9 的 ESC 语义属玩家通道（demo 事件
-  拥有）；观众退出 = 暂停/结束面板的 Q。
+  拥有）；观众退出 = 暂停/结束面板的 Q。**`[V3-21]` v3.48.0 起 Q 分面**：菜单教学页启动的 demo = Q **返回教学菜单**（进程干净 re-exec ~2s 重载，save/record 跳过 = 观察红线不变）；CLI 启动 = Q 退出进程（位级不变）。
 - **录制 quit 帧未模拟尾部排除**（`discardPendingFrame`，记档偏离 3）；
   录制带 `--save` = 槽 spec 被退出写覆写终态（闭环起点漂移，PITS
   391③——fresh 会话录制）。
@@ -796,8 +799,9 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **升天 3s 非 10s**（60f 直线飞 + 180f 悬停，仪式压缩偏离）。
 - **XP = 23 orb（22×9 + 1×2 = 200 项目 XP 刻度）**非 MC 155
   tick 直发（orb cap 9 无分裂）；**末地 orb 不持久**——end 段
-  存档静默跳过（120s 燃尽限界损失；format 33 end_xp_entities
-  后移 10d2 复议，偏离记档）；BreathCloud 存档同款跳过。
+  存档静默跳过（120s 燃尽限界损失；**`[V3-12c2]` v3.31.0 format 33
+  `end_xp_entities` 恒写 = 后移复议兑现，本偏离消除**）；BreathCloud
+  存档同款跳过（不变）。
 - **龙息云无 Slowness**（项目无减速效果）；**火球撞击无直接伤**
   （撞击即云，云即伤 D11）；**云无自伤**（零新 DamageSource/
   死因/字体——死因 fallback「死于药水」措辞不精确 D14，记档）。
@@ -821,7 +825,9 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   seam**（--explode 孪生，首帧龙存在时施加；管理旗互斥，
   nullopt = 结构免疫根）。
 - **字体扩展区 528/528 满**（+3「末影龙」后零余量——后续 CJK
-  须扩 kFontAtlasHeight = 重锚论证面，先记）。
+  须扩 kFontAtlasHeight = 重锚论证面，先记）。**已兑现**：`[V3-17a]`
+  v3.43.0 起字体 atlas 多次增长（2112→2208，`[V3-20]` v3.47.0
+  2208→2272——码点序插入 + 后缀重格纪律，顶 512 px 红线逐次恒等）。
 - **后移 10d2**：crystal_base 放置 + 4 晶召唤序列 + 复杀 8XP +
   蛋 60s 会话重生 + F3 龙态行 + 末地 orb 持久化复议 + 跨维池
   条目复议（10c 承接）+ scream/stare 音族。
@@ -832,14 +838,18 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   哈希；CHAT 独立包；打字抑制 owner 机捕获前本地吞；Latin only
   零字形——CJK 聊天 = V3-17 菜单项字体面复议）/ D22 名牌 = 第三人
   称 + Latin（本地玩家无牌；投影常量与 3D pass 同源共享）/ D23
-  accept 窗 N 定形（首客 10s + 3s 窗 250ms 重试 + WELCOME 窗后统
+  accept 窗 N 定形（**`[V3-20]` v3.47.0 起首客 = 无限等待**【250ms
+  轮询 + 1s 重渲染节拍 + 10s 心跳日志 + ESC/关窗命名取消】，附加客
+  3s 窗 250ms 重试不变 + WELCOME 窗后统
   一 flush 同 N；窗内拒收 = REJECT 续窗）。
 - **N = 3 实证 / 协议形 ≤ 8**：门臂 3P 锁步 ×4 批次跨批哈希恒等；
   8 人满员形未门（codec 已泛化 + 屏障 per-remote 水印，立项时
   复议——性能/延迟面）。
 - **大厅最小形**：名牌 + F3 players 行 + 聊天；**MOTD/设置/登录/
   联机页 = V3-17 主菜单系统**（11-07 用户实机诉求立号，12c1 意念
-  并入）。
+  并入）。**`[V3-17]` v3.43.0–v3.46.0 全 4 相位已落地**（标题/设置/
+  登陆/教学两级/多人五页 + WELCOME hostName + MOTD 首聊行；主机
+  首客无限等待 `[V3-20]` v3.47.0）。
 - **Mesa 无头前缓冲读回竞态**（PITS 411⑥）：多进程并行门臂的截图
   RAW ×2 偶发纯彩块垃圾帧（进程轮换）——权威 = net hash +
   savenorm（全绿）；本机物理双机实测面归用户（同 V3-8 门强度记
@@ -850,7 +860,9 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **11-07 用户实机诉求 2 项入表**：V3-16 扩展指导 demo 族（10 主
   题 3-10 分钟级：下界门/末影龙/房子+床/挖矿工具/体力/回血/皇宫/
   材料/河流/完整黑夜历险）+ V3-17 主菜单系统（标题/设置/登陆/教
-  学/多人五页）——BACKLOG 待执行项明细。
+  学/多人五页）——BACKLOG 待执行项明细。**两项均已全落地**（V3-16
+  10 主题 = v3.32.0–v3.40.0 / V3-17 全 4 相位 = v3.43.0–v3.46.0；其后
+  11-08 起实机诉求批 V3-18~V3-23 = v3.41.0–v3.51.0 亦全完成）。
 
 ## V3-12b 2 人多人 PoC（v3.29.0）
 
@@ -864,14 +876,19 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **lockstep 延迟 = D×16.7 + RTT/2 ≈ 38-42ms（LAN）**（D3 无本地
   预测——PoC 定案可接受；12c 复议）。
 - **主机 = 单点**（R13/D2）：主机崩 = 全体 EOF 退；主机卡死 = 客
-  户端等包 10s 点名退（无心跳 = 12c）。
+  户端等包 10s 点名退（~~无心跳 = 12c~~ **`[V3-12c1]` v3.30.0 心跳已落地**：屏障 stall **min 水印** 10s 点名移除最滞后——健康同伴不再遮死者死锁；等包 10s 点名退不变）。
 - **断线移除 = 库存 100% 掉落 + 落乘 + 效果清**（R19；会话 solo 续
-  跑）；无重连（12c）。
+  跑）；~~无重连（12c）~~ **`[V3-12c2]` v3.31.0 重连已落地**：主机
+  listener 持久，掉线客户端中会话可 REJOIN = 新体（世界快照重同步；
+  活 mob 在场点名拒收 D24，见 GAMEPLAY「多人」）。
 - **creative 多人禁用**（D11：主机 creative 时握手点名拒；solo
   creative 不动）。
 - **教程仅主机**（D12：远程玩家行为不推进教程，actor 门）。
 - **无聊天/无大厅/无发现**（D4/D15：IP:port 直连 + HELLO 携带
-  name ≤12 Latin = 12c 名牌载体）。
+  name ≤12 Latin = 12c 名牌载体）。**`[V3-12c1]` v3.30.0 聊天/名牌/
+  F3 players 行已落地**（打字抑制 + 8 行环浮层，Latin only 不变）；
+  **`[V3-17d]` v3.46.0 MOTD 已落地**（WELCOME str16 + 客机首聊行）；
+  发现（服务器列表 ping）仍 = 记档不做。
 - **mob 目标/生成锚 = primary**（D10：远程玩家不被 mob 主动攻击；
   箭扫掠除外——箭可中任一玩家）。
 
@@ -900,15 +917,18 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **F3 dragon 行 = 英文**（开发者工具纪律；528/528 字体满区不
   碰——召唤类中文 UI 字若立项须先扩 kFontAtlasHeight = 重锚论证
   面，R7）。
-- **后移（非矩阵）**：末地 orb 持久化（format 33 复议）/
+- **后移（非矩阵）**：~~末地 orb 持久化（format 33 复议）~~（**`[V3-12c2]`
+  v3.31.0 format 33 `end_xp_entities` 恒写 = 已落地**）/
   endermite / 定身 / 跨维池条目复议 / scream·stare 音族 / 召唤
   UI（晶数提示等）。
 
 ## V3-10a 末地维度框架（v3.23.0）
 
-- **frame 生存不可得**——入口环的 frame / 眼 10a 仅 creative 授予 +
-  门存档手术可得（MC 的 stronghold portal room + 末影人掉眼 + 合
-  成 = V3-10b/10c 定案面）；生存玩家暂无法自建末地入口。
+- **frame 生存不可得**——入口环的 frame 仅 creative 授予 +
+  门存档手术可得（MC 的 stronghold portal room = 记档不做；**眼 =
+  `[V3-10c]` v3.25.0 起生存可得**——末影人掉 `ender_eye` 0-1，10a
+  记档的"末影人掉眼"定案面兑现）；生存玩家现可**嵌眼建环激活**
+  （frame 块本身仍须 creative 授予/预置，偏离不变）。
 - **入场平台 (40,52,0) 每次传送重写**（5×5 obsidian + 上方 3 层清
   air；首访 end 段 journal diff = 恰 25 格，二次入场幂等零新增）；
   偏离 MC (100,49,0)（保留 MC x 须扩 200×200 岛——决策弃）。
@@ -921,8 +941,11 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
   检点名）。
 - **末地水不蒸发**（蒸发谓词 nether-scoped；MC 末地同下界蒸发——
   10b 复议）。
-- **末地无 mob / 无生成**（10c 空槽；虚空坠落 = 既有 kill plane
-  −32 + 「死于世界之外」+ 死亡回主世界重生（D8 三值化））。
+- ~~**末地无 mob / 无生成**~~（10c 空槽已消费：**`[V3-10c]` v3.25.0
+  末影人 = 末地首个 mob**【独立池 `mob_spawning_end.json` 单种族 +
+  注视激怒/瞬移/携格】+ **`[V3-10d]` v3.26.0 龙 boss**【仪式生成
+  非池】——虚空坠落 = 既有 kill plane −32 + 死亡回主世界重生
+  （D8 三值化）不变；10b 基岩洋后末地跌落死因 = Fall）。
 - **u_ambient 双 floor**（末地 0.25 同设 u_ambient + u_caveAmbient
   ——shader 无光分支只读后者；OW/nether 配置值位级不变）。
 - **A-lite 双 stateless frame 块**（项目无 per-state 纹理机制；MC
@@ -986,9 +1009,9 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 - **授予目标 = 选中热栏位（非 MC 光标拖放）**——左键满组/右键单个
   直写选中槽（同物合并、异物替换）；MC 的"光标拿取→放入任意格"
   未做（会话态光标栈 = 面板模型改造面，记档偏离）。
-- **搜索 = 前缀匹配（非子串/拼音）**——224 物品 name 升序，输入
-  [a-z0-9_] 前缀过滤；IME 组合输入（TEXT_EDITING）不处理（直打
-  字符走 TEXT_INPUT；记录偏离）。
+- **搜索 = 前缀匹配（非子串/拼音）**——全物品 name 升序（落地时
+  224 件，3.x 内容族增长后现 236 件），输入 [a-z0-9_] 前缀过滤；IME
+  组合输入（TEXT_EDITING）不处理（直打字符走 TEXT_INPUT；记录偏离）。
 - **搜索焦点数字语义**——物品栏 tab 开时数字键 = 打字（不切热栏，
   MC 搜索焦点同款）；槽位选择须在开面板前（指针锁定时）。
 - **文本输入不入 demo 词表**——录制的 demo 永不打字（InputEvent
@@ -999,8 +1022,10 @@ V3-5 建筑族 stone_bricks·bricks + terracotta 染色 14 = 34→58；其余 =
 
 ## V3-11a 创造基础（v3.17.0）
 
-- **创造物品栏 = 未做（V3-11b 下一版）**——创造玩家只能用既有背包
-  内容（无搜索/给予面板）；即挖/不消耗/不死已生效。
+- ~~**创造物品栏 = 未做（V3-11b 下一版）**~~ **`[V3-11b]` v3.18.0 已
+  落地**（E 面板创造双 tab + 前缀搜索 224 物品【落地时】+ 左键满组/右键单个
+  授予选中热栏位 + 搜索焦点数字语义，见 GAMEPLAY「生存循环 · 创造
+  模式」）——创造玩家只能用既有背包内容；即挖/不消耗/不死已生效。
 - **创造 = 存档 flag（非会话态）**——随档持久；装载 creative 档自动
   飞行；关闭 = 回生存（飞行关、饥饿自满条起正常衰减）。
 - **创造免疫 = 全源**（含饥饿/虚空）——创造下死亡统计屏不可达

@@ -2241,7 +2241,7 @@ v3.36.0 + OW 900f 无输入邻窗复跑定档 upd med f300/f600 0.407/
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build  # 构建（0 警告）
-./build/bin/tokenmine_tests                                                 # 测试（2075）
+./build/bin/tokenmine_tests                                                 # 测试（3028）
 ./build/bin/tokenmine                                                       # 运行（ESC 退出）
 ./build/bin/tokenmine --frames N [--screenshot /abs.png] [--save slot] [--new] [--config path]
 ./build/bin/tokenmine --seed 42 --time 0.75 --log-level info                # 其它参数（--help 看全部）
@@ -2343,7 +2343,7 @@ KNOWN_ISSUES、opencode-sessions/SESSION_CONTEXT）→ 6. **显式路径列表**
 | 文档 | 内容 | 何时读 |
 |---|---|---|
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | 玩法指南（操作/生存循环/战斗与食物/工具路线/昼夜） | 玩法问题 |
-| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（现状 v2.0.0，16 子系统分节；2026-11-02 刷新，细节证据在 v1x 阶段存档；世界/渲染侧 = `docs/MECHANICS_WORLD.md`） | 改玩法逻辑前 |
+| [docs/MECHANICS.md](docs/MECHANICS.md) | 机制详解（3.x 期持续刷新中；2.x 全史细节证据在 v1x/v2x 阶段存档；世界/渲染侧 = `docs/MECHANICS_WORLD.md`） | 改玩法逻辑前 |
 | [docs/CONTENT_GUIDE.md](docs/CONTENT_GUIDE.md) | 数据驱动内容添加（biome/方块/配方/Mob/hotbar）+ worldgen 参数；配置/存档/资产纪律 = `docs/CONTENT_GUIDE_CONFIG.md` | 加内容/调世界 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目录结构 + 核心架构（模块/线程池/存档格式/帧管线） | 改架构前 |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | 开发协议：命令/技术栈/硬性约定/测试/**E2E 协议** | 写代码与验证前 |
