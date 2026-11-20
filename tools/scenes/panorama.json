@@ -1,0 +1,7 @@
+{
+  "name": "panorama",
+  "config": "config/config.json",
+  "base_frames": 90,
+  "time": 0.25,
+  "ring": {"center": "spawn", "radius": 48, "y": 90}
+}
