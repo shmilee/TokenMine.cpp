@@ -6,8 +6,7 @@
 
 **本地 LLM 编写的 C++ 版 Minecraft：可运行、可扩展的 3D 体素沙盒<br>
 （C++20 / SDL3 / OpenGL 3.3，自研 JSON/PNG，内容全数据驱动）。<br>
-确定性是一级要求——无输入运行逐帧字节可复现。<br>
-当前 v3.51.0（V3-23 全景 overlap 混合带 + 菜单选中高亮加强；3.x 矩阵 21 项 + 用户实机诉求系列全收官）· 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)**
+确定性是一级要求——无输入运行逐帧字节可复现。**
 
 [![GitHub stars](https://img.shields.io/github/stars/shmilee/TokenMine.cpp?style=flat-square)](https://github.com/shmilee/TokenMine.cpp/stargazers)
 [![MIT license](https://img.shields.io/badge/license-MIT-555555?style=flat-square)](LICENSE)
@@ -99,6 +98,8 @@ cmake --build build
 其他发行版：装齐上表五项即可（`find_package`/`pkg_check_modules` 自动发现）。
 
 ## 版本与发布
+
+**当前 v3.51.0**（V3-23 全景 overlap 混合带 + 菜单选中高亮加强；3.x 矩阵 21 项 + 用户实机诉求系列全收官）· 任务表见 [docs/BACKLOG.md](docs/BACKLOG.md)
 
 - **v0.1.0**：可玩的 3D 体素沙盒（世界生成 / 昼夜光照 / 流体 / Mob 战斗 / 合成 / 存档）
 - **v1.0.0**（1.x）：十大系统完成，生存玩法闭环——火与工具分类、护甲耐久、药水效果、第三人称、教程
