@@ -32,6 +32,12 @@ void printUsage() {
         "                    r absent = the TNT-class radius 3)\n"
         "  --frames <n>      Exit after N frames (0 = run until closed)\n"
         "  --screenshot <p>  Save a PNG screenshot of the last frame\n"
+        "  --screenshot-every <n> <dir>\n"
+        "                    Save a PNG every n frames (frame-NNNNNN.png\n"
+        "                    in <dir>) — the demo's beat family's one-run\n"
+        "                    capture (render-only; the gameplay + demo\n"
+        "                    loops; x --panorama / --demo-author / the\n"
+        "                    menu's run = rejected)\n"
         "  --save <slot>     Save slot (letters/digits/_/-): load\n"
         "                    data/saves/<slot>.json.gz at startup when present\n"
         "                    (the legacy <slot>.json still loads — zero\n"
@@ -68,6 +74,11 @@ void printUsage() {
         "                    replay runs anyway (a WARN is printed; the\n"
         "                    result may be wrong if the simulation\n"
         "                    differs) — the schema's strictness is kept\n"
+        "  --demo-speed <0.5|1|2>\n"
+        "                    With --demo: start the replay at the audience's\n"
+        "                    wheel-ladder's speed (the pacing only — the\n"
+        "                    simulation is frame-locked verbatim, the\n"
+        "                    any-multiplier-same-end-state's belt)\n"
         "  --demo-author <t> V3-9: expand the JSON action timeline <t> to a\n"
         "                    .dmo (the input's <stem>.dmo) and exit —\n"
         "                    STANDALONE headless (the save management's\n"
@@ -212,6 +223,24 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             const char* v = nextValue(i, "--screenshot");
             if (!v) return false;
             args.screenshotPath = v;
+        } else if (arg == "--screenshot-every") {
+            // 4.0 demo check: the periodic's capture (the beat's
+            // one-run's face — the N's the frame step, the directory's
+            // the frame_%06d.png's home).
+            const char* n = nextValue(i, "--screenshot-every");
+            if (!n) return false;
+            const int every = std::atoi(n);
+            if (every < 1) {
+                err = "--screenshot-every's N must be >= 1 (got '" +
+                      std::string(n) + "')";
+                return false;
+            }
+            const char* dir = nextValue(i, "--screenshot-every <dir>");
+            if (!dir || std::string(dir).empty()) {
+                err = "--screenshot-every requires an output directory";
+                return false;
+            }
+            args.screenshotEvery = {every, dir};
         } else if (arg == "--save") {
             const char* v = nextValue(i, "--save");
             if (!v) return false;
@@ -259,6 +288,23 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
             args.demo = v;
         } else if (arg == "--demo-force") {
             args.demoForce = true;
+        } else if (arg == "--demo-speed") {
+            // 4.0 demo check: the audience's wheel-ladder's CLI twin
+            // (the closed vocabulary — the off-ladder's named reject).
+            const char* v = nextValue(i, "--demo-speed");
+            if (!v) return false;
+            const std::string s(v);
+            if (s == "0.5") {
+                args.demoSpeed = 0.5;
+            } else if (s == "1") {
+                args.demoSpeed = 1.0;
+            } else if (s == "2") {
+                args.demoSpeed = 2.0;
+            } else {
+                err = "invalid --demo-speed: '" + s +
+                      "' (0.5/1/2 — the audience's ladder's twin)";
+                return false;
+            }
         } else if (arg == "--list-demos") {
             args.listDemos = true;
         } else if (arg == "--demo-author") {
@@ -444,6 +490,44 @@ bool parseArgs(int argc, char** argv, GameArgs& args, std::string& err) {
         err = "--demo-force requires --demo (it bypasses the replay's "
               "sim version gate only)";
         return false;
+    }
+    // 4.0 demo check: --demo-speed is the REPLAY's pacing's CLI twin
+    // (it needs the replay's entry point to be present — the
+    // --demo-force's belt).
+    if (args.demoSpeed > 0.0 && args.demo.empty()) {
+        err = "--demo-speed requires --demo (it is the replay's "
+              "pacing's CLI twin — the audience's wheel-ladder's "
+              "closed vocabulary)";
+        return false;
+    }
+    // 4.0 demo check: --screenshot-every hooks the GAMEPLAY + the
+    // DEMO loop. The faces without a hook are the named reject (the
+    // silent drop is never): the panorama's one-shot strip render,
+    // the --demo-author's standalone (the game never boots), and the
+    // menu's run (the interactive's face — the menuEnabled's five
+    // bypass forms' mirror).
+    if (args.screenshotEvery.first > 0) {
+        if (!args.panoramaOut.empty()) {
+            err = "--screenshot-every x --panorama is rejected (the "
+                  "one-shot's strip render has no periodic's face)";
+            return false;
+        }
+        if (!args.demoAuthor.empty()) {
+            err = "--screenshot-every x --demo-author is rejected "
+                  "(the standalone's expansion never boots a loop)";
+            return false;
+        }
+        const bool menuRun =
+            args.demo.empty() && !args.demoRecord &&
+            args.listenPort == 0 && args.connectHost.empty() &&
+            !args.scriptFile.has_value() && !args.newWorld;
+        if (menuRun) {
+            err = "--screenshot-every needs a headless-shaped run "
+                  "(the menu's boot has no such face — add --demo / "
+                  "--new / --listen / --connect / --script / "
+                  "--demo-record)";
+            return false;
+        }
     }
     // V3-16a: --list-demos is STANDALONE headless (the index's parse +
     // the shipped content's cross-check — the save management's twin).

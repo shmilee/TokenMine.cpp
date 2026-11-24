@@ -1383,14 +1383,25 @@
   齐，V3-8 输入边界层复用）。
 - **观众只观察白名单**（永不触达模拟）：**ESC = 暂停菜单非退出**（暂停/
   结束共面板：title/name/speed/hint 4 行 + 全幅 0.55 暗帷；Q = 退出；
-  放完 = 观察态 keep-watching 末帧）/ **C = 相机模式循环**（First/
-  ThirdBack/ThirdFront，会话态）/ **mouse delta + 手柄摇杆 = 绕眼 orbit
-  render-only**（`kAudienceOrbitSensitivity`，pitch clamp ~±89°；零
-  orbit = 完全跳过；**瞄准射线读玩家基视角 `aimForward()`**——观众转镜头
-  不偷 demo 玩家瞄准，7 处世界向射线机械替换 = 输入路由红线）/ **滚轮（或
-  手柄 LB/RB）= 倍率 0.5→1→2**（切换落在 demo 帧边界之间 = 永不半帧，确
-  定性；真实鼠标点击同触发 = 记档偏离 v1 局限，倍率仅 pacing）/ 手柄
-  Start = 暂停、左摇杆 = 数字化步进 0.03 rad（记档偏离 7）。
+  放完 = 观察态 keep-watching 末帧）/ **mouse delta + 手柄摇杆（W/S/A/D）
+  = 真轨道 render-only**（v3.52.0：角度 = 会话绝对——首次输入从当前基视角
+  连续初始化（`m_demoOrbitActive`），其后用户独占；pre-v3.52 的 base+offset
+  相对式在「玩家持续转身」的重拍 demo 里带着用户相机转 = 实机报障根；
+  `kAudienceOrbitSensitivity`，pitch clamp ~±89°；无输入 = 分支完全跳过
+  = 无输入跑结构免疫根；**瞄准射线读玩家基视角 `aimForward()`**——观众转
+  镜头不偷 demo 玩家瞄准，7 处世界向射线机械替换 = 输入路由红线）/ **C
+  在回放中移除**（v3.52.0：观众 C 与录制的 C 共写 `m_cameraMode`，且
+  `aimForward()` 的 REPLAY 分支对 ThirdFront 施加 V2-1 前视翻转——观众 C#2
+  把注入交互的射线整体翻转 180° = 容器 RMB 落空级联【用户实机 f4528 三条，
+  T2 复现】；视角切换 = 录制内容自带，PITS 434）/ **滚轮（或手柄 LB/RB）=
+  倍率 0.5→1→2**（切换落在 demo 帧边界之间 = 永不半帧，确定性；真实鼠标
+  点击同触发 = 记档偏离 v1 局限，倍率仅 pacing；CLI 孪生 = `--demo-speed`）
+  / 手柄 Start = 暂停、左摇杆 = 数字化步进 0.03 rad（记档偏离 7）。
+- **回放输入窗 = sim 时基**（v3.52.0）：面板双击收集窗（CRAFT-7 0.3s）+
+  Space 双击飞窗的 REPLAY 分支读 `m_simTime`（demo-dt 累积）而非 solo 墙
+  钟——热循环（2× / vsync-off）下墙钟把 dmo 的 50f 同槽左键对压到 0.2s <
+  0.3s = 收集误触腐化多格环配方【C1 复现 9 错，PITS 435】；record/solo-
+  live/net 的墙钟/共享钟原样（R2 位级）。
 - **shipped 示例**：`assets/demos/example.dmo` **294 B / 266 帧 / 14 事件**
   （W 走 50 帧 + LMB 指针锁定 + 俯角挖掘 ~3 s【2 块 dirt 被挖】+ E 背包
   开关 + C 三后视角 + 滚轮 zoom；`tools/make_example_demo.py` 确定性生成

@@ -159,9 +159,15 @@ void Game::handleInteraction(Player& p, PlayerSession& s, const Input& in, doubl
             // R2: the double-tap window's clock — solo: the wall clock
             // (the original read, bit-identical); net: the shared sim
             // clock (the broadcast dt's accumulator — the two machines'
-            // wall clocks differ, the sim clock does not).
+            // wall clocks differ, the sim clock does not). 4.0 demo
+            // check (the 11-24 report's twin of the collect window's
+            // fix): REPLAY takes the sim clock — the hot loop's wall
+            // compression would pair the dmo's Space taps the author
+            // spaced as single taps (the speed-independence's belt).
             const double now =
-                (m_players.size() == 1) ? nowSeconds() : m_simTime;
+                (m_demoMode == DemoMode::Replay || m_players.size() != 1)
+                    ? m_simTime
+                    : nowSeconds();
             const FlyToggleDecision d =
                 flyToggleDecision(now, s.lastSpacePressTime,
                                   p.isFlying());

@@ -763,8 +763,20 @@ void Game::handlePanelClicks(Player& p, PlayerSession& s, const Input& in) {
     const bool rightPressed = in.wasPressed(MouseButton::Right);
     // R2: the collect window's clock — solo: the wall clock (the
     // original read, bit-identical); net: the shared sim clock.
+    // 4.0 demo check (the user's 11-24 report): REPLAY takes the SIM
+    // clock too — the wall clock's window is the pacing-speed's
+    // function: the 2x's / the vsync-off's hot loop compresses the
+    // dmo's 75-f's same-slot left pair (the 0.417-s's authored's
+    // spacing) below the 0.3-s's band = the collect's misfire eats
+    // the craft's grid (the C1 gate-catch: the furnace's 8-ring's
+    // silent corruption, the panel's cascade's root). m_simTime's
+    // demo-dt's advance = the wall's 1x's twin — the window's
+    // speed-independence. Record keeps the wall (the user's real
+    // double-click is the real time).
     const double now =
-        (m_players.size() == 1) ? nowSeconds() : m_simTime;
+        (m_demoMode == DemoMode::Replay || m_players.size() != 1)
+            ? m_simTime
+            : nowSeconds();
     auto isDoubleClick = [&](int slot) {
         return !shift && slot >= 0 && slot == s.panel.lastLeftSlot &&
                s.panel.lastLeftClickTime >= 0.0 &&

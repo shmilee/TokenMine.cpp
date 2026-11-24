@@ -336,6 +336,68 @@ class Guide:
             self.yaw = yaw
         return self
 
+    # -- the aim's smooth's face (the 4.0 check's user report 11-24:
+    #    the look_at's / the face's SINGLE-EVENT SNAP — the chop's
+    #    level's the 20-deg's jump, the 180-deg's the one-frame's
+    #    spin — "too abrupt, not silky enough"). The target's math is
+    #    the instant's twin's verbatim; the delta spreads with one
+    #    nudge every <=3 frames (the sweep_gradual's 50-step's
+    #    discipline). TWO RANGES (the 11-24's second report: the
+    #    one-range's 1.5-s's cap turned the per-cell ore's 90-deg's
+    #    re-aim into the 3:26's bloat): the ACTION re-aim (look_gradual
+    #    — the mining flow's head-turn, the player's real 0.15-0.6-s)
+    #    vs the CHOREOGRAPHY turn (face_gradual — the showcase's 180-
+    #    deg's spin, the 0.5-1.5-s's cinematic). The RETURN is the
+    #    aim's LANDED frame — the caller's mine's hold must start
+    #    AFTER it (the 25-f's margin's belt unchanged).
+
+    def _gradual_aim(self, f, d, dp, speed, min_s, max_s):
+        total = math.hypot(d, dp)
+        if total < 0.005:
+            self.actions.append({
+                "at_frame": f, "action": "mouse_move",
+                "dx": round(-d / SENS, 3), "dy": round(-dp / SENS, 3)})
+            return f
+        dur = int(round(max(min_s, min(max_s, total / speed)) * 60))
+        steps = max(1, dur // 3)
+        for i in range(steps):
+            fi = f + (i * dur) // steps
+            self.actions.append({
+                "at_frame": fi, "action": "mouse_move",
+                "dx": round(-d / steps / SENS, 3),
+                "dy": round(-dp / steps / SENS, 3)})
+        return f + dur
+
+    def look_gradual(self, f, cell, y_off=0.5):
+        """The look_at's SMOOTH twin, the ACTION's range (2.0 rad/s,
+        clamped to [0.15, 0.6]s). Returns the aim's landed's frame."""
+        tx = cell[0] + 0.5
+        ty = cell[1] + y_off
+        tz = cell[2] + 0.5
+        dx = tx - self.x
+        dy = ty - (self.y + EYE)
+        dz = tz - self.z
+        yaw = math.atan2(-dx, -dz)
+        d = (yaw - self.yaw + math.pi) % (2 * math.pi) - math.pi
+        pitch = math.atan2(dy, math.hypot(dx, dz))
+        pitch = max(-1.5, min(1.5, pitch))
+        self.at(f)
+        landed = self._gradual_aim(f, d, pitch - self.pitch, 2.0, 0.15, 0.6)
+        self.yaw = yaw
+        self.pitch = pitch
+        self._to(landed)
+        return landed
+
+    def face_gradual(self, f, yaw):
+        """The face's SMOOTH twin, the CHOREOGRAPHY's range (0.6 rad/s,
+        clamped to [0.5, 1.5]s). Returns the turn's landed's frame."""
+        self.at(f)
+        d = (yaw - self.yaw + math.pi) % (2 * math.pi) - math.pi
+        landed = self._gradual_aim(f, d, 0.0, 0.6, 0.5, 1.5)
+        self.yaw = yaw
+        self._to(landed)
+        return landed
+
     def walk_leg(self, f, tx, tz, y=None, hold=None, fly=False):
         """One axis-aligned walk leg to the EXACT point (tx, tz) (the
         cell-center's +0.5's the caller's face). The hold's length =

@@ -148,6 +148,21 @@ struct GameArgs {
     std::optional<double> dragonDamage;
     LogLevel logLevel = LogLevel::Info;
     std::filesystem::path screenshotPath; // if set: save after the last frame
+    // 4.0 demo check: --screenshot-every <N> <dir> — the periodic's
+    // capture (frame_%06d.png, the just-swapped frame's twin of the
+    // --screenshot's one-frame-behind semantics). Render-only (zero
+    // sim face): the demo's beat family's ONE-RUN capture — the
+    // per-beat replay-from-f0's harness cost elimination. The
+    // gameplay + demo loops hook it; the panorama's one-shot / the
+    // menu's run / the --demo-author's standalone = the named reject
+    // (the silent drop is never).
+    std::pair<int, std::filesystem::path> screenshotEvery {0, {}};
+    // 4.0 demo check: --demo-speed <0.5|1|2> — the audience's
+    // wheel-ladder's CLI twin (the pacing only: the simulation is
+    // frame-locked verbatim, the any-multiplier-same-end-state's
+    // belt). 0 = absent (the wheel owns the speed). Requires --demo
+    // (the named reject).
+    double demoSpeed = 0.0;
     // Save slot (Phase 13): --save <slot>. At startup loads
     // data/saves/<slot>.json when it exists (unless newWorld); on a clean
     // exit writes it back. Unset = no save/load at all (the default —
@@ -3175,8 +3190,19 @@ std::optional<MobHit> targetMob() const;
     // The audience camera's orbit (render-only — syncCamera re-resolves
     // around the eye; never saved, never touches the simulation; the
     // aim rays read aimForward, not the orbit — the red line).
+    // 4.0 demo check (the user's 11-24 report): the TRUE orbit — the
+    // angles are SESSION-ABSOLUTE (the documented "free orbit" form):
+    // initialized on the first audience input to the current base view
+    // (the continuity's start), then user-owned only. The pre-fix's
+    // base+offset's form coupled the user's camera to the demo
+    // player's own turns (the re-paced demo's smooth aim turns
+    // continuously) = the rotation ran away from under the user's
+    // hands. m_demoOrbitActive = the no-input run's structural
+    // immunity root (the orbit branch skips entirely, the pre-4.0's
+    // bit path).
     float m_demoOrbitYaw = 0.0f;
     float m_demoOrbitPitch = 0.0f;
+    bool m_demoOrbitActive = false;
     // Record (--demo-record): the boundary-tap kernel (the Input's
     // event tap closure; the world spec set in init).
     DemoRecorder m_demoRecorder;

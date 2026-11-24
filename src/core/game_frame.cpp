@@ -171,21 +171,22 @@ void Game::syncCamera() {
     }
 
     // V3-9: the AUDIENCE orbit (replay only, RENDER-ONLY): the
-    // observation view = the mode's base angles + the orbit offset the
-    // audience's mouse / gamepad sticks accumulate, the camera
-    // re-resolved around the eye at the offset angles (the third-
-    // person geometry — the single trig source; the session's zoomed
-    // distance, the base's own). A ZERO orbit skips the branch
-    // entirely (the pre-V3-9 camera path, bit-exactly — the First's
-    // legacy eye, the Third* base resolves). The orbit never touches
-    // the simulation: the aim rays read aimForward (the player's base
-    // view), the offset is session state (never saved), the player's
-    // yaw / pitch stay the demo's.
-    if (m_demoMode == DemoMode::Replay &&
-        (m_demoOrbitYaw != 0.0f || m_demoOrbitPitch != 0.0f)) {
-        const float oyaw = m_camera.yaw + m_demoOrbitYaw;
+    // observation view = the orbit's ABSOLUTE angles (the 4.0 demo
+    // check's true-orbit's form — the session-owned, user-initialized
+    // on first input), the camera re-resolved around the eye at those
+    // angles (the third-person geometry — the single trig source; the
+    // session's zoomed distance, the base's own). The inactive orbit
+    // (no audience input ever) skips the branch entirely (the
+    // pre-V3-9 camera path, bit-exactly — the First's legacy eye, the
+    // Third* base resolves; the no-input run's structural-immunity
+    // root). The orbit never touches the simulation: the aim rays
+    // read aimForward (the player's base view), the angles are
+    // session state (never saved), the player's yaw / pitch stay the
+    // demo's.
+    if (m_demoMode == DemoMode::Replay && m_demoOrbitActive) {
+        const float oyaw = m_demoOrbitYaw;
         const float opitch = std::clamp(
-            m_camera.pitch + m_demoOrbitPitch, -kAudienceOrbitMaxPitch,
+            m_demoOrbitPitch, -kAudienceOrbitMaxPitch,
             kAudienceOrbitMaxPitch);
         m_camera.position = resolveThirdPersonCamera(
             currentWorld(), m_blocks,

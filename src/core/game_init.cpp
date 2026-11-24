@@ -3403,6 +3403,21 @@ void Game::runGameplayLoop(double lastFrame) {
             m_demoRecorder.frame(dt);
         }
 
+        // 4.0 demo check: the periodic's capture (the --screenshot's
+        // one-frame-behind semantics' twin — the just-swapped frame;
+        // render-only, the sim's face untouched).
+        if (m_args.screenshotEvery.first > 0 &&
+            m_frameCount % m_args.screenshotEvery.first == 0) {
+            const std::filesystem::path dir = m_args.screenshotEvery.second;
+            std::filesystem::create_directories(dir);
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "frame_%06d.png", m_frameCount);
+            const auto shot = takeScreenshot(dir / buf);
+            if (!shot.ok()) {
+                MC_LOG_ERROR("screenshot-every: " + shot.error().describe());
+            }
+        }
+
         if (m_args.frames > 0 && m_frameCount >= m_args.frames) {
             MC_LOG_INFO("Frame limit reached (" + std::to_string(m_frameCount) +
                         " frames), exiting");
@@ -3483,6 +3498,14 @@ void Game::runDemoReplay() {
     m_demoPacingAnchorUs = 0;
     m_demoTimeUs = 0;
     m_demoFrame = 0;
+    // 4.0 demo check: the --demo-speed's CLI twin (the audience's
+    // wheel-ladder's closed vocabulary, applied at the start — the
+    // pacing only, the simulation's frame-locked verbatim).
+    if (m_args.demoSpeed > 0.0) {
+        m_demoSpeed = m_args.demoSpeed;
+        MC_LOG_INFO("Demo replay speed (the --demo-speed's CLI seam): " +
+                    demoSpeedLabel(m_demoSpeed));
+    }
 
     while (true) {
         const double frameStart = nowSeconds();
@@ -3526,14 +3549,15 @@ void Game::runDemoReplay() {
             m_demoQuitByAudienceKey = true;
             break;
         }
-        if (m_audienceInput.wasPressed(GameKey::C)) {
-            m_cameraMode =
-                m_cameraMode == CameraMode::First
-                    ? CameraMode::ThirdBack
-                    : m_cameraMode == CameraMode::ThirdBack
-                          ? CameraMode::ThirdFront
-                          : CameraMode::First;
-        }
+        // 4.0 demo check (the user's 11-24 report): the audience's C
+        // is REMOVED — the demo's camera mode is the AUTHORED content
+        // (the recorded C beats — the ending's third person's tour):
+        // the audience's C cycled the same m_cameraMode the recorded
+        // events do, desyncing the choreography (the user's one C
+        // made the demo's own beats land on the wrong view — the
+        // "the first person's sometimes far's" face). The audience's
+        // free view is the orbit below (it subsumes the C's behind's
+        // angle — the orbit can sit anywhere around the player).
         // The speed: the audience's wheel (0.5 -> 1 -> 2) at the frame
         // boundary (the switch lands BETWEEN demo frames — never a
         // half frame, the determinism). The gamepad's LB / RB (the
@@ -3553,26 +3577,49 @@ void Game::runDemoReplay() {
         }
         // The audience's orbit (render-only — the mouse's delta + the
         // gamepad's sticks; the player's look convention: right = the
-        // yaw decrease, down = the pitch decrease).
+        // yaw decrease, down = the pitch decrease). 4.0 demo check
+        // (the user's 11-24 report): the TRUE orbit — the angles are
+        // session-ABSOLUTE: the first input initializes them to the
+        // current base view (the continuity's start — no jump), then
+        // the user owns them alone. The pre-fix's base+offset's form
+        // re-added the demo player's base view every frame — the
+        // re-paced demo's smooth aim turns the player continuously,
+        // so the user's whole camera spun under their hands (the
+        // "the rotation's weird" report). Now the demo player's turns
+        // leave the user's orbit angle untouched (the user watches
+        // the player's body rotate in a fixed frame — the classic
+        // spectator's orbit).
         {
             const Vec2 a = m_audienceInput.mouseDelta();
-            m_demoOrbitYaw -= a.x * kAudienceOrbitSensitivity;
-            m_demoOrbitPitch -= a.y * kAudienceOrbitSensitivity;
-            if (m_audienceInput.isDown(GameKey::D)) {
-                m_demoOrbitYaw -= kAudienceStickOrbitStep;
+            const bool orbitInput = a.x != 0.0f || a.y != 0.0f ||
+                m_audienceInput.isDown(GameKey::D) ||
+                m_audienceInput.isDown(GameKey::A) ||
+                m_audienceInput.isDown(GameKey::S) ||
+                m_audienceInput.isDown(GameKey::W);
+            if (orbitInput && !m_demoOrbitActive) {
+                m_demoOrbitYaw = m_camera.yaw;
+                m_demoOrbitPitch = m_camera.pitch;
+                m_demoOrbitActive = true;
             }
-            if (m_audienceInput.isDown(GameKey::A)) {
-                m_demoOrbitYaw += kAudienceStickOrbitStep;
+            if (m_demoOrbitActive) {
+                m_demoOrbitYaw -= a.x * kAudienceOrbitSensitivity;
+                m_demoOrbitPitch -= a.y * kAudienceOrbitSensitivity;
+                if (m_audienceInput.isDown(GameKey::D)) {
+                    m_demoOrbitYaw -= kAudienceStickOrbitStep;
+                }
+                if (m_audienceInput.isDown(GameKey::A)) {
+                    m_demoOrbitYaw += kAudienceStickOrbitStep;
+                }
+                if (m_audienceInput.isDown(GameKey::S)) {
+                    m_demoOrbitPitch -= kAudienceStickOrbitStep;
+                }
+                if (m_audienceInput.isDown(GameKey::W)) {
+                    m_demoOrbitPitch += kAudienceStickOrbitStep;
+                }
+                m_demoOrbitPitch = std::clamp(
+                    m_demoOrbitPitch, -kAudienceOrbitMaxPitch,
+                    kAudienceOrbitMaxPitch);
             }
-            if (m_audienceInput.isDown(GameKey::S)) {
-                m_demoOrbitPitch -= kAudienceStickOrbitStep;
-            }
-            if (m_audienceInput.isDown(GameKey::W)) {
-                m_demoOrbitPitch += kAudienceStickOrbitStep;
-            }
-            m_demoOrbitPitch = std::clamp(
-                m_demoOrbitPitch, -kAudienceOrbitMaxPitch,
-                kAudienceOrbitMaxPitch);
         }
         // The still frame (the pause menu / the finished panel / the
         // finished observation): the simulation freezes, the wall-
@@ -3610,6 +3657,16 @@ void Game::runDemoReplay() {
                 m_window.swapBuffers();
             }
             if (m_args.frames > 0 && m_demoFrame >= total) {
+                // 4.0 demo check: the N-beyond-total's named belt (the
+                // still state's loop doesn't fire the hook — the silent
+                // zero-capture is never).
+                if (m_args.screenshotEvery.first > total) {
+                    MC_LOG_WARN("screenshot-every: N " +
+                                std::to_string(m_args.screenshotEvery.first) +
+                                " is beyond the demo's " +
+                                std::to_string(total) + " frames (no "
+                                "capture — the beats are sim-frame's only)");
+                }
                 MC_LOG_INFO("Demo replay finished, frame limit " +
                             std::to_string(m_args.frames) + " beyond the "
                             "demo's " + std::to_string(total) + " frames - "
@@ -3662,6 +3719,20 @@ void Game::runDemoReplay() {
         render();
         m_window.swapBuffers();
         ++m_frameCount;
+        // 4.0 demo check: the periodic's capture (the --screenshot's
+        // one-frame-behind semantics' twin — the just-swapped frame;
+        // render-only, the sim's face untouched).
+        if (m_args.screenshotEvery.first > 0 &&
+            m_frameCount % m_args.screenshotEvery.first == 0) {
+            const std::filesystem::path dir = m_args.screenshotEvery.second;
+            std::filesystem::create_directories(dir);
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "frame_%06d.png", m_frameCount);
+            const auto shot = takeScreenshot(dir / buf);
+            if (!shot.ok()) {
+                MC_LOG_ERROR("screenshot-every: " + shot.error().describe());
+            }
+        }
         m_demoTimeUs +=
             static_cast<std::int64_t>(std::llround(dt * kDemoUsPerSecond));
         // The 0.5x hold (the render-only second — see the section

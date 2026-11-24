@@ -1,141 +1,141 @@
 {
-    "demos": [
-        {
-            "category": "day1",
-            "seq": 1,
-            "mode": "solo",
-            "tags": [
-                "mining",
-                "crafting",
-                "furnace"
-            ],
-            "file": "guide_mining.dmo",
-            "length_frames": 11387,
-            "title": "挖矿打造工具"
-        },
-        {
-            "category": "day1",
-            "seq": 2,
-            "mode": "solo",
-            "tags": [
-                "wheat",
-                "bread",
-                "eating",
-                "hunger"
-            ],
-            "file": "guide_food.dmo",
-            "length_frames": 18262,
-            "title": "种植与进食"
-        },
-        {
-            "category": "day1",
-            "seq": 3,
-            "mode": "solo",
-            "tags": [
-                "fall",
-                "healing",
-                "regeneration"
-            ],
-            "file": "guide_regen.dmo",
-            "length_frames": 18344,
-            "title": "受伤与回血"
-        },
-        {
-            "category": "day1",
-            "seq": 4,
-            "mode": "solo",
-            "tags": [
-                "house",
-                "bed",
-                "sleep",
-                "night"
-            ],
-            "file": "guide_house.dmo",
-            "length_frames": 18875,
-            "title": "房子与床"
-        },
-        {
-            "category": "build",
-            "seq": 1,
-            "mode": "solo",
-            "tags": [
-                "creative",
-                "wall",
-                "tower",
-                "fly"
-            ],
-            "file": "guide_palace.dmo",
-            "length_frames": 19536,
-            "title": "建造皇宫"
-        },
-        {
-            "category": "build",
-            "seq": 2,
-            "mode": "solo",
-            "tags": [
-                "materials",
-                "biomes",
-                "collecting",
-                "mining"
-            ],
-            "file": "guide_materials.dmo",
-            "length_frames": 25383,
-            "title": "材料收集"
-        },
-        {
-            "category": "build",
-            "seq": 3,
-            "mode": "solo",
-            "tags": [
-                "river",
-                "water",
-                "bucket",
-                "swim"
-            ],
-            "file": "guide_river.dmo",
-            "length_frames": 19841,
-            "title": "引水成河"
-        },
-        {
-            "category": "survival",
-            "seq": 1,
-            "mode": "solo",
-            "tags": [
-                "night",
-                "zombie",
-                "bow",
-                "torch"
-            ],
-            "file": "guide_night.dmo",
-            "length_frames": 18301,
-            "title": "黑夜历险"
-        },
-        {
-            "category": "dimension",
-            "seq": 1,
-            "mode": "solo",
-            "tags": [
-                "nether",
-                "portal",
-                "travel"
-            ],
-            "file": "guide_nether.dmo",
-            "length_frames": 10865,
-            "title": "下界传送门"
-        },
-        {
-            "category": "dimension",
-            "seq": 2,
-            "mode": "solo",
-            "tags": [
-                "end",
-                "dragon",
-                "portal",
-                "pearl"
-            ],
-            "file": "guide_dragon.dmo",
-            "length_frames": 15214,
-            "title": "末影龙讨伐"
-        }
-    ]
+  "demos": [
+    {
+      "category": "day1",
+      "seq": 1,
+      "mode": "solo",
+      "tags": [
+        "mining",
+        "crafting",
+        "furnace"
+      ],
+      "file": "guide_mining.dmo",
+      "length_frames": 10889,
+      "title": "\u6316\u77ff\u6253\u9020\u5de5\u5177"
+    },
+    {
+      "category": "day1",
+      "seq": 2,
+      "mode": "solo",
+      "tags": [
+        "wheat",
+        "bread",
+        "eating",
+        "hunger"
+      ],
+      "file": "guide_food.dmo",
+      "length_frames": 18262,
+      "title": "\u79cd\u690d\u4e0e\u8fdb\u98df"
+    },
+    {
+      "category": "day1",
+      "seq": 3,
+      "mode": "solo",
+      "tags": [
+        "fall",
+        "healing",
+        "regeneration"
+      ],
+      "file": "guide_regen.dmo",
+      "length_frames": 18344,
+      "title": "\u53d7\u4f24\u4e0e\u56de\u8840"
+    },
+    {
+      "category": "day1",
+      "seq": 4,
+      "mode": "solo",
+      "tags": [
+        "house",
+        "bed",
+        "sleep",
+        "night"
+      ],
+      "file": "guide_house.dmo",
+      "length_frames": 18875,
+      "title": "\u623f\u5b50\u4e0e\u5e8a"
+    },
+    {
+      "category": "build",
+      "seq": 1,
+      "mode": "solo",
+      "tags": [
+        "creative",
+        "wall",
+        "tower",
+        "fly"
+      ],
+      "file": "guide_palace.dmo",
+      "length_frames": 19536,
+      "title": "\u5efa\u9020\u7687\u5bab"
+    },
+    {
+      "category": "build",
+      "seq": 2,
+      "mode": "solo",
+      "tags": [
+        "materials",
+        "biomes",
+        "collecting",
+        "mining"
+      ],
+      "file": "guide_materials.dmo",
+      "length_frames": 25383,
+      "title": "\u6750\u6599\u6536\u96c6"
+    },
+    {
+      "category": "build",
+      "seq": 3,
+      "mode": "solo",
+      "tags": [
+        "river",
+        "water",
+        "bucket",
+        "swim"
+      ],
+      "file": "guide_river.dmo",
+      "length_frames": 19841,
+      "title": "\u5f15\u6c34\u6210\u6cb3"
+    },
+    {
+      "category": "survival",
+      "seq": 1,
+      "mode": "solo",
+      "tags": [
+        "night",
+        "zombie",
+        "bow",
+        "torch"
+      ],
+      "file": "guide_night.dmo",
+      "length_frames": 18301,
+      "title": "\u9ed1\u591c\u5386\u9669"
+    },
+    {
+      "category": "dimension",
+      "seq": 1,
+      "mode": "solo",
+      "tags": [
+        "nether",
+        "portal",
+        "travel"
+      ],
+      "file": "guide_nether.dmo",
+      "length_frames": 10865,
+      "title": "\u4e0b\u754c\u4f20\u9001\u95e8"
+    },
+    {
+      "category": "dimension",
+      "seq": 2,
+      "mode": "solo",
+      "tags": [
+        "end",
+        "dragon",
+        "portal",
+        "pearl"
+      ],
+      "file": "guide_dragon.dmo",
+      "length_frames": 15214,
+      "title": "\u672b\u5f71\u9f99\u8ba8\u4f10"
+    }
+  ]
 }

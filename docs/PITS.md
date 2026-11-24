@@ -3,8 +3,49 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–433，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–437，新条目继续前插于尾部块首。
 
+- **demo 场景 fire real-dt = 字节再生不可能（PITS 437，门 242 v3.52.0
+  4.0 demo 检查）**——mk_scene 的 fresh-90f 基础跑保留 worldgen 地下火
+  簇，其 remaining/蔓延 = 墙钟（real-dt）依赖：同 spec 两次再生 fire 字
+  节不同（4 簇→3 簇 + remaining 漂）= 含 fire 的场景资产无法字节钉（PITS
+  385 无火域纪律的场景面）。对含火场景做编辑 = **字节手术**（committed
+  .json.gz 载入 → 改 journal → gzip_pin 重编码，fire 状态按 committed
+  冻结——demo 回放期内 fire 走 demo-dt 确定性不受影响）；新建场景选
+  无火 seed 或 clear_fires（未做，YAGNI）。
+- **行走模型漂移 → 旧 demo 脚本 waypoint 断轴对齐（PITS 436，门 242
+  v3.52.0 4.0 demo 检查）**——v3.36 的 demo_author 向量行走模型升级
+  （角进入速度轴归属 + 落点 ±0.03–0.09m 校准偏移）后，旧脚本（v3.32
+  era）的轴对齐断言（|dx|<0.05 ∨ |dz|<0.05）失效：上腿落点的残余偏
+  移让下腿成对角（mining 重拍 4 个 waypoint 重拟合：角点拆分 + 用
+  实际落点 z 做 waypoint）。教训 = **重放旧 demo 构建脚本前先跑 debug
+  落点打印**（walk_leg 前后 track 值），waypoint 按落点而非意图定；
+  微腿（<0.2m 的对齐走位）直接删（kReach 4.09 容差内原地做）。
+- **热循环（2×/vsync-off）墙钟双击窗误触（PITS 435，门 242 v3.52.0
+  4.0 demo 检查）**——面板双击收集窗（CRAFT-7 0.3s）与 Space 双击飞
+  窗 solo 读 nowSeconds()；demo 2× + vsync off = 热循环（每 sim 帧
+  ~4ms 墙钟），dmo 的 50f 同槽左键对（0.83s authored）压缩到 0.2s <
+  0.3s = 收集误触：carry-place-merge 模式在**单格**配方结果等价（木
+  板幸存），在**多格环**配方（熔炉 8 环）= 收集吞掉全部已放格 → 产
+  出 0 → 下游级联（C1 复现 = 2× novsync 无交互 9 面板错，P10 静默腐
+  化 + P11 起报错）。修 = REPLAY 两窗读 m_simTime（demo-dt 累积 = 速
+  度无关 + 确定；record/solo-live/net 原样 R2 位级）。教训 = **演示
+  的输入节奏纪律（点击间隔）对回放速度是隐藏依赖**——凡是「 authored
+  间隔 vs 墙钟阈值」的 sim 相邻逻辑，REPLAY 必须走 sim 时基。
+- **观众 C 碰撞 + aimForward 前视翻转 = demo 交互被观众操作破坏
+  （PITS 434，门 242 v3.52.0 4.0 demo 检查）**——demo 观众 C 与录制的
+  C 事件**共同**循环 m_cameraMode；aimForward() 的 REPLAY 分支对
+  ThirdFront 施加 V2-1 前视翻转 = **观众 C#2（正面视角）把 demo 玩家
+  注入交互的射线翻转 180°** → 下一个容器 RMB 落空 →「panel is not
+  open」级联（用户实机 f4528 三条；T2 复现首错同帧 41 条）。孪生面：
+  观众轨道 base+offset 相对式在「玩家持续转身」的重拍 demo 里 = 用户
+  整个相机被带着转（「旋转很奇怪」）→ 真轨道（绝对角 + 首次输入连续
+  初始化）。教训 = **观众观察面与录制内容面的状态分界**：m_cameraMode
+  被两个 C 源共写 = 碰撞根（修 = 观众 C 移除，模式只由录制序列重建）；
+  观察面的任何状态若被 aimForward/交互消费 = 观众可破内容，审计必查
+  （双 Input 隔离只管输入通道，不管共享状态）。另：2× 在 vsync on 下
+  不提速（vsync 60fps 封顶 = 1× 墙钟），真提速 = vsync off 热循环——
+  热循环本身 = PITS 435 的触发面。
 - **全景边界混合带 + 旋转调参两连坑（PITS 433，门 241 v3.51.0
   V3-23）**——① **拼接边界的亚像素相位缝**：同一边界射线在两个
   tile 的像素网格上落点差半列——软内容无感，**硬边缘（云边/岩
