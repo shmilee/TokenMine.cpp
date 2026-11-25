@@ -11,7 +11,7 @@
    （(7,54,0) + (8,54,-4..-1)，石 → dirt——**齐平版射线被邻石顶面遮挡否决**）
    + h0 预置 wheat_1×5（麦种 bootstrap：项目无野麦，16a prepared-start 先例）。
    demo 链 = 挖土 5 → E 泥土变耕地 ×5 → 放耕地 5（条带留空 = 结尾「下一代
-   耕地已备好」面）→ 田北行（2..6,54,-4）种 5 → 生长 → 收割 → 面包 ×3 → 吃 ×2。
+   耕地已备好」面）→ 田北行（2..6,54,-4）种 5 → 生长 → 收割 → 面包 ×3 → 吃 ×2 → 饱了即收（用户 11-25 第三轮：吃完的 360° 巡视「没必要」= 砍，终态面 = 满饥饿条 + 手里麦/面包 + 田景）。
 2. **生长阶段可加速** → 新 demo 面 **`growth_speed`**（dmo world-spec 场景形
    可选 strict int 1..8，absent = 1 位级）：cropGrowthSteps/saplingGrowthSteps
    尾参 paceFactor（ticks = 区间/pace，钳 ≥1；roll 值不变 = 高速档通过帧是
@@ -85,7 +85,7 @@ per-dig 驻留解）⑥ `$((n+500))` bash 陷阱 ×2（python 变量 n 非 shell
 
 ## 资产 / 纪律
 
-- dmo 11590f（3:26）/ scene 4675 B（gzip pin 手术 v2）/ index length 重钉。
+- dmo 9717f（2:37；初版 11590f 含吃完 360° 巡视 1870f，用户第三轮反馈砍除）/ scene 4675 B（gzip pin 手术 v2）/ index length 重钉。
 - 逐支提交（验收后单独 commit，永不 `git add -A`，config 不入库）。
 - 下一支：⑥ guide_regen（受伤与回血）——重拍口径沿用本支纪律
   （3f/step sweep + face= 走位 + 渐进瞄准 + _now() 同步 + 空闲审计 0 静帧）。

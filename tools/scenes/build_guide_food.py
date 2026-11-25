@@ -229,15 +229,11 @@ f += 400
 g.click(f, "right", hold=100)               # the eat's #2 (the 20's full)
 f += 300
 
-# -- P9 the ending (the field's 360 + the bread's 1 + wheat's 1's face) --
+# -- P9 the ending (the user's 11-25: the eat's full = the end's — the
+#    360's tour's the unnecessary's cut; the final's inventory's face
+#    is the bread's 1 + the wheat's 1's the hotbar's dwell).
 g.select(f, 1)                              # the h0's wheat's 1's face
-f += 12
-g.sweep_gradual(f, 800, 3.14)
-f += 800
-g.sweep_gradual(f, 800, -3.14)
-f += 800
-f = g.look_gradual(f, (5, 54, -2))
-f += 400
+f += 150
 # the tail's dwell (the finished's panel's dwell's belt — PITS 418's 16)
 g.at(f + 240)
 
