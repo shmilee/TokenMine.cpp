@@ -1,14 +1,34 @@
-# V3-16b demo ⑥: guide_regen (修复回血 — day1 #3).
+# V3-16b demo ⑥: guide_regen (受伤与回血 — day1 #3).
 #
-# The scene = guide_regen: the 12x12 platform (top y54) + the 5-block
-# stone column at (10, 54..58, -8) (the 5-fall's ledge — the
-# fall-damage's 2's face: fall 5 - offset 3 = 2). The player starts ON
-# the column (10.5, 59, -7.5) facing -Z, hunger 14, h0 bread x2.
+# V3-25 re-author (the 4.0 re-shoot batch's caliber — the guide_food's
+# twin): the legacy g.sweep's the single-frame's snap's root cut + the
+# gradual's aim + the per-beat's hint's (the action's face — the
+# tutorial's mouse-agnostic's convention) + the C's no-op's removal (the
+# demo's fixed's third person's the v3.52's follow-up) + the ending's
+# 360's removal.
 #
-# The beats: the column's tour -> walk off (the 5-fall, hp 20 -> 18) ->
-# the eat (the 1.6-s's channel, hunger 14 -> 19) -> the 10-s's regen
-# gate's wait (the natural regen's face: +1 HP / 4 s, the 1 hunger's
-# cost per half-heart — the 18 -> 20's full) -> the ending.
+# The user's round 2's (11-25): ① the vantage's tour's halved (16b's
+# 4700f → ~1300f, the single's sweep's — the right-left's back-and-forth
+# cut) ② the regen's watch's view STATIC (no pans around the hearts'
+# ticks — the audience watches the heart row + the column's base; the
+# camera moves only ONCE: the land's turn toward the column).
+#
+# The scene = the 12x12's platform (top y54) + the 5-block's stone's
+# column (10, 54..58, -8) — the 5-fall's ledge (fall 5 - offset 3 = 2
+# damage). The player starts ON the column (10.5, 59, -7.5) facing -Z,
+# hunger 14, h0 bread x2.
+#
+# The BEAT ORDER's the 16b's gate-catch (this re-shoot's probe's): the
+# regen's threshold is hunger >= 6 (the config's regen_hunger_threshold
+# — NOT the 18's "well-fed's" face), so the 16b's order (fall → long
+# watch → eat) let the hp's 18 → 20's regen FINISH (f3600's probe)
+# BEFORE the eat's (f4212's) — the "eat's then regen's" story's broken.
+# The re-order = fall → EAT (right after the land, the channel straddles
+# the first's tick) → the STATIC's watch's the 2nd's tick.
+#
+# The fall's HONEST landing (the probe's re-pin this re-author — the
+# 16b's -10.04's pin was the pre-v3.36's walk model's; the vector's
+# model's hold's the 0.05-m's shift): (10.5, 54, -10.087).
 from demo_author import Guide
 
 g = Guide(scene="guide_regen", pos=(10.5, 59, -7.5), yaw=0.0, pitch=0.05)
@@ -16,79 +36,55 @@ g = Guide(scene="guide_regen", pos=(10.5, 59, -7.5), yaw=0.0, pitch=0.05)
 # -- the pointer's capture (the 2-f's face: zero mining's frame) --------
 g.capture(0)
 
-# -- P0 the opening's tour (the column's vantage's face) -----------------
-g.sweep(20, 260, 0.70)
-g.sweep(280, 260, -1.40)
-g.at(560)
-g.sweep(560, 300, 0.70)
-g.sweep(860, 300, -0.55)
-g.at(1300)
-g.sweep(1300, 300, 0.55)
-g.sweep(1600, 300, -0.55)
-g.at(2100)
-g.sweep(2100, 300, 0.70)
-g.sweep(2400, 300, -0.70)
-g.at(3000)
-# the platform's face (the -Z's ahead's look)
-g.look_at(3000, (10, 54, -10), y_off=0.0)
-g.at(3800)
-g.sweep(3800, 300, 0.50)
-g.sweep(4100, 300, -0.50)
-g.at(4700)
+# -- P0 the opening's vantage (the halved's tour — the user's round's) --
+g.hint(10, "受伤与回血")
+g.sweep_gradual(20, 500, 1.5)                 # the single's sweep (no back-forth)
+f = 20 + 500                                  # the 2x's pace (the user's round 3)
+f = g.look_gradual(f, (10, 54, -10))          # the platform's edge's ahead
+f += 20
+g.hint(f, "走下高台，掉 2 颗心")
+f += 30
 
 # -- P1 the fall (the 5-block's ledge — the 2 damage's face) ------------
-g.face(4710, 0.0)
-g.at(4900)
-g.walk_leg(4900, 10.5, -9.1)                      # past the column's edge
-# the fall + the landing's observe (the hurt's flash + the 9/10's bar)
-g.at(g.cursor + 2400)
-f = g.cursor + 2400
+# the facing is already the -Z's (the walk's dir — the zero pre-turn's);
+# the target's past the edge (the 1.6-m's flat's solve's the W's hold's
+# the air's continue's the drift's the honest landing's belt).
+f = g.walk_leg(f, 10.5, -9.1)
+f = g._now() + 400                             # the air's margin (the land's inside)
+g.x, g.y, g.z = 10.5, 54, -10.087              # the honest landing's re-anchor
+# the ONE camera move after the land: the slow's turn's toward the
+# column (the eat's + the watch's face — the static's hold's anchor).
+g.sweep_gradual(f, 195, 2.5)                  # the 2x's pace (the user's round 3)
+f += 195
 
-# -- P2 the eat (the bread's x1 — the hunger's 14 -> 19) -----------------
-g.select(f, 1)
-f += 40
-g.look_at(f, (10, 58, -8), y_off=0.5)             # the column's face
-f += 30
-g.click(f, "right", hold=100)                     # the 96-f's channel
-f += 1200
+# -- P2 the eat (RIGHT AFTER the land — the tick's order's the fix: the
+#    the channel's must straddle the first's tick (the land+840's) for
+#    the on-screen's "the bread's then the heart's" story).
+g.hint(f, "吃面包回饥饿")
+f += 10
+g.select(f, 1)                                # the h0's bread
+f += 15
+f = g.look_gradual(f, (10, 54, -8))           # the column's BASE's face
+f += 15
+g.click(f, "right", hold=100)                 # the eat's 96-f's channel
+f += 300
 
-# -- P3 the regen's wait (the 10-s's gate + the 2 x 4-s's intervals) -----
-# (the damage's at ~f2060: the gate's open ~f2660, the +1 HP ~f2900, the
-#  +1 HP ~f3140 — the 3.5-s's over-margin's still + the bar's watch)
-g.at(f + 400)
-f += 400
-# the regen's watch (the 10-s's gate's open + the 2 x 4-s's ticks — the
-# hearts' bar's 9/10 -> 10/10's the still's belt)
-g.sweep(f, 300, 0.50)
-g.sweep(f + 300, 300, -0.50)
-f += 600
-g.at(f + 800)
-f += 800
-g.sweep(f, 300, 0.50)
-g.sweep(f + 300, 300, -0.50)
-f += 600
-g.at(f + 800)
-f += 800
-# the full bar's face (the 10/10's hearts's still)
-g.at(f + 1000)
-f += 1000
+# -- P3 the regen's watch (STATIC — the user's round's: the view's the
+#    hold, the hearts' the content: tick2 (the land+1080's) + the
+#    margin's dwell). The damage's at the land's (the probe's ~hold+58);
+#    tick1's the land+840's (the channel's inside), tick2's the
+#    land+1080's (here, the 163-f's after the hint's). The user's round
+#    4's: the 1400-f's the 20-s's post-tick's stare's the dead time —
+#    the 500-f's = tick2's cover + the 300-f's full-bar's confirm.
+g.hint(f, "饥饿满了会回血")
+g.at(f + 500)
+f += 500
 
-# -- P4 the ending (the full bar's face — the third person's tour) -------
-g.select(f, 1)
-f += 40
-g.tap(f + 20, "c")
-g.sweep(f + 80, 300, 0.90)
-g.sweep(f + 380, 300, -1.80)
-g.at(f + 700)
-g.sweep(f + 700, 300, 0.90)
-g.sweep(f + 1000, 300, -0.90)
-g.at(f + 1400)
-g.sweep(f + 1400, 300, 0.60)
-g.sweep(f + 1700, 300, -0.60)
-g.at(f + 2100)
-g.sweep(f + 2100, 300, 0.40)
-g.sweep(f + 2400, 300, -0.40)
-g.at(f + 3100)
+# -- P4 the ending (the full's bar = the end's — the 360's cut) --
+g.hint(f, "回血完成")
+f += 200
+# the tail's dwell (the finished's panel's dwell's belt — PITS 418's 16)
+g.at(f + 240)
 
 import os
 g.dump(os.path.join(os.path.dirname(os.path.abspath(__file__)),
