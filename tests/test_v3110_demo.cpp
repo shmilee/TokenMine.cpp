@@ -75,20 +75,20 @@ DemoFile fixtureFile() {
     f.world.seed = 123456789;
     f.dts = {0.016666666666666666, 0.01, 0.0, 0.25};
     f.events.push_back({0, InputEvent {InputEvent::Kind::KeyDown, SDLK_W,
-                                       0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false}});
+                                       0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false, std::string()}});
     f.events.push_back({0, InputEvent {InputEvent::Kind::MouseDown, 0,
                                        SDL_BUTTON_LEFT, 0, 0.0f, 0.0f, 0.0f,
-                                       0.0f, false}});
+                                       0.0f, false, std::string()}});
     f.events.push_back({1, InputEvent {InputEvent::Kind::MouseMove, 0, 0, 0,
-                                       12.5f, -4.0f, 632.0f, 352.0f, false}});
+                                       12.5f, -4.0f, 632.0f, 352.0f, false, std::string()}});
     f.events.push_back({2, InputEvent {InputEvent::Kind::Wheel, 0, -1, 0,
-                                       0.0f, 0.0f, 0.0f, 0.0f, false}});
+                                       0.0f, 0.0f, 0.0f, 0.0f, false, std::string()}});
     f.events.push_back({2, InputEvent {InputEvent::Kind::GamepadButton, 7,
                                        SDL_GAMEPAD_BUTTON_SOUTH, 0, 0.0f, 0.0f,
-                                       0.0f, 0.0f, true}});
+                                       0.0f, 0.0f, true, std::string()}});
     f.events.push_back({3, InputEvent {InputEvent::Kind::GamepadAxis, 7,
                                        SDL_GAMEPAD_AXIS_LEFTX, 16384, 0.0f,
-                                       0.0f, 0.0f, 0.0f, false}});
+                                       0.0f, 0.0f, 0.0f, false, std::string()}});
     f.hasGamepadEvents = true;
     return f;
 }
@@ -652,9 +652,9 @@ TEST(V3110Demo, PlayerInjectOrderWithinFrame) {
     f.world.seed = 1;
     f.dts = {0.01};
     f.events.push_back({0, InputEvent {InputEvent::Kind::KeyDown, SDLK_E,
-                                       0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false}});
+                                       0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false, std::string()}});
     f.events.push_back({0, InputEvent {InputEvent::Kind::KeyDown, SDLK_W,
-                                       0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false}});
+                                       0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false, std::string()}});
     const DemoPlayer player(f);
     std::vector<GameKey> order;
     Input in;
@@ -758,11 +758,11 @@ TEST(V3110Demo, RecorderZeroSideEffect) {
 TEST(V3110Demo, RecorderFrameAttribution) {
     DemoRecorder rec;
     rec.tapEvent(InputEvent {InputEvent::Kind::KeyDown, SDLK_A, 0, 0, 0.0f,
-                             0.0f, 0.0f, 0.0f, false},
+                             0.0f, 0.0f, 0.0f, false, std::string()},
                  0);
     rec.frame(0.01);
     rec.tapEvent(InputEvent {InputEvent::Kind::Wheel, 0, 1, 0, 0.0f, 0.0f,
-                             0.0f, 0.0f, false},
+                             0.0f, 0.0f, false, std::string()},
                  1);
     rec.frame(0.02);
     ASSERT_EQ(rec.file().events.size(), 2);
@@ -776,11 +776,11 @@ TEST(V3110Demo, RecorderFrameAttribution) {
 TEST(V3110Demo, RecorderDiscardPendingFrame) {
     DemoRecorder rec;
     rec.tapEvent(InputEvent {InputEvent::Kind::KeyDown, SDLK_A, 0, 0, 0.0f,
-                             0.0f, 0.0f, 0.0f, false},
+                             0.0f, 0.0f, 0.0f, false, std::string()},
                  0);
     rec.frame(0.01);
     rec.tapEvent(InputEvent {InputEvent::Kind::KeyUp, SDLK_A, 0, 0, 0.0f,
-                             0.0f, 0.0f, 0.0f, false},
+                             0.0f, 0.0f, 0.0f, false, std::string()},
                  1);
     // Frame 1 was never simulated (the quit's pump ran) — the tail is
     // excluded; the simulated prefix stays.
@@ -1172,7 +1172,7 @@ TEST(V316aDemo, PanelClickCodecRoundTrip) {
     f.events.push_back({3, InputEvent {InputEvent::Kind::PanelClick,
                                        kDemoPanelInventory, 110,
                                        kDemoPanelButtonLeft, 0.0f, 0.0f,
-                                       0.0f, 0.0f, false}});
+                                       0.0f, 0.0f, false, std::string()}});
     const std::string body = serializeDemoJson(f);
     auto js = Json::parse(body);
     ASSERT_TRUE(js.ok());
@@ -1207,7 +1207,7 @@ TEST(V316aDemo, PanelClickCodecRejects) {
     f.events.push_back({3, InputEvent {InputEvent::Kind::PanelClick,
                                        kDemoPanelInventory, 110,
                                        kDemoPanelButtonLeft, 0.0f, 0.0f,
-                                       0.0f, 0.0f, false}});
+                                       0.0f, 0.0f, false, std::string()}});
     auto base = Json::parse(serializeDemoJson(f));
     ASSERT_TRUE(base.ok());
     const Json* pe = base->find("events");
@@ -1335,7 +1335,7 @@ TEST(V316aDemo, InjectPanelClickResolverFace) {
     f.events.push_back({3, InputEvent {InputEvent::Kind::PanelClick,
                                        kDemoPanelTable, 110,
                                        kDemoPanelButtonLeft, 0.0f, 0.0f,
-                                       0.0f, 0.0f, false}});
+                                       0.0f, 0.0f, false, std::string()}});
     DemoPlayer p(f);
     Input in;
     // The resolver's absent face (the named problem).
@@ -1724,5 +1724,262 @@ TEST(V316aDemo, IndexCheckCrossFace) {
         auto r = checkDemoIndexDir(i2, demos, scenes);
         ASSERT_TRUE(r.ok()) << r.error().describe();
         std::filesystem::remove(sp, ec);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// V3-25: the demo's hint line + the scene's growth_speed
+// ---------------------------------------------------------------------------
+
+TEST(V325Demo, HintCodecRoundTrip) {
+    DemoFile f = fixtureFile();
+    f.world.type = DemoWorldSpec::Type::Scene;
+    f.world.slot = "guide_food";
+    f.world.growthSpeed = 6;
+    f.events.push_back({3, InputEvent {InputEvent::Kind::Hint, 0, 0, 0,
+                                       0.0f, 0.0f, 0.0f, 0.0f, false,
+                                       "麦种在手里，先挖土"}});
+    const std::string body = serializeDemoJson(f);
+    EXPECT_NE(body.find("\"hint\""), std::string::npos);
+    EXPECT_NE(body.find("growth_speed"), std::string::npos);
+    auto js = Json::parse(body);
+    ASSERT_TRUE(js.ok());
+    auto back = parseDemoJson(*js);
+    ASSERT_TRUE(back.ok()) << back.error().describe();
+    EXPECT_EQ(back->world.growthSpeed, 6);
+    const auto& evs = back->events;
+    ASSERT_EQ(evs.size(), f.events.size());
+    EXPECT_EQ(evs.back().event.kind, InputEvent::Kind::Hint);
+    EXPECT_EQ(evs.back().event.text, "麦种在手里，先挖土");
+    // The every-other-kind's text's empty's belt (the bit-level's).
+    for (const auto& de : evs) {
+        if (de.event.kind != InputEvent::Kind::Hint) {
+            EXPECT_TRUE(de.event.text.empty());
+        }
+    }
+}
+
+TEST(V325Demo, HintCodecRejects) {
+    auto withEvent = [](const std::string& ev) {
+        const std::string root =
+            std::string(R"json({"version": "v", )json"
+                        R"json("world": {"type": "scene", "name": "guide_food"}, )json"
+                        R"json("dts": [0.01, 0.01], "events": [)json"
+                        + ev + R"json(]})json");
+        return parseDemoJson(Json::parse(root).value());
+    };
+    {
+        auto r = withEvent(R"json({"frame": 0, "type": "hint"})json");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("'text'"), std::string::npos);
+    }
+    {
+        auto r = withEvent(R"json({"frame": 0, "type": "hint", "text": 5})json");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("string"), std::string::npos);
+    }
+    {
+        auto r = withEvent(R"json({"frame": 0, "type": "hint", "text": ""})json");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("non-empty"), std::string::npos);
+    }
+    {
+        // 25's ASCII's cps (the 24's belt's over).
+        auto r = withEvent(R"json({"frame": 0, "type": "hint", "text": "1234567890123456789012345"})json");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("codepoints"), std::string::npos);
+    }
+    {
+        // The font's missing glyph's (U+9F98's, the V3-20's title's
+        // font-safety's twin — the silent's '?' would render).
+        auto r = withEvent(R"json({"frame": 0, "type": "hint", "text": "龘"})json");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("U+9F98"), std::string::npos);
+    }
+    {
+        auto r = withEvent(
+            R"json({"frame": 0, "type": "hint", "text": "ok", "ticks": 1})json");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("unexpected key 'ticks'"),
+                  std::string::npos);
+    }
+    {
+        // The control's (the glyph-safe's the mixed's ASCII + CJK's).
+        auto r = withEvent(
+            R"json({"frame": 0, "type": "hint", "text": "按LMB挖泥土"})json");
+        ASSERT_TRUE(r.ok()) << r.error().describe();
+    }
+}
+
+TEST(V325Demo, HintAuthorTimeline) {
+    Json actions = Json::array();
+    Json a0 = Json::object();
+    a0["at_frame"] = 10;
+    a0["action"] = "hint";
+    a0["text"] = "按E合成：泥土变耕地";
+    actions.push_back(a0);
+    auto list = parseTimelineActions(actions);
+    ASSERT_TRUE(list.ok()) << list.error().describe();
+    ASSERT_EQ(list->size(), 1u);
+    EXPECT_EQ((*list)[0].type, TimelineAction::Type::Hint);
+    EXPECT_EQ((*list)[0].atFrame, 10);
+    EXPECT_EQ((*list)[0].key, "按E合成：泥土变耕地");
+    DemoWorldSpec spec;
+    spec.type = DemoWorldSpec::Type::Scene;
+    spec.slot = "guide_food";
+    spec.growthSpeed = 6;
+    DemoFile f = authorDemoFile(spec, *list);
+    ASSERT_EQ(f.events.size(), 1u);
+    EXPECT_EQ(f.events[0].frame, 10);
+    EXPECT_EQ(f.events[0].event.kind, InputEvent::Kind::Hint);
+    EXPECT_EQ(f.events[0].event.text, "按E合成：泥土变耕地");
+    EXPECT_EQ(f.world.growthSpeed, 6);
+    // The reject's faces (the C++'s checkHintText's twin's the author's
+    // entry's).
+    auto oneHint = [](const char* text) {
+        Json a = Json::object();
+        a["at_frame"] = 5;
+        a["action"] = "hint";
+        a["text"] = text;
+        Json arr = Json::array();
+        arr.push_back(a);
+        return parseTimelineActions(arr);
+    };
+    {
+        Json arr = Json::array();
+        Json a = Json::object();
+        a["at_frame"] = 5;
+        a["action"] = "hint";
+        arr.push_back(a);
+        auto r = parseTimelineActions(arr);
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("'text'"), std::string::npos);
+    }
+    {
+        auto r = oneHint("");
+        ASSERT_FALSE(r.ok());
+    }
+    {
+        auto r = oneHint("龘");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("U+9F98"), std::string::npos);
+    }
+    {
+        auto r = oneHint("1234567890123456789012345");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("codepoints"), std::string::npos);
+    }
+}
+
+TEST(V325Demo, ScriptRejectsHint) {
+    // The net's --script's the hint's twin bound (the 40B's FrameState's
+    // carries no text's line — the panel_click's reject's twin).
+    Json root = Json::object();
+    Json actions = Json::array();
+    Json a0 = Json::object();
+    a0["at_frame"] = 1;
+    a0["action"] = "hint";
+    a0["text"] = "按LMB挖泥土";
+    actions.push_back(a0);
+    root["actions"] = actions;
+    const auto p = scratchDir() / "hint_script.json";
+    writeAll(p.string(), root.dump(-1));
+    auto r = parseScriptTimeline(p);
+    ASSERT_FALSE(r.ok());
+    EXPECT_NE(r.error().message.find("hint"), std::string::npos);
+    // The control's (the keys' face parses).
+    Json root2 = Json::object();
+    Json actions2 = Json::array();
+    Json a1 = Json::object();
+    a1["at_frame"] = 1;
+    a1["action"] = "key_down";
+    a1["key"] = "w";
+    actions2.push_back(a1);
+    root2["actions"] = actions2;
+    const auto p2 = scratchDir() / "hint_script_ok.json";
+    writeAll(p2.string(), root2.dump(-1));
+    EXPECT_TRUE(parseScriptTimeline(p2).ok());
+}
+
+TEST(V325Demo, HintInjectFaces) {
+    // The hint's presentation's face: the target's Input is NEVER touched
+    // (the simulation's zero — the D21's twin), the out-parameter's the
+    // caller's line; the out-parameter's absent = the named's caller's
+    // bug (the panelClick's resolver's twin).
+    DemoFile f;
+    f.sim = kDemoSimVersion;
+    f.recordedWith = kDemoFileVersion;
+    f.world.type = DemoWorldSpec::Type::Fresh;
+    f.world.seed = 1;
+    f.dts = {0.01, 0.01, 0.01};
+    f.events.push_back({1, InputEvent {InputEvent::Kind::Hint, 0, 0, 0,
+                                       0.0f, 0.0f, 0.0f, 0.0f, false,
+                                       "麦子开始长了"}});
+    DemoPlayer p(f);
+    Input in;
+    std::string hint;
+    const std::string err = p.injectForFrame(1, in, nullptr, &hint);
+    EXPECT_TRUE(err.empty());
+    EXPECT_EQ(hint, "麦子开始长了");
+    // The frame's input's zero's pin (the fresh's Input's snapshot's
+    // identical — the hint's never's key/mouse's touch).
+    Input in0;
+    EXPECT_EQ(inputSnapshot(in), inputSnapshot(in0));
+    // The no-event's frame's hint's holds (the caller's line's the
+    // beat's dwell's face — the loop's m_demoHint's the keep's).
+    EXPECT_TRUE(p.injectForFrame(0, in, nullptr, &hint).empty());
+    EXPECT_EQ(hint, "麦子开始长了");
+    // The out-parameter's absent's named's (the replay's loop's face).
+    const std::string err2 = p.injectForFrame(1, in);
+    EXPECT_NE(err2.find("out-parameter"), std::string::npos);
+}
+
+TEST(V325Demo, GrowthSpeedWorldSpec) {
+    auto parseWorld = [](const std::string& worldJson) {
+        const std::string root =
+            std::string(R"({"version": "v", "world": )") + worldJson +
+            R"(, "dts": [0.01], "events": []})";
+        return parseDemoJson(Json::parse(root).value());
+    };
+    {
+        // The absent's = 1 (the old's dmo's the verbatim's belt).
+        auto r = parseWorld(R"({"type": "scene", "name": "guide_food"})");
+        ASSERT_TRUE(r.ok()) << r.error().describe();
+        EXPECT_EQ(r->world.growthSpeed, 1);
+    }
+    {
+        auto r = parseWorld(
+            R"({"type": "scene", "name": "guide_food", "growth_speed": 6})");
+        ASSERT_TRUE(r.ok()) << r.error().describe();
+        EXPECT_EQ(r->world.growthSpeed, 6);
+    }
+    {
+        // The fresh's form's no pace (the scene's face only — the
+        // memberCount's exact's belt's named reject).
+        auto r = parseWorld(
+            R"({"type": "fresh", "seed": 7, "growth_speed": 2})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("exactly"), std::string::npos);
+    }
+    {
+        auto r = parseWorld(
+            R"({"type": "save", "slot": "s1", "growth_speed": 2})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("exactly"), std::string::npos);
+    }
+    for (const char* bad : {R"({"type": "scene", "name": "a", "growth_speed": 0})",
+                            R"({"type": "scene", "name": "a", "growth_speed": 9})",
+                            R"({"type": "scene", "name": "a", "growth_speed": 2.5})",
+                            R"({"type": "scene", "name": "a", "growth_speed": "4"})"}) {
+        auto r = parseWorld(bad);
+        ASSERT_FALSE(r.ok()) << bad;
+        EXPECT_NE(r.error().message.find("1..8"), std::string::npos) << bad;
+    }
+    {
+        // The 4th's key's reject (the closed's set's).
+        auto r = parseWorld(
+            R"({"type": "scene", "name": "a", "growth_speed": 2, "bogus": 1})");
+        ASSERT_FALSE(r.ok());
+        EXPECT_NE(r.error().message.find("optional"), std::string::npos);
     }
 }

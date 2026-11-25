@@ -126,14 +126,59 @@ EYE = 1.62             # the eye's height over the feet
 MIN_CLICK_GAP = 20     # the panel's click's spacing (the 0.3-s
                        # double-click collect window's 18-frame's margin)
 
+# V3-25: the hint's text's glyph safety's faces (the C++'s checkHintText's
+# twin — the table is READ from src/ui/font.hpp's kCjkGlyphs at run time:
+# the single source, the Python mirror's drift's root cut, the PITS 396's
+# belt).
+_HINT_TABLE = None
+HINT_MAX_CODEPOINTS = 24  # the gate's UI space's line's width's belt
+
+
+def _hint_glyph_table():
+    global _HINT_TABLE
+    if _HINT_TABLE is None:
+        import re
+        hpp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "..", "src", "ui", "font.hpp")
+        s = open(hpp).read()
+        m = re.search(r"kCjkGlyphs\[\d+\] = \{(.*?)\n\};", s, re.S)
+        _HINT_TABLE = set(
+            int(a, 16) for a, _ in
+            re.findall(r"\{(0x[0-9A-Fa-f]+),\s*(\d+)\}", m.group(1)))
+    return _HINT_TABLE
+
+
+def _hint_text_ok(text):
+    if not text:
+        raise AssertionError("a hint's text is empty")
+    if len(text) > HINT_MAX_CODEPOINTS:
+        raise AssertionError(
+            "a hint's text exceeds the %d-codepoint's belt (%d)"
+            % (HINT_MAX_CODEPOINTS, len(text)))
+    table = _hint_glyph_table()
+    for ch in text:
+        cp = ord(ch)
+        if 0x20 <= cp <= 0x7E or cp in table:
+            continue
+        raise AssertionError(
+            "a hint's text has the font's missing glyph U+%04X (%r) — "
+            "the replay's '?' would render (the C++'s init's named "
+            "reject's twin)" % (cp, ch))
+
 
 class Guide:
     def __init__(self, scene=None, seed=None, pos=(0.5, 54, 0.5),
-                 yaw=0.0, pitch=0.0):
+                 yaw=0.0, pitch=0.0, growth_speed=None):
         assert (scene is None) != (seed is None), \
             "the world's spec: a scene name XOR a fresh seed"
+        # V3-25: the scene's growth's pace (the dmo's world-spec's
+        # optional `growth_speed`, 1..8's strict; None = absent = the
+        # world's own pace — every non-paced demo's bit-identity).
+        assert scene is not None or growth_speed is None, \
+            "the growth_speed's rides the scene's form only"
         self.scene = scene
         self.seed = seed
+        self.growth_speed = growth_speed
         self.x, self.y, self.z = float(pos[0]), float(pos[1]), float(pos[2])
         self.yaw = float(yaw)
         self.pitch = float(pitch)
@@ -275,7 +320,11 @@ class Guide:
         """Aim the crosshair at the ground's point in the cell (the
         PLACE's face: the ray's hit on the platform's top face, the
         block's land in the cell — the center's aim flies 0.5 over
-        and lands a cell off, the probe's gate-catch)."""
+        and lands a cell off, the probe's gate-catch). The SMOOTH
+        twin (the V3-25's re-shoot's user's feedback: the single-
+        frame's full-delta's snap read as "the view's suddenly's
+        changed" — the 2.0 rad/s's the action's tier's interpolate,
+        the look_gradual's twin). Returns the aim's LANDED frame."""
         self.at(f)
         dx = cell[0] + 0.5 - self.x
         dy = ground_y - (self.y + EYE)
@@ -283,18 +332,19 @@ class Guide:
         yaw = math.atan2(-dx, -dz)
         d = (yaw - self.yaw + math.pi) % (2 * math.pi) - math.pi
         pitch = max(-1.5, min(1.5, math.atan2(dy, math.hypot(dx, dz))))
-        self.actions.append({
-            "at_frame": f, "action": "mouse_move",
-            "dx": round(-d / SENS, 3),
-            "dy": round(-(pitch - self.pitch) / SENS, 3)})
+        landed = self._gradual_aim(f, d, pitch - self.pitch, 2.0, 0.15, 0.6)
         self.yaw = yaw
         self.pitch = pitch
-        return self
+        self._to(landed)
+        return landed
 
     def place_at(self, f, cell, ground_y=54.0):
-        """The RMB's place in the cell (the ground's aim + the click)."""
-        self.look_ground(f, cell, ground_y)
-        return self.click(f + 30, "right")
+        """The RMB's place in the cell (the ground's aim + the click).
+        The click at the aim's LANDED + 25 (the 36-f's big's angle's
+        the pre-land's miss's belt — the 9-f's small's = the 30-f's
+        the 25-f's margin's near-identical)."""
+        landed = self.look_ground(f, cell, ground_y)
+        return self.click(landed + 25, "right")
 
     def sweep(self, f, dur, dyaw):
         """A slow look's sweep (the observe beat — the dyaw over dur)."""
@@ -309,12 +359,16 @@ class Guide:
         return self
 
     # -- the walk's face -------------------------------------------------
-    def sweep_gradual(self, f, dur, dyaw, steps=12):
-        """A GRADUAL look sweep (the showcase's face: the 360-deg's the
-        12-step's — the sweep's single-event's snap's the audience's
-        the disorient's twin). The 12 mouse_moves spread over dur, the
-        track's yaw's per-step's advance."""
+    def sweep_gradual(self, f, dur, dyaw, steps=None):
+        """A GRADUAL look sweep (the showcase's face). The mouse_moves
+        spread over dur at the 3-f's step tempo (steps = dur/3 — the
+        mining's smooth's belt: a 12-f's step gap reads as a
+        staircase, the 3-f's as continuous). An explicit steps
+        overrides (the committed's 50-per-150-f's calls' the same
+        tempo)."""
         self.at(f)
+        if steps is None:
+            steps = max(20, dur // 3)
         step = dyaw / steps
         for i in range(steps):
             fi = f + (i * dur) // steps
@@ -398,7 +452,8 @@ class Guide:
         self._to(landed)
         return landed
 
-    def walk_leg(self, f, tx, tz, y=None, hold=None, fly=False):
+    def walk_leg(self, f, tx, tz, y=None, hold=None, fly=False,
+                 face=None):
         """One axis-aligned walk leg to the EXACT point (tx, tz) (the
         cell-center's +0.5's the caller's face). The hold's length =
         the ENT-7 model's solve for the door-to-door's distance (the
@@ -411,7 +466,13 @@ class Guide:
         frames (the short-hop's drop: the w's release before the edge,
         the air's drift's the calibration's twin); fly: the creative's
         flight's leg (the FLY's pace's the no-margin's — the fly's v's
-        the isDown's direct-set's the no-registration's face)."""
+        the isDown's direct-set's the no-registration's face); face:
+        the V3-25's re-shoot's user's feedback's root — the facing the
+        leg WALKS in (the SMOOTH pre-turn's, the 2.0 rad/s's tier's —
+        the legacy's single-frame's auto-face's snap read as "the
+        view's suddenly's changed" + the aim's the side's); face=None
+        = the walk's dir (the legacy's semantics, now smooth); the key
+        = the walk's dir's relative to the facing (w/s/a/d)."""
         self.at(f)
         dx = tx - self.x
         dz = tz - self.z
@@ -422,12 +483,20 @@ class Guide:
             " physics loss — split the corner)"
         axis = (1 if dx > 0 else -1) if abs(dx) > abs(dz) \
             else (2 if dz > 0 else -2)
-        yaw = math.atan2(-dx, -dz)
+        # The V3-25's re-shoot's user's feedback: the leg's TURN is the
+        # SMOOTH pre-turn (the 2.0 rad/s's the action's tier's — the
+        # legacy's single-frame's full-delta's snap read as "the view's
+        # suddenly's changed" and, worse, the face's = the walk's dir
+        # left the aim's facing's the side's (the strip's hop's the
+        # "the side's along's block's" beat). face: the caller's KNOWING
+        # facing (the aim's dir — the leg STRAFES: the key is the walk's
+        # dir's relative to the facing, w/s/a/d). face=None = the
+        # walk's dir (the legacy's semantics, now smooth).
+        yaw = math.atan2(-dx, -dz) if face is None else face
         dyaw = (yaw - self.yaw + math.pi) % (2 * math.pi) - math.pi
+        turn = 0
         if abs(dyaw) > 0.001:
-            self.actions.append({
-                "at_frame": f, "action": "mouse_move",
-                "dx": round(-dyaw / SENS, 3), "dy": 0.0})
+            turn = self._gradual_aim(f, dyaw, 0.0, 2.0, 0.15, 0.6) - f
             self.yaw = yaw
         if hold is None:
             if fly:
@@ -436,8 +505,26 @@ class Guide:
                 hold = _walk_hold_for(d, self._walkVx, self._walkVz, axis)
         frames = hold
         assert frames >= 8, "walk_leg: a too-short leg"
-        self.actions.append({"at_frame": f + 1, "action": "hold",
-                             "key": "w", "until_frame": f + 1 + frames})
+        # The key's the walk's dir's relative to the facing (the
+        # axis-aligned's belt: the dot/cross's the quadrant's):
+        # facing's forward (fx, fz) = (-sin(yaw), -cos(yaw)); the move's
+        # unit (mx, mz); dot 1 = w / -1 = s / cross 0 = a (left) or d
+        # (right: the cross fx*mz - fz*mx's sign).
+        fx, fz = -math.sin(yaw), -math.cos(yaw)
+        mx = {1: 1, -1: -1}.get(axis, 0)
+        mz = {2: 1, -2: -1}.get(axis, 0)
+        dot = mx * fx + mz * fz
+        cross = fx * mz - fz * mx
+        if dot > 0.7:
+            key = "w"
+        elif dot < -0.7:
+            key = "s"
+        elif cross > 0:
+            key = "d"
+        else:
+            key = "a"
+        self.actions.append({"at_frame": f + turn + 1, "action": "hold",
+                             "key": key, "until_frame": f + turn + 1 + frames})
         if fly:
             self._walkVx, self._walkVz = 0.0, 0.0  # the fly's exit's velocity's unmodeled's
         else:
@@ -458,7 +545,7 @@ class Guide:
                 self.x, self.z = x0 + dp, z0 + da
         if y is not None:
             self.y = y
-        f = f + 1 + frames + 8  # the settle's pause (the 9th coast frame = the next leg's face frame, modeled in _walk_dd)
+        f = f + turn + 1 + frames + 8  # the settle's pause (the 9th coast frame = the next leg's face frame, modeled in _walk_dd)
         self.cursor = f
         return f
 
@@ -474,7 +561,10 @@ class Guide:
         """Aim the exact 3D point (the FACE-aim's face: a side face's
         point 0.1 past the plane — the roof's middle row's placement's
         gate-catch: the top face's aim needs the eye's above, the
-        side face's works from below)."""
+        side face's works from below). The SMOOTH twin (the V3-25's
+        re-shoot's user's feedback — the single-frame's snap read as
+        "the view's suddenly's changed"; the 2.0 rad/s's the action's
+        tier's interpolate). Returns the aim's LANDED frame."""
         dx = x - self.x
         dy = y - (self.y + EYE)
         dz = z - self.z
@@ -482,13 +572,11 @@ class Guide:
         d = (yaw - self.yaw + math.pi) % (2 * math.pi) - math.pi
         pitch = max(-1.5, min(1.5, math.atan2(dy, math.hypot(dx, dz))))
         self.at(f)
-        self.actions.append({
-            "at_frame": f, "action": "mouse_move",
-            "dx": round(-d / SENS, 3),
-            "dy": round(-(pitch - self.pitch) / SENS, 3)})
+        landed = self._gradual_aim(f, d, pitch - self.pitch, 2.0, 0.15, 0.6)
         self.yaw = yaw
         self.pitch = pitch
-        return self
+        self._to(landed)
+        return landed
 
     def place_ahead(self, f, dist=1.0, ground_y=54.0):
         """The RELATIVE place (the drift's robustness's face): aim the
@@ -499,11 +587,10 @@ class Guide:
         self.at(f)
         pitch = math.atan2(ground_y - (self.y + EYE), dist)
         pitch = max(-1.5, min(1.5, pitch))
-        self.actions.append({
-            "at_frame": f, "action": "mouse_move",
-            "dx": 0.0, "dy": round(-(pitch - self.pitch) / SENS, 3)})
+        landed = self._gradual_aim(f, 0.0, pitch - self.pitch, 2.0, 0.15, 0.6)
         self.pitch = pitch
-        return self.click(f + 30, "right")
+        self._to(landed)
+        return self.click(landed + 25, "right")
 
     def open_ahead(self, f, dist=1.0):
         """The RELATIVE container open (the place_ahead's twin): aim the
@@ -511,11 +598,11 @@ class Guide:
         feet's +0.5) + RMB — the table/furnace's panel's open."""
         self.at(f)
         pitch = math.atan2(0.5 - EYE, dist)
-        self.actions.append({
-            "at_frame": f, "action": "mouse_move",
-            "dx": 0.0, "dy": round(-(pitch - self.pitch) / SENS, 3)})
+        landed = self._gradual_aim(f, 0.0, pitch - self.pitch, 2.0,
+                                   0.15, 0.6)
         self.pitch = pitch
-        return self.click(f + 30, "right")
+        self._to(landed)
+        return self.click(landed + 25, "right")
 
     # -- the hands' face -------------------------------------------------
     def tap(self, f, key, gap=6):
@@ -608,6 +695,23 @@ class Guide:
         self._to(f + 35)
         return self
 
+    def hint(self, f, text):
+        """The demo's bottom's hint's line (the V3-25's face — the
+        user's 11-25 ruling: the key's hint is the demo's own face,
+        not the tutorial's default). Presentation's ONLY: the replay
+        renders it at the mid-bottom's slot (the tutorial's line's
+        position — the tutorial is DORMANT in the replay), it never
+        touches the simulation. The text is glyph-safe-checked
+        against src/ui/font.hpp's kCjkGlyphs (the single source —
+        read at tool's run, no Python mirror's drift), 24 codepoints
+        max (the gate's UI space's line's width's belt)."""
+        _hint_text_ok(text)
+        f = int(f)
+        self.actions.append({"at_frame": f, "action": "hint",
+                             "text": text})
+        self._to(f + 1)
+        return self
+
     def open_panel(self, f):
         return self.tap(f, "e")
 
@@ -625,8 +729,12 @@ class Guide:
 
     # -- the dump's face -------------------------------------------------
     def dump(self, path):
-        world = ({"type": "scene", "name": self.scene} if self.scene
-                 else {"type": "fresh", "seed": self.seed})
+        if self.scene:
+            world = {"type": "scene", "name": self.scene}
+            if self.growth_speed is not None:
+                world["growth_speed"] = self.growth_speed
+        else:
+            world = {"type": "fresh", "seed": self.seed}
         doc = {"world": world,
                "actions": sorted(self.actions,
                                  key=lambda a: a["at_frame"])}

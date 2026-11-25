@@ -79,6 +79,11 @@ struct InputEvent {
                     // center in the CURRENT geometry at inject time;
                     // the record's tap never produces it, the author's
                     // face only, the closed vocabulary's tail)
+        Hint // V3-25: the demo's bottom's hint's line (the `text`'s
+             // payload — the replay's presentation's face only, it
+             // NEVER touches the simulation: the record's tap has no
+             // SDL-event source for it, the author's face only, the
+             // net's --script rejects it named (the 40B's bound))
     } kind = Kind::KeyDown;
     std::uint32_t u32 = 0;
     std::int32_t code = 0;
@@ -88,6 +93,9 @@ struct InputEvent {
     float ax = 0.0f;
     float ay = 0.0f;
     bool down = false;
+    std::string text; // V3-25: the Hint's payload (every other kind =
+                      // empty — the bit-level's belt; the record's tap
+                      // never writes it)
 };
 
 enum class GameKey {

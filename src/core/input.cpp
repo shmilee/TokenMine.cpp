@@ -221,7 +221,7 @@ void Input::handleKey(std::uint32_t sdlKeycode, bool down) {
     // unmapped keycode records and re-injects as the same no-op).
     tapEvent(InputEvent {down ? InputEvent::Kind::KeyDown
                               : InputEvent::Kind::KeyUp,
-                         sdlKeycode, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false});
+                         sdlKeycode, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false, std::string()});
     // V3-11b: the search's delete — Backspace maps to no GameKey (the
     // tap above records its no-op as with every unmapped key), so this
     // frame flag is its only carrier.
@@ -245,7 +245,7 @@ void Input::handleKey(std::uint32_t sdlKeycode, bool down) {
 void Input::handleMouseButton(int sdlButton, bool down) {
     tapEvent(InputEvent {down ? InputEvent::Kind::MouseDown
                               : InputEvent::Kind::MouseUp,
-                         0, sdlButton, 0, 0.0f, 0.0f, 0.0f, 0.0f, false});
+                         0, sdlButton, 0, 0.0f, 0.0f, 0.0f, 0.0f, false, std::string()});
     auto button = mapButton(sdlButton);
     if (!button) {
         return;
@@ -255,7 +255,7 @@ void Input::handleMouseButton(int sdlButton, bool down) {
 
 void Input::handleMouseMotion(float dx, float dy, float x, float y) {
     tapEvent(InputEvent {InputEvent::Kind::MouseMove, 0, 0, 0, dx, dy, x, y,
-                         false});
+                         false, std::string()});
     m_mouseDelta.x += dx;
     m_mouseDelta.y += dy;
     m_mousePos = Vec2 {x, y};
@@ -263,7 +263,7 @@ void Input::handleMouseMotion(float dx, float dy, float x, float y) {
 
 void Input::handleMouseWheel(int deltaY) {
     tapEvent(InputEvent {InputEvent::Kind::Wheel, 0, deltaY, 0, 0.0f, 0.0f,
-                         0.0f, 0.0f, false});
+                         0.0f, 0.0f, false, std::string()});
     m_wheelDelta += deltaY;
 }
 
@@ -353,7 +353,7 @@ void Input::handleGamepadButton(int sdlButton, bool down) {
     // V3-9: the tap after the not-connected guard (a tracked device's
     // which is recorded — the replay's synthetic connect, demo.hpp).
     tapEvent(InputEvent {InputEvent::Kind::GamepadButton, m_gamepadWhich,
-                         sdlButton, 0, 0.0f, 0.0f, 0.0f, 0.0f, down});
+                         sdlButton, 0, 0.0f, 0.0f, 0.0f, 0.0f, down, std::string()});
     const GamepadButtonAction action = mapGamepadButton(sdlButton);
     if (const GameKey* key = std::get_if<GameKey>(&action)) {
         setKeySource(*key, kInputSourceGamepad, down);
@@ -371,7 +371,7 @@ void Input::handleGamepadAxis(int sdlAxis, std::int16_t value) {
     // V3-9: the tap (see handleGamepadButton) — the raw axis code +
     // value, no deadzone remap (the replay re-runs the remap).
     tapEvent(InputEvent {InputEvent::Kind::GamepadAxis, m_gamepadWhich,
-                         sdlAxis, value, 0.0f, 0.0f, 0.0f, 0.0f, false});
+                         sdlAxis, value, 0.0f, 0.0f, 0.0f, 0.0f, false, std::string()});
     switch (sdlAxis) {
         case SDL_GAMEPAD_AXIS_LEFTX:
             m_gamepadLeftX = value;

@@ -960,3 +960,80 @@ TEST(SaplingGrowthTest, CrossChunkTreeLandsInBothChunks) {
     EXPECT_GT(outside, 0); // the plan really crossed the boundary
     EXPECT_TRUE(saplings.empty());
 }
+
+// ---------------------------------------------------------------------------
+// V3-25: the DEMO's pace factor (the scene's growth_speed — the crop's
+// per-stage interval divided, the roll's value unchanged). 1 = the
+// world's own pace (bit-identical, every non-demo run).
+// ---------------------------------------------------------------------------
+
+TEST(GrowthTest, PaceOneIsBitIdentical) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    const BlockRegistry reg = wheatRegistry(120);
+    const BlockID sprout = wheatId(reg, 1);
+    world.setBlock(8, 1, 8, sprout);
+    std::map<BlockPos, BlockID> crops;
+    crops[{8, 1, 8}] = sprout;
+    // The explicit pace 1's == the default's (the caller's zero-change's
+    // belt — every non-demo run passes the default).
+    for (std::uint64_t f = 0; f < 200; ++f) {
+        const auto a = cropGrowthSteps(world, reg, crops, 99, f, false, 1);
+        const auto b = cropGrowthSteps(world, reg, crops, 99, f, false);
+        ASSERT_EQ(a.size(), b.size());
+        for (std::size_t k = 0; k < a.size(); ++k) {
+            EXPECT_EQ(a[k].pos, b[k].pos);
+            EXPECT_EQ(a[k].to.value, b[k].to.value);
+        }
+    }
+}
+
+TEST(GrowthTest, PaceDividesIntervalSuperset) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    const BlockRegistry reg = wheatRegistry(120); // the dry's interval's 120
+    const BlockID sprout = wheatId(reg, 1);
+    world.setBlock(8, 1, 8, sprout);
+    std::map<BlockPos, BlockID> crops;
+    crops[{8, 1, 8}] = sprout;
+    // The higher pace's passes are the base pace's deterministic
+    // SUPERSET (the roll's value unchanged — roll % 120 == 0 implies
+    // roll % 30 == 0): every pace-1 step frame is a pace-4 step frame,
+    // and some frame is pace-4 only (the 120's vs the 30's's face).
+    int baseOnly = 0, fastExtra = 0;
+    for (std::uint64_t f = 0; f < 4000; ++f) {
+        const bool a = !cropGrowthSteps(world, reg, crops, 99, f, false, 1)
+                           .empty();
+        const bool b = !cropGrowthSteps(world, reg, crops, 99, f, false, 4)
+                           .empty();
+        if (a && !b) {
+            ++baseOnly;
+        }
+        if (b && !a) {
+            ++fastExtra;
+        }
+    }
+    // The subset's belt (a base-pace's step frame is never a fast-pace's
+    // miss — the roll's value's unchanged's proof).
+    EXPECT_EQ(baseOnly, 0);
+    // The pace really divided (the 4000-f's window's mean's ~100's the
+    // extra's; the deterministic's seed's exact 90's, the belt's the
+    // +-3'sigma's range's — a future salt's edit's the loud fail's).
+    EXPECT_GT(fastExtra, 50);
+    EXPECT_LT(fastExtra, 150);
+}
+
+TEST(GrowthTest, PaceFloorClamp) {
+    World world;
+    world.getOrCreateChunk({0, 0, 0});
+    const BlockRegistry reg = wheatRegistry(1); // the interval's 1 (every frame)
+    const BlockID sprout = wheatId(reg, 1);
+    world.setBlock(8, 1, 8, sprout);
+    std::map<BlockPos, BlockID> crops;
+    crops[{8, 1, 8}] = sprout;
+    // 1 / 8 = 0 -> clamped to 1 = every frame's pass (the div-0's
+    // belt — no data edit's future could stall a crop).
+    for (std::uint64_t f = 0; f < 10; ++f) {
+        EXPECT_FALSE(cropGrowthSteps(world, reg, crops, 5, f, false, 8).empty());
+    }
+}

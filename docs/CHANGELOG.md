@@ -11,6 +11,38 @@
 > 晋升定案），11-04 同日用户重编号定案改 3.x（2.x 已吸收原 3.x「系
 > 统扩展」八项，回归自然序号）——任务号 V3-1~V3-7。
 
+## v3.52.0 demo 重拍批（2026-11-25）— 4.0 预发布 demo 逐个重拍 ⑤ guide_food 全链农耕 + 生长加速 + 逐 beat 提示 + 相机双修（门 244 全 PASS，banner 维持 3.52.0）
+
+V3-24 批量 9 支第二支（day1 ⑤种植与进食，用户 11-25 实机验收后逐支推进）：
+**①种植链体现**（诉求①：不能一上来就长在地里）——场景字节手术：16b 原
+24 株预种麦全清 + 5 格凸起泥土条（石→dirt，齐平版射线被邻石顶面遮挡否决）
++ h0 预置 wheat_1×5（项目无野麦 = prepared-start 先例）；demo 链 = 挖土 5
+→ E 泥土变耕地 ×5 → 放耕地 5（条带留空 = 结尾「下一代耕地已备好」面）→
+田北行种 5 → 生长 → 收割 5 → 面包 ×3 → 吃 ×2，11590f（3:26）；**②生长
+加速**（诉求②）= 新 dmo world-spec 字段 `growth_speed`（场景形可选 strict
+int 1..8，absent = 1 位级）：cropGrowthSteps/saplingGrowthSteps 尾参
+paceFactor（区间/pace 钳 ≥1，roll 值不变 = 高速通过帧是基础档确定性超集），
+m_demoGrowthPace 会话态零 format + **sim 不 bump**（旧 dmo 无字段位级 /
+新 dmo 旧二进制 strict 拒收）；**③逐 beat 底部提示**（诉求③：不用教学默认
+「W 向前/砍树」）= 新 demo 事件 kind `hint`（panel_click 16a 先例：author
+独占 + strict ≤24 码点 + 字形安全 fail-fast【缺字 init 命名拒收 U+XXXX】+
+replay 底部中线渲染 + net --script 命名拒收 + 表现层不入哈希 D21 孪生），
+replay 期教学系统休眠（m_tutorialEnabled=false，D12 扩展，会话旗零
+format）；**④重拍中相机双修**（用户 11-25 第二轮实机反馈：旋转卡顿 +
+「视野突然从面向方块变侧边沿着方块」）——sweep 50 步/600-1600f 楼梯 →
+`sweep_gradual` 默认 3 帧一拍（mining 验收口径）；**walk_leg 单帧 auto-face
+snap**（最多 180° 一帧硬转走路方向）→ `walk_leg(face=...)` 平滑预转 +
+面朝目标走路路（w/s/a/d 相对键自动选）；**look_ground/look_point/place_
+at/place_ahead 单帧全量瞄准**（19-58° 瞬间低头）→ 全部插值（2 rad/s 档，
+RMB 落定 +25f）；附带修 beat 帧计数落后 cursor 的堆叠坑（place 后
+`f = g._now()` 重同步）。门 244：3040/3040（+9 V325Demo 6 + Growth pace
+3）0 警告；author ×2 字节恒等 + S1 ≡ base20 247963 B ×2 + S2 ×2 RAW/
+savenorm EXACT + 终态钉（h0 麦×1/h2 面包×1/饥饿 17/条带耕地×5/田空/实体
+0 = 5 株全 wheat_7 算术）+ 空闲审计 max 静帧 0f + canary 4 ×2 EXACT（跨树
+savenorm EXACT，仅 2 支差 tutorial.id 一行 = 教学休眠预期偏离记档；solo
+跨树 RAW/savenorm EXACT）+ 性能 A/B 同档（OW 900f median 交错 + swap 14.9）；
+PITS 440 十坑；详见 `docs/archive/phase-3.52.0-demos.md`
+
 ## v3.52.0 后续批（2026-11-25）— 4.0 预发布实机反馈：demo 固定第三人称近轨 / 主菜单 UI ×4 / 字体 +2 / ESC 暂停面板（门 243 全 PASS）
 
 **11-24/11-25 用户实机反馈批（V3-25）= 4 代码批 + 1 文档批提交**（banner 维持

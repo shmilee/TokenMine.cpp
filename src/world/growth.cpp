@@ -103,7 +103,7 @@ std::vector<GrowthStep> cropGrowthSteps(const World& world,
                                         const std::map<BlockPos, BlockID>& cropCells,
                                         std::uint64_t seed,
                                         std::uint64_t frame,
-                                        bool raining) {
+                                        bool raining, int paceFactor) {
     std::vector<GrowthStep> steps;
     // Position-ordered iteration (std::map) — deterministic step list.
     for (const auto& [pos, tracked] : cropCells) {
@@ -149,9 +149,20 @@ std::vector<GrowthStep> cropGrowthSteps(const World& world,
         // rain). The roll value is unchanged, so every dry pass is also a
         // wet pass — exactly 1/drySlowdown as often, deterministic per
         // (seed, frame, cell).
-        const int ticks =
-            block.properties.growthTicks *
-            (cropIsWet(world, pos, raining) ? 1 : block.properties.drySlowdown);
+        // V3-25: the demo's pace factor divides the interval (the roll
+        // value stays — the faster pace's passes are the base pace's
+        // deterministic superset; the wet/dry subset's belt keeps).
+        // 1 = the world's own pace (bit-identical, every non-demo run).
+        int ticks =
+            (block.properties.growthTicks *
+             (cropIsWet(world, pos, raining) ? 1 : block.properties.drySlowdown)) /
+            paceFactor;
+        if (ticks < 1) {
+            // The pace's floor (no shipped block's interval drops below
+            // 1 frame — the belt against a future data edit's div-0):
+            // clamp to 1 = the roll passes every frame (roll % 1 == 0).
+            ticks = 1;
+        }
         // The roll state advances with the frame (PITS #4) and is
         // per-cell via the position hash; splitmix64 finalizes.
         const std::uint64_t state = seed +
@@ -172,7 +183,8 @@ std::vector<SaplingStep> saplingGrowthSteps(const World& world,
                                             const BlockRegistry& blocks,
                                             const std::map<BlockPos, BlockID>& saplingCells,
                                             std::uint64_t seed,
-                                            std::uint64_t frame) {
+                                            std::uint64_t frame,
+                                            int paceFactor) {
     std::vector<SaplingStep> steps;
     // Position-ordered iteration (std::map) — deterministic step list.
     for (const auto& [pos, tracked] : saplingCells) {
@@ -224,7 +236,13 @@ std::vector<SaplingStep> saplingGrowthSteps(const World& world,
             frame * 0x9E3779B97F4A7C15ULL +
             hash3(asU64(pos.x), asU64(pos.y), asU64(pos.z), kSaplingRollSalt);
         const std::uint64_t roll = splitmix64(state);
-        if (roll % static_cast<std::uint64_t>(block.properties.growthTicks) != 0) {
+        // V3-25: the demo's pace factor's twin (the crop's face — the
+        // clamped interval, the div-0's belt).
+        int ticks = block.properties.growthTicks / paceFactor;
+        if (ticks < 1) {
+            ticks = 1;
+        }
+        if (roll % static_cast<std::uint64_t>(ticks) != 0) {
             continue;
         }
         // The stage (the ENT-2 per-instance state — the crop's block id,

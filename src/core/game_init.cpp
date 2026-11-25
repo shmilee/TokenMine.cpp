@@ -3567,6 +3567,18 @@ void Game::runDemoReplay() {
     // belt in third_person.hpp). The audience's wheel is the SPEED's
     // ladder in the replay (never the zoom), so the distance holds.
     m_thirdPersonDistance = kDemoOrbitDistance;
+    // V3-25 (the user's 11-25 ruling): the demo's growth's pace (the
+    // scene-form world-spec's optional `growth_speed`, 1..8's strict;
+    // absent / the other forms = 1 = the world's own pace — the
+    // bit-level's belt) + the tutorial's DORMANT (the D12's net-skip's
+    // extension to the replay: the onboarding's bottom's line ("W to
+    // go forward" / "chop a tree"...) is the demo's NOISE — the
+    // mid-bottom's slot becomes the demo's hint's line (the
+    // m_demoHint's render's face). The session's flag only: the
+    // save's face is untouched (the series/step's STATE stays — the
+    // demo's never-write-back's redline, the flag is not saved).
+    m_demoGrowthPace = m_args.demoFile->world.growthSpeed;
+    m_tutorialEnabled = false;
     // The pacing's anchor (the wall clock — re-anchored at the speed
     // change and the pause/resume, the demo time is untouched).
     m_demoPacingAnchorWall = nowSeconds();
@@ -3770,7 +3782,11 @@ void Game::runDemoReplay() {
         }
         m_input.frameBegin();
         // V3-16a: the panel-click's resolver (the demo's break's loud
-        // line — the named problem, the gate's grep face).
+        // line — the named problem, the gate's grep face). V3-25: the
+        // hint's out-parameter (the frame's hint's line, if any — the
+        // presentation's face; the m_demoHint holds it until the next
+        // hint event, the beat's own dwell's face, no wall clock).
+        std::string hintLine;
         const std::string injErr =
             m_demoPlayer->injectForFrame(
                 m_demoFrame, m_input,
@@ -3779,7 +3795,11 @@ void Game::runDemoReplay() {
                     auto r = demoPanelClick(panel, slot, button);
                     return r.ok() ? std::string("")
                                   : r.error().message;
-                });
+                },
+                &hintLine);
+        if (!hintLine.empty()) {
+            m_demoHint = hintLine;
+        }
         if (!injErr.empty()) {
             MC_LOG_ERROR("demo: the panel's click's problem at frame " +
                          std::to_string(m_demoFrame) + " — " + injErr);

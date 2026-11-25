@@ -2727,7 +2727,8 @@ void Game::updateOverworldWorldPass() {
         const std::vector<GrowthStep> steps = cropGrowthSteps(
             m_world, m_blocks, m_states.crops,
             static_cast<std::uint64_t>(m_generator->seed()),
-            static_cast<std::uint64_t>(m_frameCount), m_weather.raining);
+            static_cast<std::uint64_t>(m_frameCount), m_weather.raining,
+            m_demoGrowthPace);
         for (const GrowthStep& s : steps) {
             setBlock(s.pos.x, s.pos.y, s.pos.z, s.to);
             // Cross-shaped crops are non-opaque: the light field is
@@ -2748,7 +2749,7 @@ void Game::updateOverworldWorldPass() {
         const std::vector<SaplingStep> steps = saplingGrowthSteps(
             m_world, m_blocks, m_states.saplings,
             static_cast<std::uint64_t>(m_generator->seed()),
-            static_cast<std::uint64_t>(m_frameCount));
+            static_cast<std::uint64_t>(m_frameCount), m_demoGrowthPace);
         for (const SaplingStep& s : steps) {
             if (s.action == SaplingAction::Advance) {
                 m_world.setBlockState(s.pos.x, s.pos.y, s.pos.z,

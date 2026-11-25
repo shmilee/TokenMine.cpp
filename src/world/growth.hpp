@@ -92,13 +92,22 @@ struct SaplingStep {
 // its arguments: same world + set + seed + frame + raining -> same
 // steps. `raining` (V2-4, default false = the pre-V2-4 pace bit-
 // identical) releases the dry_slowdown gate through cropIsWet: a dry
-// field grows at the full pace while it rains.
+// field grows at the full pace while it rains. `paceFactor` (V3-25,
+// default 1 = bit-identical) = the DEMO's growth pacing: the demo's
+// world-spec optional `growth_speed` (the scene-form's face, 1..8)
+// divides the per-stage interval (720/6 = 120 frames per stage, the
+// dry's wheat's face) so a planted crop matures on the demo's clock
+// (the user's 11-25 ruling: the growth's stages are WATCHED, not
+// waited for); the roll value is unchanged, so the higher-pace pass
+// stays a deterministic superset of the base pace's (the dry/wet's
+// subset's belt). Every non-demo run passes 1 (the world's own pace).
 std::vector<GrowthStep> cropGrowthSteps(const World& world,
                                         const BlockRegistry& blocks,
                                         const std::map<BlockPos, BlockID>& cropCells,
                                         std::uint64_t seed,
                                         std::uint64_t frame,
-                                        bool raining = false);
+                                        bool raining = false,
+                                        int paceFactor = 1);
 
 // GEN-2: the SAPLING growth steps (the cropGrowthSteps twin over the
 // `m_states.saplings` tracked set — blocks with a `tree` object). Once per frame
@@ -124,11 +133,15 @@ std::vector<GrowthStep> cropGrowthSteps(const World& world,
 //      — it holds the sapling) for the step to be a Complete; otherwise
 //      no step (the sapling waits, Minecraft's blocked-canopy rule).
 // Pure function of its arguments: same world + set + seed + frame ->
-// same steps.
+// same steps. `paceFactor` (V3-25, default 1 = bit-identical) = the
+// DEMO's growth pacing's twin (the cropGrowthSteps' face — the demo's
+// world-spec's `growth_speed` divides the per-stage interval; every
+// non-demo run passes 1).
 std::vector<SaplingStep> saplingGrowthSteps(const World& world,
                                             const BlockRegistry& blocks,
                                             const std::map<BlockPos, BlockID>& saplingCells,
                                             std::uint64_t seed,
-                                            std::uint64_t frame);
+                                            std::uint64_t frame,
+                                            int paceFactor = 1);
 
 } // namespace mc

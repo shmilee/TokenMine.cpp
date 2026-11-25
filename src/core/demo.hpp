@@ -184,6 +184,10 @@ struct DemoWorldSpec {
     enum class Type { Fresh, Save, Scene } type = Type::Fresh;
     std::int64_t seed = 0; // Fresh only
     std::string slot;      // Save / Scene only (the --save charset)
+    // V3-25: the demo's growth's pace factor — the Scene-form's
+    // OPTIONAL `growth_speed` (1..8 strict); 1 = the world's own pace
+    // (every other form / the absent key — the bit-level's belt).
+    int growthSpeed = 1;
 };
 
 // One recorded / authored input event: the demo frame index (0-based,
@@ -380,9 +384,13 @@ public:
     // [0, frameCount) is a caller bug (asserts). The panelClick's
     // resolver (the V3-16a face — absent = the PanelClick event's
     // named problem string, the replay's loop's loud line).
+    // V3-25: the hint's out-parameter (nullptr = the caller's the
+    // hint's face absent — the script's / the record's call sites);
+    // non-null and the frame carries a Hint event = *hint set to the
+    // text (the presentation's line — the target's Input is untouched).
     std::string injectForFrame(int frame, Input& target,
                                const PanelClickResolver& panelClick =
-                                   nullptr) const;
+                                   nullptr, std::string* hint = nullptr) const;
     // The frame's dt (the simulation's step — the frame-locked systems
     // advance per call, the real-dt systems per this value).
     double dtForFrame(int frame) const;
@@ -459,9 +467,16 @@ struct TimelineAction {
         Wheel,
         PanelClick, // V3-16a: the geometry-free panel click (the
                     // panel/slot/button names)
+        Hint // V3-25: the demo's bottom's hint's line (the `key`
+             // carries the text — the presentation's face only: the
+             // replay renders it, the simulation never sees it; the
+             // record's tap never produces it, the net's script
+             // rejects it named)
     } type = Type::KeyDown;
     int atFrame = 0;
-    std::string key;    // Key*: the author's key name (the closed set)
+    std::string key;    // Key*: the author's key name (the closed set);
+                        // Hint: the hint's text (the V3-20's title's
+                        // font-safety's twin — glyph-safe, ≤ 24 cps)
     std::string panel;  // PanelClick: the panel's name
     std::string pslot;  // PanelClick: the slot's name
     int untilFrame = -1; // Hold only

@@ -3214,6 +3214,20 @@ std::optional<MobHit> targetMob() const;
     // stop — the legacy exit's shape keeps).
     bool m_gamePaused = false;
 
+    // V3-25: the DEMO's growth's pace factor (the user's 11-25 ruling:
+    // the growth's stages are watched, not waited for). The demo's
+    // world-spec optional `growth_speed` (the scene-form's face, 1..8,
+    // strict); 1 = the world's own pace (every non-demo run — the
+    // bit-level's root). Session state (never saved — the demo's dmo
+    // is the carrier).
+    int m_demoGrowthPace = 1;
+    // V3-25: the demo's bottom's hint's line (the dmo's hint event's
+    // payload — the replay's presentation's face only: never the
+    // simulation, never the hash (the D21's twin), never saved. The
+    // text holds until the next hint event (the beat's own dwell's
+    // face — no wall clock = the frame-locked's belt).
+    std::string m_demoHint;
+
     // -- V3-12b: the NET session (the 2-player lockstep PoC) ------------
     // The transport (one TCP connection; the host owns the session —
     // the client's EOF is the D2's all-exit, the host's EOF is the

@@ -1950,6 +1950,34 @@ void Game::renderUi() {
                 }
             }
         }
+
+        // V3-25: the DEMO's hint's line (the user's 11-25 ruling: the
+        // bottom's key hint is the DEMO's own face, not the tutorial's
+        // default — the onboarding's line is DORMANT in the replay
+        // (m_tutorialEnabled's false, runDemoReplay's init), so this
+        // mid-bottom's slot is free). The m_demoPlayer's gate = the
+        // structural immunity (a no-input run never draws it — the
+        // m_demoHint is empty there too, the double belt). The slot's
+        // math = the tutorial's line's twin (the same y / center /
+        // kText's face).
+        if (m_demoPlayer.has_value() && !m_demoHint.empty() &&
+            !lplayer->isDead()) {
+            const int hy = y0 - kUiIconPx - kUiStripGap;
+            bool hasArmor = false;
+            for (int slot = 0; slot < kArmorSlotCount && !hasArmor; ++slot) {
+                hasArmor = !lplayer->armorSlot(slot).empty();
+            }
+            const int topRow =
+                hasArmor ? 2 : (lsess.effects.count() > 0 ? 1 : 0);
+            const int hintY =
+                hy - topRow * (kUiIconPx + kUiStripGap) - kUiStripGap -
+                kGlyphSize;
+            addText(m_demoHint,
+                    (w -
+                         static_cast<int>(textWidth(m_demoHint, fScale(1.0)))) /
+                        2,
+                    hintY, fScale(1.0), kText);
+        }
     }
 
     // -- V2-11 (XP): the XP bar + level number -------------------------------

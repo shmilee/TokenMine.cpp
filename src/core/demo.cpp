@@ -49,10 +49,10 @@ bool isFiniteNumber(const Json& j, double& out) {
 // The demo's event type names (the CLOSED file vocabulary — the
 // strict parse's table; the order is the InputEvent::Kind order, the
 // two gamepad kinds carry their press state in the payload).
-constexpr const char* kEventTypeNames[9] = {
+constexpr const char* kEventTypeNames[10] = {
     "key_down",       "key_up",         "mouse_down",   "mouse_up",
     "mouse_move",     "wheel",          "gamepad_button", "gamepad_axis",
-    "panel_click"};
+    "panel_click", "hint"};
 
 // The event's per-type key sets (the unexpected-key reject's table —
 // every key besides {frame, type} must belong to its type's set).
@@ -67,6 +67,7 @@ const std::vector<std::string>& eventKeys(const InputEvent::Kind kind) {
                                                     "value"};
     static const std::vector<std::string> kPanel = {"panel", "slot",
                                                     "button"};
+    static const std::vector<std::string> kHint = {"text"};
     switch (kind) {
         case InputEvent::Kind::KeyDown:
         case InputEvent::Kind::KeyUp:
@@ -84,12 +85,53 @@ const std::vector<std::string>& eventKeys(const InputEvent::Kind kind) {
             return kGAxis;
         case InputEvent::Kind::PanelClick:
             return kPanel;
+        case InputEvent::Kind::Hint:
+            return kHint;
     }
     return kKey; // unreachable (the switch covers the closed Kind)
 }
 
+// V3-25: the hint's text's strict check (the V3-20's title's
+// font-safety's twin — the replay's bottom's line renders via the
+// kCjkGlyphs' table, a missing glyph would draw the '?': the init's
+// named reject, the silent-fallback's belt). The length's belt: 24
+// codepoints = the mid-bottom's line's width at the gate's UI space
+// (24 CJK's = 408 px at fScale 1.0, the 453-px's margin).
+Result<void> checkHintText(const std::string& text, const std::string& ctx) {
+    if (text.empty()) {
+        return MC_FAIL(ctx + ": 'text' must be non-empty");
+    }
+    std::size_t n = 0, pos = 0;
+    while (pos < text.size()) {
+        const auto cp = utf8NextCodepoint(text, pos);
+        if (!cp.has_value()) {
+            return MC_FAIL(ctx + ": 'text' has invalid UTF-8");
+        }
+        ++n;
+        const uint32_t c = *cp;
+        const bool ascii = c >= 0x20 && c <= 0x7E;
+        const auto it = std::lower_bound(
+            std::begin(kCjkGlyphs), std::end(kCjkGlyphs), c,
+            [](const CjkGlyph& g, uint32_t v) { return g.cp < v; });
+        const bool cjk = it != std::end(kCjkGlyphs) && it->cp == c;
+        if (!ascii && !cjk) {
+            char hexbuf[16];
+            std::snprintf(hexbuf, sizeof(hexbuf), "U+%04X", c);
+            return MC_FAIL(ctx + ": 'text' has the font's missing glyph '" +
+                           std::string(hexbuf) + "' (the replay's '?' "
+                           "would render)");
+        }
+    }
+    if (n > 24) {
+        return MC_FAIL(ctx + ": 'text' is " + std::to_string(n) +
+                       " codepoints (the 24's belt — the mid-bottom's "
+                       "line's width at the gate's UI space)");
+    }
+    return {};
+}
+
 InputEvent::Kind kindForType(const std::string& type) {
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < 10; ++i) {
         if (type == kEventTypeNames[i]) {
             return static_cast<InputEvent::Kind>(i);
         }
@@ -164,9 +206,27 @@ Result<DemoWorldSpec> parseWorldSpec(const Json& world) {
                            "(letters, digits, '_' or '-')");
         }
         spec.slot = name->asString();
-        if (world.memberCount() != 2) {
-            return MC_FAIL("demo world (scene) must have exactly the "
-                           "keys 'type' and 'name'");
+        // V3-25 (the user's 11-25 ruling: the growth's stages are
+        // WATCHED, not waited for): the demo's growth's pace — the
+        // optional `growth_speed` (the 1..8's strict factor; the
+        // fresh/save's forms carry no pace — the scene's face only,
+        // the net's fresh-only's twin bound). Absent = 1 = the
+        // world's own pace (the bit-level's belt — the old dmo's
+        // verbatim form).
+        const Json* pace = world.find("growth_speed");
+        if (pace != nullptr) {
+            long long pv;
+            if (!isIntValue(*pace, pv) || pv < 1 || pv > 8) {
+                return MC_FAIL("demo world (scene): 'growth_speed' must "
+                               "be an integer 1..8 (the demo's growth's "
+                               "pace factor)");
+            }
+            spec.growthSpeed = static_cast<int>(pv);
+        }
+        if (world.memberCount() > 3) {
+            return MC_FAIL("demo world (scene) must have the keys "
+                           "'type', 'name' and the optional "
+                           "'growth_speed' only");
         }
     } else {
         return MC_FAIL("demo world: unknown type '" + type->asString() +
@@ -340,7 +400,7 @@ Result<DemoFile> parseDemoJson(const Json& root) {
                            ": unknown type '" + typeName +
                            "' (key_down/key_up/mouse_down/mouse_up/"
                            "mouse_move/wheel/gamepad_button/gamepad_axis/"
-                           "panel_click)");
+                           "panel_click/hint)");
         }
         const InputEvent::Kind kind = kindForType(typeName);
         // The per-type key set (the unexpected key is named — the
@@ -507,6 +567,18 @@ Result<DemoFile> parseDemoJson(const Json& root) {
                 ev.value = static_cast<std::int16_t>(v);
                 break;
             }
+            case InputEvent::Kind::Hint: {
+                const Json* k = e.find("text");
+                if (!k || !k->isString()) {
+                    return MC_FAIL("demo event " + std::to_string(i) +
+                                   " ('hint'): 'text' must be a string");
+                }
+                MC_TRY(checkHintText(k->asString(), "demo event " +
+                                                        std::to_string(i) +
+                                                        " ('hint')"));
+                ev.text = k->asString();
+                break;
+            }
         }
         file.events.push_back(DemoEvent {frameIdx, ev});
     }
@@ -569,6 +641,13 @@ std::string serializeDemoJson(const DemoFile& file) {
         // key, the save's slot's twin).
         world["type"] = Json(std::string("scene"));
         world["name"] = Json(file.world.slot);
+        // V3-25: the scene's growth's pace (the optional's key —
+        // the absent's form when 1 (the world's own pace's belt: the
+        // old's dmo's the verbatim's serialize's twin)).
+        if (file.world.growthSpeed > 1) {
+            world["growth_speed"] =
+                Json(static_cast<long long>(file.world.growthSpeed));
+        }
     }
     root["world"] = std::move(world);
     Json dts = Json::array();
@@ -628,6 +707,11 @@ std::string serializeDemoJson(const DemoFile& file) {
                 e["slot"] = Json(ev.code);
                 e["button"] = Json(static_cast<long long>(ev.value));
                 break;
+            case InputEvent::Kind::Hint:
+                e["type"] = Json(std::string(kEventTypeNames[
+                    static_cast<int>(ev.kind)]));
+                e["text"] = Json(ev.text);
+                break;
         }
         events.push_back(std::move(e));
     }
@@ -683,7 +767,8 @@ DemoPlayer::DemoPlayer(const DemoFile& file) : m_file(file) {
 }
 
 std::string DemoPlayer::injectForFrame(int frame, Input& target,
-                                       const PanelClickResolver& panelClick) const {
+                                       const PanelClickResolver& panelClick,
+                                       std::string* hint) const {
     assert(frame >= 0 && frame < frameCount());
     const int begin = m_frameBegin[frame];
     const int end = m_frameBegin[frame + 1];
@@ -717,7 +802,7 @@ std::string DemoPlayer::injectForFrame(int frame, Input& target,
             case InputEvent::Kind::GamepadAxis:
                 target.handleGamepadAxis(ev.code, ev.value);
                 break;
-            case InputEvent::Kind::PanelClick:
+            case InputEvent::Kind::PanelClick: {
                 if (panelClick == nullptr) {
                     if (err.empty()) {
                         err = "the demo's panel_click event " +
@@ -732,6 +817,27 @@ std::string DemoPlayer::injectForFrame(int frame, Input& target,
                     err = pe;
                 }
                 break;
+            }
+            case InputEvent::Kind::Hint: {
+                // V3-25: the presentation's line — the target's Input
+                // is NEVER touched (the simulation's zero face; the
+                // replay's loop reads *hint and renders the bottom's
+                // line, the D21's presentation's-never-in-the-hash's
+                // twin). A hint without the out-parameter = the
+                // caller's the face's bug (named, the panelClick's
+                // twin).
+                if (hint == nullptr) {
+                    if (err.empty()) {
+                        err = "the demo's hint event " +
+                              std::to_string(i) +
+                              " has no hint's out-parameter (the "
+                              "replay's loop's face — a caller's bug)";
+                    }
+                    break;
+                }
+                *hint = ev.text;
+                break;
+            }
         }
     }
     return err;
@@ -872,6 +978,8 @@ const std::vector<std::string>& actionKeys(TimelineAction::Type type) {
     static const std::vector<std::string> kPanelClick = {"at_frame",
                                                          "action", "panel",
                                                          "slot", "button"};
+    static const std::vector<std::string> kHint = {"at_frame", "action",
+                                                   "text"};
     switch (type) {
         case TimelineAction::Type::KeyDown:
         case TimelineAction::Type::KeyUp:
@@ -887,6 +995,8 @@ const std::vector<std::string>& actionKeys(TimelineAction::Type type) {
             return kWheel;
         case TimelineAction::Type::PanelClick:
             return kPanelClick;
+        case TimelineAction::Type::Hint:
+            return kHint;
     }
     return kKey; // unreachable (the switch covers the closed Type)
 }
@@ -936,6 +1046,8 @@ Result<std::vector<TimelineAction>> parseTimelineActions(const Json& actions) {
             t.type = TimelineAction::Type::Wheel;
         } else if (an == "panel_click") {
             t.type = TimelineAction::Type::PanelClick;
+        } else if (an == "hint") {
+            t.type = TimelineAction::Type::Hint;
         } else if (an == "gamepad_button" || an == "gamepad_axis") {
             return MC_FAIL(idx + "gamepad actions are the record's face "
                            "(the author v1 is keyboard/mouse)");
@@ -943,7 +1055,7 @@ Result<std::vector<TimelineAction>> parseTimelineActions(const Json& actions) {
             return MC_FAIL(idx + "unknown action '" + an +
                            "' (the vocabulary: key_down key_up hold "
                            "mouse_down mouse_up mouse_move wheel "
-                           "panel_click)");
+                           "panel_click hint)");
         }
         // The unexpected key (the per-action closed set).
         const auto& keys = actionKeys(t.type);
@@ -1058,6 +1170,15 @@ Result<std::vector<TimelineAction>> parseTimelineActions(const Json& actions) {
                 }
                 t.button = k3->asString();
                 MC_TRY(authorPanelButton(t.button));
+                break;
+            }
+            case TimelineAction::Type::Hint: {
+                const Json* k = a.find("text");
+                if (!k || !k->isString()) {
+                    return fail("'text' is required (a non-empty string)");
+                }
+                MC_TRY(checkHintText(k->asString(), idx));
+                t.key = k->asString(); // the hint's payload rides `key`
                 break;
             }
         }
@@ -1289,11 +1410,12 @@ DemoFile authorDemoFile(const DemoWorldSpec& world,
         auto keyEv = [kc](bool down) {
             return InputEvent {down ? InputEvent::Kind::KeyDown
                                     : InputEvent::Kind::KeyUp,
-                               kc, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false};
+                               kc, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, false,
+                               std::string()};
         };
         auto mouseEv = [mb](InputEvent::Kind kind) {
             return InputEvent {kind, 0, mb, 0, 0.0f, 0.0f, 0.0f, 0.0f,
-                               false};
+                               false, std::string()};
         };
         switch (a.type) {
             case TimelineAction::Type::KeyDown:
@@ -1328,13 +1450,13 @@ DemoFile authorDemoFile(const DemoWorldSpec& world,
                                               static_cast<float>(a.dy),
                                               static_cast<float>(a.x),
                                               static_cast<float>(a.y),
-                                              false}});
+                                              false, std::string()}});
                 break;
             case TimelineAction::Type::Wheel:
                 evs.push_back(Ev {a.atFrame, i, 0,
                                   InputEvent {InputEvent::Kind::Wheel, 0,
                                               a.ticks, 0, 0.0f, 0.0f, 0.0f,
-                                              0.0f, false}});
+                                              0.0f, false, std::string()}});
                 break;
             case TimelineAction::Type::PanelClick:
                 // The parse's validation already succeeded (the author's
@@ -1347,7 +1469,17 @@ DemoFile authorDemoFile(const DemoWorldSpec& world,
                                                   a.pslot),
                                               *authorPanelButton(a.button),
                                               0.0f, 0.0f, 0.0f, 0.0f,
-                                              false}});
+                                              false, std::string()}});
+                break;
+            case TimelineAction::Type::Hint:
+                // V3-25: the hint's line (the presentation's face —
+                // the inject's target's Input never sees it; the
+                // replay's loop reads the hint's out-parameter).
+                evs.push_back(Ev {a.atFrame, i, 0,
+                                  InputEvent {InputEvent::Kind::Hint,
+                                              0, 0, 0,
+                                              0.0f, 0.0f, 0.0f, 0.0f,
+                                              false, a.key}});
                 break;
         }
     }
@@ -1457,6 +1589,14 @@ Result<DemoFile> parseScriptTimeline(const std::filesystem::path& path) {
             return MC_FAIL("script: the 'panel_click' is the solo's "
                            "guide's face (the net's lockstep's input "
                            "carries no panel id)");
+        }
+        if (a.type == TimelineAction::Type::Hint) {
+            // V3-25: the hint's twin bound — the net's FrameState's
+            // 40B carries no text's line (the lockstep's input's
+            // documented bound; the coop's guide's later face).
+            return MC_FAIL("script: the 'hint' is the solo's guide's "
+                           "face (the net's lockstep's input carries "
+                           "no text's line)");
         }
     }
     return authorDemoFile(spec, *list);
