@@ -16,6 +16,7 @@
 #include "block/chance_drop.hpp"
 #include "block/cube_face_table.hpp"
 #include "core/game_local.hpp"
+#include "core/menu_layout.hpp" // V3-52: the pause's panel's pure layout
 #include "core/save_slot.hpp" // V3-18: the slot path family
 #include "core/json.hpp"
 #include "core/png.hpp"
@@ -3330,16 +3331,35 @@ void Game::runGameplayLoop(double lastFrame) {
                 m_scriptPlayer->frameCount()) {
             m_scriptPlayer->injectForFrame(m_frameCount, m_input);
         }
-        // ESC exits only while the pointer is free AND the inventory is
-        // closed AND the player is alive (while captured it releases the
-        // pointer, while the inventory is open it closes it, while dead
-        // the death screen owns the input — all handled in update).
-        if (m_input.quitRequested() ||
-            (!(m_demoPlayer ? true : m_window.relativeMouseMode()) && !panelOpen() &&
-             !localPlayer()->isDead() &&
-             m_input.wasPressed(GameKey::Escape))) {
+        // The window's close = the exit (the solo's + the net's shape
+        // unchanged — the pause's panel cannot trap it).
+        if (m_input.quitRequested()) {
             MC_LOG_INFO("Exit requested, shutting down");
             break;
+        }
+        // V3-52 (the user's 11-25 report: the ESC's direct exit wanted
+        // the confirm's face): the ESC's act while the pointer is free
+        // AND the inventory is closed AND the player is alive (while
+        // captured it RELEASES the pointer, while the inventory is open
+        // it closes it, while dead the death screen owns the input —
+        // all handled in update). Solo: the first such ESC OPENS the
+        // pause's panel (the second closes it — the demo's panel's
+        // toggle's twin). Net: the lockstep cannot stop (the
+        // deviation's record) — the legacy exit's shape keeps.
+        const bool escFree =
+            !(m_demoPlayer ? true : m_window.relativeMouseMode()) &&
+            !panelOpen() && !localPlayer()->isDead();
+        if (escFree && m_input.wasPressed(GameKey::Escape)) {
+            if (m_gamePaused) {
+                m_gamePaused = false;
+                MC_LOG_INFO("Game resumed");
+            } else if (netActive()) {
+                MC_LOG_INFO("Exit requested, shutting down");
+                break;
+            } else {
+                m_gamePaused = true;
+                MC_LOG_INFO("Game paused");
+            }
         }
 
         const double frameStart = nowSeconds();
@@ -3358,6 +3378,42 @@ void Game::runGameplayLoop(double lastFrame) {
             const double fps = 1.0 / dt;
             m_fpsSmoothed =
                 (m_fpsSmoothed <= 0.0) ? fps : (m_fpsSmoothed * 0.95 + fps * 0.05);
+        }
+
+        // V3-52: the pause's frame (the solo's panel is UP — the dt's
+        // block ran ABOVE, so lastFrame stays fresh and the resume's
+        // first frame sees no dt jump): the simulation FREEZES (no
+        // update / net's hooks / record's append / m_frameCount — the
+        // demo's pause's "finished = the sim's frozen dwell"'s twin,
+        // PITS 391⑥'s shape), the world + the panel's veil still
+        // RENDERS (the demo's panel's precedent). The panel's clicks:
+        // 保存退出 = the exit's path (the loop's tail's writeSave's
+        // single choke point, the clean-exit's belt); 继续 = the resume
+        // + the pointer's RE-CAPTURE (the MC's back-to-game's shape —
+        // the resume's click is the intentional's one, no second
+        // click to lock).
+        if (m_gamePaused) {
+            const auto [mx, my] = uiMouse();
+            const UiSize uiSpace = uiSize();
+            const MenuPauseLayout pl =
+                menuPauseLayout(uiSpace.width, uiSpace.height);
+            const MenuPauseStep step = menuPauseStep(
+                m_input.wasPressed(MouseButton::Left),
+                menuPauseControl(pl, mx, my));
+            if (step.kind == MenuPauseStep::Kind::SaveQuit) {
+                m_gamePaused = false;
+                MC_LOG_INFO("Exit requested (the pause's panel's 保存退出), "
+                            "shutting down");
+                break;
+            }
+            if (step.kind == MenuPauseStep::Kind::Resume) {
+                m_gamePaused = false;
+                m_window.setRelativeMouseMode(true);
+                MC_LOG_INFO("Game resumed (the panel's 继续's click)");
+            }
+            render();
+            m_window.swapBuffers();
+            continue;
         }
 
         // V3-12b: the net's frame pre-hook (the poll / the capture / the

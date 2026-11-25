@@ -3207,6 +3207,13 @@ std::optional<MobHit> targetMob() const;
     // event tap closure; the world spec set in init).
     DemoRecorder m_demoRecorder;
 
+    // V3-52: the SOLO gameplay's pause (the user's 11-25 report: the
+    // ESC's direct exit wanted the confirm's face — the pause's panel).
+    // The session state (NEVER saved — the demo's pause's twin's
+    // deviation); the net's loop never sets it (the lockstep cannot
+    // stop — the legacy exit's shape keeps).
+    bool m_gamePaused = false;
+
     // -- V3-12b: the NET session (the 2-player lockstep PoC) ------------
     // The transport (one TCP connection; the host owns the session —
     // the client's EOF is the D2's all-exit, the host's EOF is the

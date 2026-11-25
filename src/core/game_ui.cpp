@@ -6,6 +6,7 @@
 #include <cstdio>
 
 #include "core/game_local.hpp"
+#include "core/menu_layout.hpp" // V3-52: the pause's panel's pure layout
 #include "core/ui_layout.hpp"
 #include "core/xp_curve.hpp" // V2-11: the XP bar's pure level/fill math
 #include "ui/item_tooltip.hpp"
@@ -3120,6 +3121,64 @@ void Game::renderUi() {
         // The flush (this position = after the main 2D flush + the 3D
         // cube icons, before the tooltip / tints / hurt flash).
         for (auto& b : demoBatches) {
+            drawUiBatch(b.vertices, ortho, b.textured ? *b.texture
+                                                      : m_fontTexture,
+                        b.textured, b.color);
+        }
+    }
+
+    // V3-52: the SOLO's pause's panel (the m_gamePaused's gate — the
+    // net's loop never sets it, the demo's replay runs its own loop;
+    // the no-input baseline never pauses, so this block draws ZERO
+    // batches there — the structural immunity). The demo's panel's
+    // twin: self-contained batches (no merge into the main's — a merge
+    // would draw the panel UNDER the veil at an existing same-color
+    // batch's position), the 0.55 veil + the centered's title + the
+    // two buttons (the hover's bar = the menu's kHoverBar's face),
+    // flushed at the SAME position (after the main 2D flush + the 3D
+    // cube icons, before the tooltip / tints / hurt flash).
+    if (m_gamePaused) {
+        std::vector<UiBatch> pauseBatches;
+        auto pauseQuad = [&pauseBatches, &addQuadUv](const Vec4& color,
+                                                     int x, int y, int qw,
+                                                     int qh) {
+            UiBatch b;
+            b.color = color;
+            addQuadUv(b, x, y, qw, qh, Vec2 {0.0f, 0.0f}, Vec2 {1.0f, 1.0f});
+            pauseBatches.push_back(std::move(b));
+        };
+        auto pauseText = [this, &pauseBatches](const std::string& text,
+                                               int x, int y, double scale,
+                                               const Vec4& color) {
+            UiBatch b;
+            b.color = color;
+            b.textured = true;
+            b.texture = &m_fontTexture;
+            makeTextVertices(text, x, y, scale, b.vertices);
+            pauseBatches.push_back(std::move(b));
+        };
+        const MenuPauseLayout pl = menuPauseLayout(w, h);
+        const auto [mx, my] = uiMouse();
+        pauseQuad(Vec4 {0.0f, 0.0f, 0.0f, 0.55f}, 0, 0, w, h);
+        pauseText(kMenuPauseTitle, pl.titleX, pl.titleY, 2.0, kText);
+        const double s15 = fScale(1.5);
+        const auto pauseButton = [&](const MenuButton& r,
+                                     const std::string& label) {
+            const bool hov = r.contains(mx, my);
+            if (hov) {
+                // The menu's kHoverBar's face (the white's 0.30 + the
+                // 3-px orange's left edge — the V3-23's belt).
+                pauseQuad(Vec4 {1.0f, 1.0f, 1.0f, 0.30f}, r.x, r.y, r.w,
+                          r.h);
+                pauseQuad(Vec4 {1.0f, 0.82f, 0.0f, 1.0f}, r.x, r.y, 3, r.h);
+            }
+            pauseText(label,
+                      r.x + (r.w - static_cast<int>(textWidth(label, s15))) / 2,
+                      r.y, s15, hov ? Vec4 {1.0f, 1.0f, 1.0f, 1.0f} : kText);
+        };
+        pauseButton(pl.resume, kMenuPauseResumeLabel);
+        pauseButton(pl.saveQuit, kMenuPauseSaveQuitLabel);
+        for (auto& b : pauseBatches) {
             drawUiBatch(b.vertices, ortho, b.textured ? *b.texture
                                                       : m_fontTexture,
                         b.textured, b.color);

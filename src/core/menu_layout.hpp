@@ -657,4 +657,77 @@ inline int menuParseHostPort(const std::string& host, const std::string& port) {
     return value;
 }
 
+// ---------------------------------------------------------------------------
+// V3-52: the GAMEPLAY pause's panel (the user's 11-25 report: the ESC's
+// direct exit had no confirm's face). The panel = the demo's pause /
+// finished panel's twin (the 0.55 veil + the centered's title + the
+// buttons), the SOLO-only (the net's lockstep cannot stop — the legacy
+// exit's shape keeps, the deviation's record). The layout's pure function
+// = the every-other-menu-page's test-twin's belt.
+// ---------------------------------------------------------------------------
+
+struct MenuPauseLayout {
+    int titleX = 0, titleY = 0; // the 「已暂停」's top-left (the 2.0)
+    MenuButton resume;          // the 「继续」's button
+    MenuButton saveQuit;        // the 「保存退出」's button
+};
+
+inline MenuPauseLayout menuPauseLayout(int w, int h) {
+    MenuPauseLayout l;
+    // The title's width = the 3 CJK's at 2.0: (17n-1)*s = 100 px
+    // (the textWidth's formula's belt).
+    l.titleX = (w - 100 + 1) / 2;
+    l.titleY = h / 2 - 78;
+    // The 继续's button (70 px = the 49-px text's twin, the 保存/返回's
+    // face) at h/2-30; the 保存退出's (120 px = the 100-px text + the
+    // padding) at h/2+8 — the 10-px's gap's belt.
+    constexpr int kResumeWidth = 70;
+    l.resume = MenuButton {(w - kResumeWidth + 1) / 2, h / 2 - 30,
+                           kResumeWidth, 28};
+    constexpr int kSaveQuitWidth = 120;
+    l.saveQuit = MenuButton {(w - kSaveQuitWidth + 1) / 2, h / 2 + 8,
+                             kSaveQuitWidth, 28};
+    return l;
+}
+
+inline constexpr int kMenuPauseResume = 40; // the 继续's control's id
+inline constexpr int kMenuPauseSaveQuit = 41; // the 保存退出's control's id
+
+// The panel's vocabulary's single source (the render consumes it — the
+// every-other-menu-page's font-safety's belt).
+inline constexpr const char* kMenuPauseTitle = "已暂停";
+inline constexpr const char* kMenuPauseResumeLabel = "继续";
+inline constexpr const char* kMenuPauseSaveQuitLabel = "保存退出";
+
+// Pure: the control's under (mx, my) — the id or -1.
+inline int menuPauseControl(const MenuPauseLayout& l, int mx, int my) {
+    if (l.resume.contains(mx, my)) {
+        return kMenuPauseResume;
+    }
+    if (l.saveQuit.contains(mx, my)) {
+        return kMenuPauseSaveQuit;
+    }
+    return -1;
+}
+
+struct MenuPauseStep {
+    enum class Kind { None, Resume, SaveQuit };
+    Kind kind = Kind::None;
+};
+
+// Pure: the pause's panel's click's step (the ESC's toggle is the loop's
+// act — the demo's panel's precedent's shape; the click = the hovered
+// button's action, the miss = the None's belt).
+inline MenuPauseStep menuPauseStep(bool click, int controlId) {
+    MenuPauseStep s;
+    if (click) {
+        if (controlId == kMenuPauseResume) {
+            s.kind = MenuPauseStep::Kind::Resume;
+        } else if (controlId == kMenuPauseSaveQuit) {
+            s.kind = MenuPauseStep::Kind::SaveQuit;
+        }
+    }
+    return s;
+}
+
 } // namespace mc

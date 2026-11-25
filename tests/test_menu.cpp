@@ -554,3 +554,60 @@ TEST(MenuKeyboardTest, MultiplayerAndJoinEnter) {
     EXPECT_EQ(menuJoinStep(false, false, false, false, 1, true).action,
               MenuAction::Back);
 }
+
+// ---------------------------------------------------------------------------
+// V3-52: the gameplay's pause's panel (the user's 11-25 report: the ESC's
+// direct exit wanted the confirm's face). The layout's + the step's
+// pure functions' twin (the every-other-menu-page's belt).
+// ---------------------------------------------------------------------------
+TEST(MenuPauseTest, LayoutGeometryAtGateSpace) {
+    // The gate's UI space (679x744 @ ui.scale 1.5 = 453x496).
+    const MenuPauseLayout l = menuPauseLayout(kW, kH);
+    // The title (the 3 CJK's at 2.0 = 100 px, at h/2-78).
+    EXPECT_EQ(l.titleX, (kW - 100 + 1) / 2); // 177
+    EXPECT_EQ(l.titleY, kH / 2 - 78);        // 169
+    // The 继续's button (70 px = the 保存/返回's face, at h/2-30).
+    EXPECT_EQ(l.resume.w, 70);
+    EXPECT_EQ(l.resume.h, 28);
+    EXPECT_EQ(l.resume.x, (kW - 70 + 1) / 2); // 192
+    EXPECT_EQ(l.resume.y, kH / 2 - 30);       // 218
+    // The 保存退出's button (120 px, at h/2+8 — the 10-px's gap).
+    EXPECT_EQ(l.saveQuit.w, 120);
+    EXPECT_EQ(l.saveQuit.x, (kW - 120 + 1) / 2); // 167
+    EXPECT_EQ(l.saveQuit.y, kH / 2 + 8);         // 256
+    EXPECT_EQ(l.resume.y + l.resume.h, l.saveQuit.y - 10); // the gap's belt
+    // The control's hit test (the gate's xdotool clicks the same
+    // centers).
+    EXPECT_EQ(menuPauseControl(l, l.resume.x + 35, l.resume.y + 14),
+              kMenuPauseResume);
+    EXPECT_EQ(menuPauseControl(l, l.saveQuit.x + 60, l.saveQuit.y + 14),
+              kMenuPauseSaveQuit);
+    EXPECT_EQ(menuPauseControl(l, 10, 10), -1);
+    // The wide window's centered's belt (the 11-24's report's twin).
+    const MenuPauseLayout lw = menuPauseLayout(853, 480);
+    EXPECT_EQ(lw.resume.x, (853 - 70 + 1) / 2);
+    EXPECT_EQ(lw.saveQuit.x, (853 - 120 + 1) / 2);
+}
+
+TEST(MenuPauseTest, StepActions) {
+    // The buttons' clicks.
+    EXPECT_EQ(menuPauseStep(true, kMenuPauseResume).kind,
+              MenuPauseStep::Kind::Resume);
+    EXPECT_EQ(menuPauseStep(true, kMenuPauseSaveQuit).kind,
+              MenuPauseStep::Kind::SaveQuit);
+    // The miss's click = the None (the veil's click's belt).
+    EXPECT_EQ(menuPauseStep(true, -1).kind, MenuPauseStep::Kind::None);
+    // The no-click = the None (the ESC's toggle is the loop's act —
+    // the demo's panel's precedent's shape).
+    EXPECT_EQ(menuPauseStep(false, kMenuPauseSaveQuit).kind,
+              MenuPauseStep::Kind::None);
+}
+
+TEST(MenuPauseTest, LabelsAreFontSafe) {
+    // The label's vocabulary is pinned (a typo renders '?' — the
+    // glyph's presence itself is the font's test's face; the 停/暂's
+    // cells are the V3-52's +2's pins, test_font's belt).
+    EXPECT_STREQ(kMenuPauseTitle, "已暂停");
+    EXPECT_STREQ(kMenuPauseResumeLabel, "继续");
+    EXPECT_STREQ(kMenuPauseSaveQuitLabel, "保存退出");
+}
