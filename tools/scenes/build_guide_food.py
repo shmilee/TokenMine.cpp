@@ -51,7 +51,7 @@ f = g.look_gradual(f, (8, 54, -2))          # the strip's face (the dirt's y54's
 # -- P1 the dig (the 5 dirt's — the bare-hand's 0.75-s's hold) ----------
 # the stances: (5.5,0.5) for the (7,0) cell; (6.5,z+0.5) for the
 # (8,z) column (the 2-m's west, the reach's 4.09's margin).
-g.hint(f + 40, "按 LMB 挖泥土")
+g.hint(f + 40, "挖 5 格泥土")
 f += 60
 # the collect's per-dig dwells (the probe's gate-catch ×2: the 2.5-m's
 # magnet's range is not a pickup range — the long-range's pull creeps
@@ -99,7 +99,7 @@ f += 60
 # -- P3 the place (the 5 farmland's in the strip's holes) ---------------
 # the (7,0)'s first (the (5.5,0.5)'s stance — the P2's in-place's end's
 # walk-back), then the column's north-to-south's.
-g.hint(f, "按 RMB 放下耕地")
+g.hint(f, "放下 5 块耕地")
 # the east's facing's persist (the P1's end's face): the west's step is
 # the backward's S (the target's side's the view's keep), the 4-m's leg's
 # the strafe's 'd's (the south's), the column's hops's the 'a's.
@@ -137,7 +137,7 @@ for z in (-1, -2, -3, -4):
 # facing the row's north: the parallel's 1-m's rays pass the (x,54,-3)'s
 # air (above the row z-3's farmland) — zero occlusion, zero reversal
 # (the x6-first's west's back), the 30-f's settle after the turn.
-g.hint(f, "按 RMB 种下麦种")
+g.hint(f, "种下 5 颗麦种")
 g.select(f, 1)                              # the h0's wheat_1
 f += 40
 f = g.walk_leg(f, g.x, -2.5, face=NORTH)    # the row's south's step (the S's)
@@ -178,7 +178,7 @@ f += 60
 # -- P6 the harvest (the 5 ripe's — the hardness-0's 1-f's tap) ---------
 # the same south's stance's row (the P5's end's (2.5,-2.5) = the (2)'s
 # stance in place), the east's back (the same direction's hops).
-g.hint(f, "按 LMB 收麦子")
+g.hint(f, "收 5 株麦子")
 f = g.face_gradual(f, NORTH)                # the P5's end's facing's correct
 f = g.look_point(f, g.x, 54.5, g.z - 1.0)   # the wheat's 1-m's north (smooth)
 f += 25

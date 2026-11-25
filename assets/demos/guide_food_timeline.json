@@ -2515,7 +2515,7 @@
     {
       "at_frame": 1316,
       "action": "hint",
-      "text": "\u6309 LMB \u6316\u6ce5\u571f"
+      "text": "\u6316 5 \u683c\u6ce5\u571f"
     },
     {
       "at_frame": 1336,
@@ -3045,7 +3045,7 @@
     {
       "at_frame": 3047,
       "action": "hint",
-      "text": "\u6309 RMB \u653e\u4e0b\u8015\u5730"
+      "text": "\u653e\u4e0b 5 \u5757\u8015\u5730"
     },
     {
       "at_frame": 3047,
@@ -3315,7 +3315,7 @@
     {
       "at_frame": 3615,
       "action": "hint",
-      "text": "\u6309 RMB \u79cd\u4e0b\u9ea6\u79cd"
+      "text": "\u79cd\u4e0b 5 \u9897\u9ea6\u79cd"
     },
     {
       "at_frame": 3615,
@@ -8969,7 +8969,7 @@
     {
       "at_frame": 7162,
       "action": "hint",
-      "text": "\u6309 LMB \u6536\u9ea6\u5b50"
+      "text": "\u6536 5 \u682a\u9ea6\u5b50"
     },
     {
       "at_frame": 7162,
