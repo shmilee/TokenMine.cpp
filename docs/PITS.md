@@ -3,8 +3,10 @@
 > Phase 30 文档整理：从 `SESSION_CONTEXT.md` **原样**移入（未改写）。文中路径引用
 > （如 `KNOWN_ISSUES.md`、`/tmp/opencode/*.zsh`）指向当时状态；当前文档布局见
 > `README.md`「文档地图」。
-> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–437，新条目继续前插于尾部块首。
+> pre-3.x 条目（PITS 1–384）→ `docs/archive/PITS_PRE3X.md`；本文件 = 3.x 时代 PITS 385–439，新条目继续前插于尾部块首。
 
+- **门臂输入双坑：xdotool ESC tap 伪重复 + click --window 合成事件（PITS 438，门 243 v3.52.0 后续批 暂停面板）**——① 无头 X 环境下 xdotool `key Escape` tap 除物理按下外还产生 **~0.6s 后的伪重复 KEYDOWN**（X11 auto-repeat 形：keyup 在 SDL grab 态被吞 = 键「按住」，重复延迟 ~660ms 再按）→ 每个 ESC tap 可能 toggle 两次（释镜→暂停，或暂停→恢复）：门臂协议**不得假设 tap 数→状态映射**，须每 tap 后 drain 1.6s + 读日志尾态（Game paused / Game resumed 的最后一个）+ 不对齐再 tap 重对齐（6 次上限）。② xdotool `click --window` 走**合成事件**（XSendEvent send_event=True）= **SDL 不收**：点击静默落在帷空白处（getmouselocation 可实证指针位正确，按钮事件却到不了 SDL）——改 `mousedown 1` / `mouseup 1` **无 --window**（XTestFakeButtonEvent = 硬件形，落指针所在窗）。
+- **项目 FNV 有两套 basis：字体 pin 是 17 位历史变体（PITS 439，门 243 v3.52.0 后续批 字体 +2）**——tests/test_font.cpp 的 fnv1a64Hex 与 entity/pathfind.cpp 用 basis 1469598103934665603（标准 FNV-1a 64 = 14695981039346656037，**少一位**）；net 的 assetFNV（net_proto.hpp）用的是标准 basis = 两套并存。一切历史 font.png / 区域 FNV pin 皆由 17 位变体函数产出——用标准算法重算 = **假 FAIL**（实证：同一 font.png 标准值 a29b076df0526872 vs 项目函数值 f5c00ef99dad4594，两值并存 = 重钉 FNV 的陷阱：永远取测试的 "Which is" 输出，永不手算）。不修函数本身（修 = 全部历史 pin 作废）。
 - **demo 场景 fire real-dt = 字节再生不可能（PITS 437，门 242 v3.52.0
   4.0 demo 检查）**——mk_scene 的 fresh-90f 基础跑保留 worldgen 地下火
   簇，其 remaining/蔓延 = 墙钟（real-dt）依赖：同 spec 两次再生 fire 字
