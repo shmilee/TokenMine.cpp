@@ -191,6 +191,8 @@ inline constexpr const char* kMenuSettingsLabels[kMenuSettingsRowCount] = {
     "界面缩放", "全屏", "窗口宽", "窗口高",
 };
 inline constexpr int kMenuSettingsSave = 32; // the 保存 button's control id
+inline constexpr int kMenuSettingsBack = 33; // the 返回 button's control id
+                                             // (the 11-24's addition)
 // The control id's encoding: row*2 = the minus / toggle button,
 // row*2+1 = the plus (the toggle row's plus = dead).
 inline constexpr bool isToggleRow(int row) {
@@ -207,6 +209,9 @@ struct MenuSettingsLayout {
     };
     Row rows[kMenuSettingsRowCount];
     MenuButton save;
+    MenuButton back; // 11-24 (the user's report): the 返回's button —
+                     // the settings was the ONLY page without one (ESC
+                     // alone — the every-other-page's visible's twin).
     int noteX = 0, noteY = 0; // the 「部分项重启后生效」 hint
 };
 
@@ -231,6 +236,11 @@ inline MenuSettingsLayout menuSettingsLayout(int w, int h) {
     constexpr int kMenuSaveWidth = 70;
     l.save = MenuButton {(w - kMenuSaveWidth + 1) / 2,
                          menuRoundDiv(85 * h, 100), kMenuSaveWidth, 28};
+    // The 返回's button (the 70-px's twin, at 0.92h — below the save;
+    // the anchor's 496-h: the save's 421+28=449, the back's 456+28=484,
+    // the 7-px's gap's belt).
+    l.back = MenuButton {(w - kMenuSaveWidth + 1) / 2,
+                         menuRoundDiv(92 * h, 100), kMenuSaveWidth, 28};
     // The hint (8 glyphs @ 1.0 = 135 px).
     const int noteW = 8 * 17 - 1;
     l.noteX = (w - noteW + 1) / 2;
@@ -250,6 +260,9 @@ inline int menuSettingsControl(const MenuSettingsLayout& l, int mx, int my) {
     }
     if (l.save.contains(mx, my)) {
         return kMenuSettingsSave;
+    }
+    if (l.back.contains(mx, my)) {
+        return kMenuSettingsBack;
     }
     return -1;
 }
@@ -292,6 +305,10 @@ inline MenuSettingsStep menuSettingsStep(bool click, bool enter, bool esc,
     }
     if (controlId == kMenuSettingsSave) {
         s.kind = MenuSettingsStep::Kind::Save;
+        return s;
+    }
+    if (controlId == kMenuSettingsBack) {
+        s.kind = MenuSettingsStep::Kind::Back; // the ESC's twin's face
         return s;
     }
     if (controlId >= 0 && controlId < kMenuSettingsRowCount * 2) {
@@ -380,10 +397,16 @@ inline MenuTutorialLayout menuTutorialLayout(int w, int h) {
     l.titleY = menuRoundDiv(10 * h, 100);
     const int rowY0 = menuRoundDiv(22 * h, 100);
     constexpr int kRowPitch = 32;
-    constexpr int kRowX = 60;
     constexpr int kRowW = 333;
+    // 11-24 (the user's wide-window's report): the row's rect is
+    // CENTERED on the window's axis for ANY width — the fixed kRowX 60
+    // was the 453-px anchor's (w-kRowW+1)/2's value, so a wide window's
+    // rows sat left of the centered title's axis. The anchor's geometry
+    // is unchanged ((453-333+1)/2 = 60 = the old kRowX, the layout
+    // test's belt).
     for (int i = 0; i < 5; ++i) {
-        l.rows[i] = MenuButton {kRowX, rowY0 + i * kRowPitch, kRowW, 28};
+        l.rows[i] = MenuButton {(w - kRowW + 1) / 2, rowY0 + i * kRowPitch,
+                                kRowW, 28};
     }
     l.back = MenuButton {(w - 70 + 1) / 2, menuRoundDiv(85 * h, 100), 70, 28};
     const int msgW = 3 * 25 - 1; // 需联机 3 glyphs @ 1.5

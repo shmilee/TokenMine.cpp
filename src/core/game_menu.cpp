@@ -676,8 +676,12 @@ void Game::renderMenu() {
             (static_cast<double>(w) / static_cast<double>(h)) *
             (static_cast<double>(m_menuPanorama.height()) /
              static_cast<double>(m_menuPanorama.width()));
+        // 11-24 (the user's pacing report): the pan's 1-px-per-frame's
+        // 85-s loop was "a bit fast" — the /2's half pace (the 171-s's
+        // loop). The frame-locked pure function's belt keeps (the
+        // m_menuFrame/2's the ×2 RAW's determinism).
         const float off = static_cast<float>(
-            (m_menuFrame % m_menuPanorama.width()) /
+            ((m_menuFrame / 2) % m_menuPanorama.width()) /
             static_cast<double>(m_menuPanorama.width()));
         std::vector<MeshVertex> panoVerts;
         auto put = [&](float px, float py, float u, float v) {
@@ -884,6 +888,19 @@ void Game::renderMenu() {
         }
         addText("保存", centerX("保存", 1.5, layout.save.x, layout.save.w),
                 layout.save.y, 1.5, hovS ? kHover : kText);
+        // The 返回's button (the 11-24's user report: the settings was
+        // the only page without the visible back — the ESC's the
+        // invisible's twin; the every-other-page's 返回's belt). The
+        // 1.5's the page's action's scale (the 保存's twin — the
+        // kMenuItemScale 2.0's the title's items' face, the sub-page's
+        // buttons' all 1.5's belt).
+        const bool hovB = layout.back.contains(mx, my);
+        if (hovB) {
+            addHoverBar(layout.back);
+        }
+        addText(kMenuBackLabel,
+                centerX(kMenuBackLabel, 1.5, layout.back.x, layout.back.w),
+                layout.back.y, 1.5, hovB ? kHover : kText);
     } else if (m_menuPage == MenuPage::Tutorial) {
         // V3-17c: the two-level (tier 1 = the chapters + the counts,
         // tier 2 = the chapter's demos + the lengths + the coop's
@@ -921,9 +938,13 @@ void Game::renderMenu() {
                 addHoverBar(r);
             }
             // The tier-2's demo rows at 1.0 (the names run long), the
-            // tier-1's chapter rows at 1.5.
+            // tier-1's chapter rows at 1.5. 11-24 (the user's report):
+            // the label's CENTERED in the row's rect (the centerX's
+            // belt — every other menu row's twin; the r.x+10's left
+            // anchor made the short rows sit left of the window's
+            // axis while the title/back's were centered).
             const double rowScale = tier2 ? 1.0 : 1.5;
-            addText(label, r.x + 10,
+            addText(label, centerX(label, rowScale, r.x, r.w),
                     r.y + (r.h - static_cast<int>(16.0 * fScale(rowScale))) / 2,
                     rowScale, hov ? kText : kTextDim);
         }
@@ -935,10 +956,13 @@ void Game::renderMenu() {
         if (hov) {
             addHoverBar(back);
         }
+        // The 1.5's the sub-page's action's scale (the 11-24's belt:
+        // the kMenuItemScale 2.0 is the title's items' face — every
+        // sub-page's 开始/保存/返回 is the 1.5's uniform).
         addText(kMenuBackLabel,
-                centerX(kMenuBackLabel, kMenuItemScale, back.x, back.w),
-                back.y + (back.h - static_cast<int>(16.0 * fScale(kMenuItemScale))) / 2,
-                kMenuItemScale, hov ? kHover : kText);
+                centerX(kMenuBackLabel, 1.5, back.x, back.w),
+                back.y + (back.h - static_cast<int>(16.0 * fScale(1.5))) / 2,
+                1.5, hov ? kHover : kText);
     } else if (m_menuPage == MenuPage::Multiplayer) {
         // V3-17d: the multiplayer page (the name's field — the login's
         // twin's render — + the 创建游戏/加入游戏's actions + the 返回).

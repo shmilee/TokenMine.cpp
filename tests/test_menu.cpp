@@ -132,6 +132,14 @@ TEST(MenuSettingsTest, LayoutGeometryAtGateSpace) {
               12);
     EXPECT_EQ(menuSettingsControl(l, l.save.x + 35, l.save.y + 14),
               kMenuSettingsSave);
+    // 11-24 (the user's report): the 返回's button (the settings was
+    // the only page without one) — below the save (the 7-px gap), the
+    // control's id 33.
+    EXPECT_EQ(l.back.x, (kW - 70 + 1) / 2);
+    EXPECT_EQ(l.back.y, 456);                    // lround(0.92 * 496)
+    EXPECT_EQ(l.save.y + l.save.h, 450);         // the gap's belt
+    EXPECT_EQ(menuSettingsControl(l, l.back.x + 35, l.back.y + 14),
+              kMenuSettingsBack);
     EXPECT_EQ(menuSettingsControl(l, 10, 400), -1);
 }
 
@@ -155,6 +163,10 @@ TEST(MenuSettingsTest, StepActions) {
     EXPECT_EQ(menuSettingsStep(true, false, false, 10, -1, false, false).kind,
               MenuSettingsStep::Kind::Toggle);
     EXPECT_EQ(menuSettingsStep(true, false, false, 10, -1, false, false).row, 5);
+    // The back's button click (the 11-24's addition — the ESC's twin's
+    // visible's face).
+    EXPECT_EQ(menuSettingsStep(true, false, false, kMenuSettingsBack, -1, false, false).kind,
+              MenuSettingsStep::Kind::Back);
     // The save (the button OR the Enter's convenience).
     EXPECT_EQ(menuSettingsStep(true, false, false, kMenuSettingsSave, -1, false, false).kind,
               MenuSettingsStep::Kind::Save);
@@ -250,6 +262,13 @@ TEST(MenuTutorialTest, LayoutGeometryAtGateSpace) {
     EXPECT_EQ(l.msgX, 190);
     EXPECT_EQ(l.msgY, 387);
     EXPECT_TRUE(l.rows[2].contains(60 + 166, l.rows[2].y + 14));
+    // 11-24 (the user's wide-window's report): the row's rect is the
+    // axis-centered for ANY width — the fixed kRowX 60 was the 453's
+    // anchor's value (the wide window's rows sat left). The gate's
+    // space above pins 60 = (453-333+1)/2's identity.
+    const MenuTutorialLayout lw = menuTutorialLayout(853, 480);
+    EXPECT_EQ(lw.rows[0].x, (853 - 333 + 1) / 2); // 260
+    EXPECT_EQ(lw.rows[4].x, (853 - 333 + 1) / 2);
 }
 
 TEST(MenuTutorialTest, StepActions) {
