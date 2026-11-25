@@ -256,8 +256,15 @@ void Game::handleUiKeys() {
     // Locked-pointer only: with the cursor free (panel open / death
     // screen) C does nothing — the E-key pattern. The mode is session
     // state (never saved): a loaded world starts in first person, the
-    // Minecraft convention.
-    if (m_input.wasPressed(GameKey::C) && (m_demoPlayer ? true : m_window.relativeMouseMode())) {
+    // Minecraft convention. 4.0 demo check (the user's 11-24 ruling):
+    // REPLAY's C is a NO-OP — the demo's view is the FIXED third person
+    // (runDemoReplay's init): the recorded C beats cycled the same mode
+    // the audience's C does (the collision's face, PITS 434), and the
+    // ThirdFront's aim flip (aimForward's replay branch) let a C'd mode
+    // steer the injected interactions 180 degrees off. Record keeps C
+    // (the author's live preview — the tap records it either way).
+    if (m_input.wasPressed(GameKey::C) &&
+        m_demoMode != DemoMode::Replay && m_window.relativeMouseMode()) {
         m_cameraMode =
             m_cameraMode == CameraMode::First
                 ? CameraMode::ThirdBack

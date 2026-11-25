@@ -37,6 +37,14 @@ class BlockRegistry;
 // here and is the resolve's default argument, so every pre-V2-19 call
 // site and unit test stays bit-identical).
 constexpr float kThirdPersonDistance = 4.0f;
+// 4.0 demo check (the user's 11-24 ruling): the demo's FIXED third
+// person's orbit distance — the 4.0's default was "too far, the
+// screen's empty" (the action's 1-m ahead read small behind a wide
+// platform); 2.5 fills the frame with the player + the work. The
+// occlusion clamp's verbatim (the user's ruling: the camera's blocked
+// by the front's object is ACCEPTABLE — the close view's the point),
+// inside the live zoom's [kZoomMin, kZoomMax] = 2.0..8.0's domain.
+inline constexpr float kDemoOrbitDistance = 2.5f;
 
 // V2-19 (the wheel zoom): the clamp band + the per-tick step of the
 // third-person orbit distance the mouse wheel adjusts (the Game owns the

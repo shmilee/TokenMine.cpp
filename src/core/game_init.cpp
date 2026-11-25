@@ -3492,6 +3492,25 @@ void Game::runDemoReplay() {
     if (m_demoPlayer->hasGamepadEvents()) {
         m_input.handleGamepadAdded(kDemoSyntheticGamepadWhich);
     }
+    // 4.0 demo check (the user's 11-24 ruling): the demo's view is FIXED
+    // third person (the back view) — with the audience's C removed (the
+    // camera-mode's collision's face, PITS 434) the first person's
+    // default left the demo's action seen only from the head (the user's
+    // "the front's object's far's" face); the back view shows the demo
+    // player's body + the held item + the action's geometry at all
+    // times. The back view's AIM = the player's base view verbatim (the
+    // front flip's only mode — unreachable now), so the recorded
+    // choreography replays bit-identically: ONLY the rendered camera
+    // moves (the first person's eye -> the third person's orbit). The
+    // recorded C beats become no-ops (the handleUiKeys' replay's gate)
+    // — the 13 no-post-Front-interaction demos are sim-untouched; the
+    // one post-Front's (guide_night f10899) rides the re-author's batch.
+    m_cameraMode = CameraMode::ThirdBack;
+    // The demo's close orbit (the user's 11-24 ruling: the 4.0-m's
+    // default's "too far, the screen's empty" — kDemoOrbitDistance's
+    // belt in third_person.hpp). The audience's wheel is the SPEED's
+    // ladder in the replay (never the zoom), so the distance holds.
+    m_thirdPersonDistance = kDemoOrbitDistance;
     // The pacing's anchor (the wall clock — re-anchored at the speed
     // change and the pause/resume, the demo time is untouched).
     m_demoPacingAnchorWall = nowSeconds();
